@@ -1,17 +1,21 @@
 # Constraints & Non-Negotiables
 
 ## Technical
-- Platform: Android only, minSdk 26, Kotlin, Jetpack Compose.
-- Map SDK: MapLibre GL (free, no token lock-in).
-- Basemap: CARTO (API key owned); evaluate offline PMTiles later — do not assume connectivity.
-- Weather radar MVP: RainViewer free tiles; MRMS/IEM later — RainViewer's free API is the load-bearing constraint, design an interface so it can be swapped.
-- Transit: Metro Transit public GTFS-RT + REST; no API key required for read endpoints — still rate-limit ourselves (poll ≥ 10s).
-- No paid tile/vendor dependencies in v1.
+- Android only for v1: Kotlin, Jetpack Compose, minSdk 26.
+- Map SDK: MapLibre GL.
+- Provider integration must be contract-first; provider-specific types do not leak into core domain.
+- Metro Transit GTFS/GTFS-RT/NexTrip are public for v1; authenticated provider support is still required at contract boundaries.
+- Realtime feeds may refresh as often as 5s; clients poll conservatively and honor provider limits.
+- No secrets, API keys, or tokens in Git.
+- No artificial maximum system render radius; scalability comes from scope/render pipeline.
 
 ## Product
-- Clean default UI; advanced mode behind a setting. Never overwhelm the first-run user.
-- One app — no forks per user type.
+- One app, no forks.
+- Default experience simple; advanced/dev controls behind settings.
+- Routing is core, not optional.
+- Phase implementation requires blueprint freeze gates.
 
 ## Process
-- Blueprints and ADRs before new features.
-- Keep the engine extractable: no Android framework types in domain modules.
+- Docs authoritative before code.
+- Contradictions are resolved by ADRs before implementation.
+- Unresolved research questions stay explicitly open.

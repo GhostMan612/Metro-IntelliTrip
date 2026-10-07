@@ -1,0 +1,44 @@
+# Phase 06 — Routing
+
+## Objective
+Plan origin→destination multimodal journeys through provider-neutral contracts.
+
+## Prerequisites
+- Scope engine and live transit available.
+
+## In scope
+- `RoutingProvider` contract.
+- Walking and transit legs.
+- Transfers.
+- Realtime trip update integration hooks.
+- OpenTripPlanner adapter candidate.
+
+## Out of scope
+- Turn-by-turn navigation.
+- Transfer confidence scoring beyond placeholder.
+- Fare payment.
+
+## Components affected
+- routing module, trip planner UI later, provider adapters.
+
+## Requirements
+- Provider-neutral `JourneyOption`.
+- Realtime updates can annotate journeys.
+- Clear failure when routing unavailable.
+
+## Tests/gates
+- Golden routing fixtures.
+- Multimodal transfer mapping tests.
+- Provider outage behavior tests.
+
+## Definition of Done
+- App can request journey options for an origin/destination.
+
+## Freeze gate
+- Routing contract stable before transfer intelligence.
+
+## Artifacts
+- Routing models/provider, OTP adapter spike, tests.
+
+## Handoff
+- Phase 07 can score transfer confidence.
