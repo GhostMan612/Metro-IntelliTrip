@@ -37,4 +37,6 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.transit:gtfs-realtime-bindings:0.0.4")
     implementation("org.maplibre.gl:android-sdk:11.6.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation(project(":core:atlas-transit"))
 }
