@@ -4,13 +4,15 @@ System-wide rendering is an architectural target. Scale is handled by the pipeli
 
 ## Pipeline
 ```text
-All live data
-  -> spatial index
-  -> data-scope filter
-  -> viewport intersection
+live snapshot
+  -> spatial filtering
+  -> viewport culling
   -> LOD/clustering
-  -> renderer
+  -> bulk renderer / source update
 ```
+
+## Renderer boundary
+`MapRenderer`/AtlasMapEngine (MapLibre adapter) is separate from `BasemapProvider`. MapLibre is the rendering runtime; CARTO/offline PMTiles/future providers supply style and tile resources through `BasemapProvider`.
 
 ## Techniques
 - Spatial index/filter for vehicles, stops, alerts, traffic.
@@ -20,6 +22,11 @@ All live data
 - Update throttling so realtime refreshes do not redraw excessively.
 - Interpolation between vehicle updates for smooth motion.
 - Weather/transit layer composition order: basemap -> weather radar -> transit shapes/stops -> vehicles -> alerts.
+
+## System-scale guidance (implementation-safe)
+- Use MapLibre-native source/layer data updates (GeoJSON sources, symbol/circle layers, clustering) or other GPU-efficient bulk rendering.
+- Do NOT create one Android View per vehicle, one Compose object per marker, or heavyweight per-marker UI at system scale.
+- Vehicle updates should mutate source feature collections, not rebuild the view hierarchy.
 
 ## Rendering states
 Renderer consumes immutable scope/snapshot state from the engine. It must not call providers directly.

@@ -15,6 +15,11 @@
 - HTTPS only for provider traffic.
 - No cleartext API endpoints.
 
+## Provider identification
+- HTTP clients must send an appropriate `User-Agent` with an application/contact identifier as required by providers (notably NWS).
+- The identifier is adapter-configurable; no false or misleading identity is hardcoded.
+- No personal contact data, emails, or secrets are committed to the repo.
+
 ## Logging/redaction
 - Never log auth headers, tokens, exact user locations, or full request URLs containing secrets.
 - Realtime parse failures may log entity ids/error classes, not personal data.

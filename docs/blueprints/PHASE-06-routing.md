@@ -22,9 +22,11 @@ Plan origin→destination multimodal journeys through provider-neutral contracts
 - routing module, trip planner UI later, provider adapters.
 
 ## Requirements
-- Provider-neutral `JourneyOption`.
+- Provider-neutral `JourneyOption` with `Leg.Transit` carrying agency/feed, route key, trip key, from/to stop keys, scheduled/predicted departure/arrival, realtime delay/status, assigned/live vehicle key, service date/trip instance.
 - Realtime updates can annotate journeys.
 - Clear failure when routing unavailable.
+- Topology research gate: decide app -> `RoutingProvider` -> self-hosted OTP service / trusted public service / local offline engine / hybrid before implementing the OTP adapter (ADR-007). OTP alone on Android is not assumed.
+- Transfer confidence is modeled via `TransferConnection` objects, scored in Phase 07.
 
 ## Tests/gates
 - Golden routing fixtures.

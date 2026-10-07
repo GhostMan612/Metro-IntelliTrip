@@ -23,8 +23,14 @@
 - UI marks stale data visibly.
 - Do not silently reuse expired realtime positions as current.
 
-## Update/version strategy
-- Static GTFS has feed metadata/versioning where available; refresh weekly or when feed changes.
+## Static GTFS refresh
+- Run a lightweight conditional check daily using `If-Modified-Since` / `Last-Modified` validators.
+- `304 Not Modified`: keep the current snapshot.
+- `200 OK`: download, then validate (parse + required tables + agency/route/stop consistency) before activation.
+- Replacement is atomic: only after successful validation, the new snapshot is swapped in and the old one discarded.
+- Offline snapshots record `fetchedAt`, feed validity window (`validFrom`/`validTo`), version/hash, and activation/swap metadata so stale or superseded feeds are never silently activated.
+
+## Provider capability checks
 - Provider capability checks may detect schema/feed changes.
 - Offline snapshots include fetchedAt, feedVersion if known, and expiry policy.
 

@@ -20,9 +20,10 @@ Extract the reusable Atlas engine boundary for other apps.
 - core modules, docs, packaging.
 
 ## Requirements
-- Domain modules remain Android-free.
+- Domain modules remain Android-free pure Kotlin; `app/`, `platform/`, and adapters isolated.
 - App shell depends only on public engine APIs.
 - Provider adapters replaceable.
+- Prototype code violating the portability rule is audited/quarantined/refactored before extraction.
 
 ## Tests/gates
 - Portability tests.

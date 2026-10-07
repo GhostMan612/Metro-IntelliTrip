@@ -1,14 +1,15 @@
 # Phase 07 — Transfer Intelligence
 
 ## Objective
-Add transfer confidence signals to journey options.
+Add transfer confidence signals via `TransferConnection` objects on journey options.
 
 ## Prerequisites
 - Phase 06 routing working.
 
 ## In scope
-- Transfer confidence model.
+- Transfer confidence model on `TransferConnection(arrivingLeg, departingLeg, transferStop, scheduledBuffer, predictedBuffer, walkingDuration, confidence, rationale)`.
 - Realtime delay/headway inputs.
+- `JourneyOption` holds 0..n `TransferConnection`s (no journey-level confidence).
 - UI badges/warnings.
 
 ## Out of scope
@@ -27,7 +28,7 @@ Add transfer confidence signals to journey options.
 - Stale realtime behavior tests.
 
 ## Definition of Done
-- Journey options expose transfer confidence with rationale.
+- Journey options expose transfer confidence with rationale via `TransferConnection` objects.
 
 ## Freeze gate
 - Transfer model stable before offline/SDK phases.

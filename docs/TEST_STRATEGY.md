@@ -2,11 +2,18 @@
 
 ## Domain
 - Pure unit tests for `ScopeState`, `Vehicle`, `JourneyOption`, stale-data rules, LOD bucket selection.
+- Identity tests: `RouteKey`/`TripKey`/`StopKey`/`VehicleKey` disambiguate same raw IDs across agencies.
+- Journey model tests: `Leg.Transit` field mapping, `TripInstance`/service date, `TransferConnection` buffers and rationale; journey no longer carries a journey-level confidence.
 
 ## Provider contracts
 - Contract tests that each provider maps DTOs into domain models.
 - Malformed/missing fields rejected safely.
-- Stale timestamps preserved.
+- Stale timestamps preserved; `ProviderResult` kinds (success, stale success, unavailable, rate limited, auth failure, malformed, partial, timeout/network) mapped consistently.
+- `FreshnessMetadata` (source timestamp, fetchedAt, age, providerId) present on all results.
+
+## Scope resolver
+- ScopeResolver maps each Focus (trip, route, vehicle, radius, viewport, region, multiple agencies, system, trip corridor + nearby transit) to expected CameraScope/DataScope/RenderScope.
+- Adapter-broad-fetch-plus-local-filter behavior tests.
 
 ## GTFS / GTFS-RT
 - Fixture zips and `.pb` samples.
@@ -14,8 +21,9 @@
 - Shape parsing tests for route polylines.
 
 ## Routing
-- Golden tests for origin→destination journey options.
+- Golden tests for origin–destination journey options.
 - Transfer leg grouping tests.
+- `TransferConnection` computation tests (scheduled/predicted buffer, walking duration, confidence, rationale).
 - Provider-neutral model mapping tests.
 
 ## Scope engine
@@ -25,6 +33,7 @@
 - Snapshot immutability tests.
 - Cluster/LOD bucket tests by zoom.
 - Stale vehicle rendering state tests.
+- Pipeline order tests: snapshot -> spatial filter -> viewport cull -> LOD -> bulk source update.
 
 ## Weather
 - Radar frame freshness tests.

@@ -23,6 +23,7 @@ Define and implement local static network capability and graceful degradation.
 - Offline snapshots timestamped and versioned.
 - No fake realtime when offline.
 - Basemap fallback strategy explicit.
+- Daily conditional GTFS check via `If-Modified-Since`/`Last-Modified`; 304 keeps current snapshot; 200 validates then atomically swaps activation; snapshots retain fetchedAt, feed validity, version/hash, and swap metadata.
 
 ## Tests/gates
 - Offline fixture boot tests.

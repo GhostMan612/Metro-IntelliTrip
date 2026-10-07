@@ -13,9 +13,15 @@
 
 ## Routing
 - OpenTripPlanner: https://www.opentripplanner.org/ · https://github.com/opentripplanner/OpenTripPlanner
+- Topology unresolved: Android app → `RoutingProvider` → self-hosted OTP service / trusted public service / local offline engine / hybrid. Affects privacy, sovereignty, network dependency, hosting cost, offline, latency, reliability. Research gate before routing implementation (ADR-007). Routing remains core.
+
+## Static GTFS refresh
+- Daily lightweight conditional check with `If-Modified-Since` / `Last-Modified`.
+- `304` keeps current snapshot; `200` triggers download, validation, then atomic swap (see OFFLINE_MODEL.md).
 
 ## Weather / Radar
 - NWS Web API: https://www.weather.gov/documentation/services-web-api
+- NWS requires clients to send an identifying `User-Agent` (app name + contact); adapter-configurable, not a fabricated identity.
 - NWS radar FAQ/GIS: https://www.weather.gov/radarfaq/ · https://www.weather.gov/gis/cloudgiswebservices
 - NOAA MRMS data: https://www.nssl.noaa.gov/projects/mrms/MRMS_data.php
 - MRMS QPE ImageServer: https://mapservices.weather.noaa.gov/raster/rest/services/obs/mrms_qpe/ImageServer
@@ -23,6 +29,7 @@
 - IEM NEXRAD composites: https://mesonet.agron.iastate.edu/docs/nexrad_composites/
 - IEM RADAR mapserver: https://mesonet.agron.iastate.edu/docs/radmapserver/?
 - RainViewer weather maps API: https://www.rainviewer.com/api/weather-maps-api.html
+  - Status: PROVISIONAL / RESEARCH-GATED (terms, limits, suitability, licensing unconfirmed — see ADR-003). Viable for prototype/MVP adapter only, not an unquestioned production dependency.
 
 ## Basemap / tiles
 - CARTO: https://www.carto.com/
