@@ -11,6 +11,8 @@ enum class VehicleType { BUS, RAIL, FERRY, OTHER }
 
 // Identity: raw GTFS/provider IDs are NOT assumed globally unique.
 // All cross-provider references use namespaced keys.
+// `AgencyId` is Atlas-normalized and globally collision-safe within Atlas.
+// It is not assumed to equal raw GTFS `agency_id`; adapters synthesize/namespace it.
 @JvmInline value class AgencyId(val value: String)
 @JvmInline value class FeedId(val value: String)
 

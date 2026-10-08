@@ -21,18 +21,26 @@ Common metadata on every result (`FreshnessMetadata`):
 
 Streaming contracts use `Flow<ProviderResult<T>>`; one-shot contracts use `suspend` functions returning `ProviderResult<T>`.
 
+Central rule:
+- one-shot provider call -> `suspend` -> `ProviderResult<T>`
+- continuous provider stream -> `Flow<ProviderResult<T>>`
+
 ## TransitStaticProvider
-- `agencies(): List<Agency>`
-- `routes(agencyId?): List<Route>`
-- `stops(agencyId?): List<Stop>`
-- `trips(routeKey?): List<Trip>`
-- `stopTimes(tripKey): List<StopTime>`
-- `calendar(): List<Calendar>`, `calendarDates(): List<CalendarDate>`
-- `shapes(routeKey?): List<Shape>`
-- `frequencies(): List<Frequency>`
-- `transfers(): List<Transfer>`
-- `feedMetadata(): FeedMetadata`
+All operations are one-shot: `suspend` functions returning `ProviderResult<T>`.
+
+- `suspend fun agencies(): ProviderResult<List<Agency>>`
+- `suspend fun routes(agencyId: AgencyId? = null): ProviderResult<List<Route>>`
+- `suspend fun stops(agencyId: AgencyId? = null): ProviderResult<List<Stop>>`
+- `suspend fun trips(routeKey: RouteKey? = null): ProviderResult<List<Trip>>`
+- `suspend fun stopTimes(tripKey: TripKey): ProviderResult<List<StopTime>>`
+- `suspend fun calendar(): ProviderResult<List<Calendar>>`
+- `suspend fun calendarDates(): ProviderResult<List<CalendarDate>>`
+- `suspend fun shapes(routeKey: RouteKey? = null): ProviderResult<List<Shape>>`
+- `suspend fun frequencies(): ProviderResult<List<Frequency>>`
+- `suspend fun transfers(): ProviderResult<List<Transfer>>`
+- `suspend fun feedMetadata(): ProviderResult<FeedMetadata>`
 - Provider DTO mapping stays at the adapter edge.
+- `AgencyId` is Atlas-normalized and globally collision-safe; it is not assumed to equal raw GTFS `agency_id`. Raw agency IDs remain at adapter edge.
 
 ## TransitRealtimeProvider
 - `vehiclePositions(scope: DataScope): Flow<ProviderResult<List<Vehicle>>>`
@@ -46,20 +54,20 @@ Streaming contracts use `Flow<ProviderResult<T>>`; one-shot contracts use `suspe
 - `alerts(): Flow<ProviderResult<List<ServiceAlert>>>`
 
 ## RoutingProvider
-- `plan(request: TripPlanRequest): ProviderResult<List<JourneyOption>>`
-- provider-agnostic; OTP is a candidate, not baked into domain
+- `suspend fun plan(request: TripPlanRequest): ProviderResult<List<JourneyOption>>`
+- provider-agnostic; OTP is a strong candidate, not baked into domain
 - supports multimodal legs, `TransferConnection` objects, realtime updates
 - routing topology is unresolved — see ADR-007
 
 ## WeatherForecastProvider
-- `forecast(location: GeoPoint): ProviderResult<Forecast>`
+- `suspend fun forecast(location: GeoPoint): ProviderResult<Forecast>`
 
 ## WeatherAlertProvider
 - `alerts(bounds: LatLngBounds?): Flow<ProviderResult<List<WeatherAlert>>>`
 
 ## RadarProvider
-- `latestFrame(): ProviderResult<RadarFrame?>`
-- `frames(since: Instant): ProviderResult<List<RadarFrame>>`
+- `suspend fun latestFrame(): ProviderResult<RadarFrame?>`
+- `suspend fun frames(since: Instant): ProviderResult<List<RadarFrame>>`
 
 ## BasemapProvider
 - `styleUrl(): String` or local style asset

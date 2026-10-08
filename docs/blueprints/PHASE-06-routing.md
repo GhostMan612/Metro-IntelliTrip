@@ -11,7 +11,7 @@ Plan origin→destination multimodal journeys through provider-neutral contracts
 - Walking and transit legs.
 - Transfers.
 - Realtime trip update integration hooks.
-- OpenTripPlanner adapter candidate.
+- Selected routing-provider adapter/spike (OpenTripPlanner remains a candidate; topology research gate determines implementation).
 
 ## Out of scope
 - Turn-by-turn navigation.
@@ -25,7 +25,7 @@ Plan origin→destination multimodal journeys through provider-neutral contracts
 - Provider-neutral `JourneyOption` with `Leg.Transit` carrying agency/feed, route key, trip key, from/to stop keys, scheduled/predicted departure/arrival, realtime delay/status, assigned/live vehicle key, service date/trip instance.
 - Realtime updates can annotate journeys.
 - Clear failure when routing unavailable.
-- Topology research gate: decide app -> `RoutingProvider` -> self-hosted OTP service / trusted public service / local offline engine / hybrid before implementing the OTP adapter (ADR-007). OTP alone on Android is not assumed.
+- Topology research gate: decide app -> `RoutingProvider` -> self-hosted OTP service / trusted public service / local offline engine / hybrid before implementing the selected routing-provider adapter (ADR-007). OTP alone on Android is not assumed.
 - Transfer confidence is modeled via `TransferConnection` objects, scored in Phase 07.
 
 ## Tests/gates
@@ -40,7 +40,7 @@ Plan origin→destination multimodal journeys through provider-neutral contracts
 - Routing contract stable before transfer intelligence.
 
 ## Artifacts
-- Routing models/provider, OTP adapter spike, tests.
+- Routing models/provider, selected routing-provider adapter/spike, tests.
 
 ## Handoff
 - Phase 07 can score transfer confidence.

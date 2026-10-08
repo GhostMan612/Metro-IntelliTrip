@@ -27,7 +27,7 @@ Providers
 - Default UX is simple; advanced capabilities remain available in the same app.
 
 ## Identity
-Raw GTFS/provider IDs are not assumed globally unique. Cross-provider references use namespaced identities: `AgencyId`, `FeedId`, `RouteKey(agencyId, routeId)`, `TripKey(agencyId, tripId)`, `StopKey(agencyId, stopId)`, `VehicleKey(agencyId, vehicleId)`. See `DOMAIN_MODEL.md`.
+Raw GTFS/provider IDs are not assumed globally unique. Cross-provider references use namespaced identities: `AgencyId`, `FeedId`, `RouteKey(agencyId, routeId)`, `TripKey(agencyId, tripId)`, `StopKey(agencyId, stopId)`, `VehicleKey(agencyId, vehicleId)`. `AgencyId` is Atlas-normalized and globally collision-safe; it is not assumed to equal raw GTFS `agency_id`. Raw provider identifiers remain at the adapter edge. See `DOMAIN_MODEL.md`.
 
 ## Static transit
 The provider-neutral model covers agencies, routes, stops, trips, stop_times, calendars, calendar_dates, shapes, frequencies, transfers, and feed metadata — sufficient for visualization, trip lookup, stop sequencing, service-day validity, routing, transfers, and offline planning. Phase 01 implements this model.
