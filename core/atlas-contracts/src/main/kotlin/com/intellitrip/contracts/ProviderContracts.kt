@@ -19,7 +19,11 @@ sealed interface ProviderResult<out T> {
     data class RateLimited(val retryAfter: Duration?) : ProviderResult<Nothing>
     data class AuthFailure(val error: ProviderError) : ProviderResult<Nothing>
     data class MalformedResponse(val error: ProviderError) : ProviderResult<Nothing>
-    data class PartialResult<T>(val data: T, val missing: List<String>) : ProviderResult<T>
+    data class PartialResult<T>(
+        val data: T,
+        val missing: List<String>,
+        val freshness: FreshnessMetadata,
+    ) : ProviderResult<T>
     data class Timeout(val error: ProviderError) : ProviderResult<Nothing>
     data class NetworkFailure(val error: ProviderError) : ProviderResult<Nothing>
 }

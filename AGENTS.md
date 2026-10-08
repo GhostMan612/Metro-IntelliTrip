@@ -23,4 +23,4 @@ gradlew.bat lint
 - Brief: docs/PRODUCT_BRIEF.md
 - Constraints: docs/CONSTRAINTS.md
 - Domain: docs/DOMAIN_MODEL.md
-- ADRs: docs/ADR.md
+- ADRs: docs/ADR/
