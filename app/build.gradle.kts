@@ -39,4 +39,6 @@ dependencies {
     implementation("org.maplibre.gl:android-sdk:11.6.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation(project(":core:atlas-transit"))
+    implementation(project(":core:atlas-domain"))
+    implementation(project(":core:atlas-contracts"))
 }

@@ -12,6 +12,12 @@ gradlew.bat test
 gradlew.bat lint
 ```
 
+## Modules
+- `app/` Android Compose shell
+- `core/atlas-domain/` pure Kotlin identity/scope domain
+- `core/atlas-contracts/` pure Kotlin provider/scope contracts
+- `core/atlas-transit/` protected prototype adapter; not authoritative until migrated
+
 ## Docs
 - Architecture: docs/ARCHITECTURE.md
 - Brief: docs/PRODUCT_BRIEF.md

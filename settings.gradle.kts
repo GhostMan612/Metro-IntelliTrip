@@ -17,3 +17,5 @@ dependencyResolutionManagement {
 }
 include(":app")
 include(":core:atlas-transit")
+include(":core:atlas-domain")
+include(":core:atlas-contracts")
