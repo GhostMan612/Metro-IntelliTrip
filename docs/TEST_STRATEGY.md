@@ -28,6 +28,7 @@
 - `TransferConnection` computation tests (scheduled/predicted buffer, walking duration, confidence, rationale).
 - Provider-neutral model mapping tests.
 - Implemented (`core/atlas-routing`): multimodal journey shape (walk/transit/walk), transit-leg identity and schedule, direct vs transfer journeys, transfer-connection linkage to its two legs, realtime annotation without schedule rewriting, unreachable-destination `PartialResult`, service-time conversion past midnight, OTP URL construction and unreachable-service behaviour.
+- Transfer intelligence (`core/atlas-routing`): no-realtime and stale-realtime connections score `SCHEDULED_UNKNOWN`; generous buffer scores `HIGH`; tight buffer `MEDIUM`; buffer below the `transfers.txt` minimum transfer time `LOW`; negative predicted buffer `LOW`; canceled departure `LOW`; every outcome carries a rationale; journeys without transfers report no confidence.
 
 ## Scope engine
 - Focus transitions, viewport/data/render scope separation, continuous radius behavior.
