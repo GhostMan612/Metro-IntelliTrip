@@ -45,6 +45,10 @@ import com.intellitrip.map.RenderInput
 import com.intellitrip.map.RenderUpdateThrottle
 import com.intellitrip.map.TransitRenderPipeline
 import com.intellitrip.map.android.MapLibreMapRenderer
+import com.intellitrip.gtfs.StaticFeedSnapshotStore
+import com.intellitrip.offline.BasemapAvailability
+import com.intellitrip.offline.CacheEntry
+import com.intellitrip.offline.OfflineRegistry
 import com.intellitrip.weather.NwsWeatherAlertProvider
 import com.intellitrip.weather.RainViewerRadarProvider
 import com.intellitrip.weather.WeatherHttpClient
@@ -101,6 +105,18 @@ private fun IntelliTripMapScreen() {
 
     val scopeEngine = remember { ScopeEngine() }
     val scopeState = scopeEngine.currentScope(focus)
+
+    // Offline capability is recomputed from the live snapshot cache; stale
+    // realtime data is never presented as live positions.
+    val offlineRegistry = remember { OfflineRegistry(StaticFeedSnapshotStore(context.filesDir.toPath())) }
+    val realtimeCacheEntry = remember(vehicles) {
+        if (vehicles.isEmpty()) null else CacheEntry(FeedId(FEED_ID), Instant.now())
+    }
+    val capabilities = offlineRegistry.capabilities(
+        feedId = FeedId(FEED_ID),
+        realtimeEntry = realtimeCacheEntry,
+        basemap = BasemapAvailability.OnlineOnly,
+    )
 
     val pipeline = remember { TransitRenderPipeline() }
     val throttle = remember { RenderUpdateThrottle() }
@@ -287,6 +303,17 @@ private fun IntelliTripMapScreen() {
             )
 
             Text(text = status, style = MaterialTheme.typography.bodyMedium)
+
+            Text(
+                text = "Data: ${if (capabilities.staticNetworkUsable) "offline network ready" else "no offline snapshot"}" +
+                    " · live: ${if (capabilities.realtimeUsable) "current" else capabilities.realtimeFreshness.name.lowercase()}" +
+                    " · basemap: ${capabilities.basemap.name}",
+                style = MaterialTheme.typography.labelSmall,
+            )
+
+            capabilities.notes.forEach { note ->
+                Text(text = "• $note", style = MaterialTheme.typography.labelSmall)
+            }
         }
     }
 }

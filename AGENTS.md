@@ -22,6 +22,7 @@ gradlew.bat lint
 - `core/atlas-map-android/` MapLibre renderer adapter (bulk source/layer updates)
 - `core/atlas-scope/` pure Kotlin scope engine (focus -> camera/data/render resolution)
 - `core/atlas-routing/` pure Kotlin routing (journey planner + OTP adapter spike)
+- `core/atlas-offline/` pure Kotlin offline capability (snapshots, staleness, basemap policy)
 - `core/atlas-weather/` pure Kotlin weather adapters (radar, NWS alerts, layer composer)
 - `core/atlas-transit/` protected prototype adapter; not authoritative until migrated
 

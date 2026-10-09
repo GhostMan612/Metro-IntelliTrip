@@ -19,6 +19,7 @@
 
 ## GTFS / GTFS-RT
 - Static (Phase 01, `core/atlas-gtfs-static`): fixture GTFS ZIP parses; optional files absent is tolerated; missing required file/unknown references rejected; stop times ordered by `stop_sequence`; shape points ordered by `shape_pt_sequence`; service times beyond 24h preserved; snapshot activation and conditional-refresh (304 keep, 200 validate+activate, invalid payload keeps previous snapshot) tests; static provider returns `ProviderResult`.
+- Offline (`core/atlas-offline`, Phase 08): staleness classification across fresh/stale/expired/absent, only-fresh realtime presentable as live, static usable while not expired, stored snapshot enables offline planning, corrupt payload rejected offline, missing offline basemap reported, basemap preference selection.
 - Realtime (Phase 02, not yet implemented): `.pb` replay fixtures for vehicle positions, trip updates, alerts; feed association and `VehicleKey` resolution tests.
 - Shape parsing tests for route polylines.
 

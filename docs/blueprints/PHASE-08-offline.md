@@ -39,5 +39,8 @@ Define and implement local static network capability and graceful degradation.
 ## Artifacts
 - Offline cache manager, staleness model, tile strategy doc.
 
+## Status
+Implemented in `core/atlas-offline`. `StaticFeedSnapshotStore` (Phase 01) provides versioned snapshots with atomic pointer activation; `OfflineRegistry` derives a capability report (static network usable, realtime usable, freshness, basemap availability) and loads the stored feed for offline planning; `StalenessModel` classifies cached data as FRESH/STALE/EXPIRED/ABSENT and never presents cached realtime as live unless fresh; `BasemapPolicy` makes the offline-package-missing case explicit. The app shows a data-status line (verified on-device: "no offline snapshot · live: absent"). An installed offline vector tile package is still OPEN — the policy and hook exist, but no package is bundled yet.
+
 ## Handoff
 - Phase 09 can extract stable engine contracts.

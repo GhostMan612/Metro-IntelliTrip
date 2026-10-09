@@ -39,8 +39,10 @@ dependencies {
     implementation(project(":core:atlas-domain"))
     implementation(project(":core:atlas-contracts"))
     implementation(project(":core:atlas-gtfs-realtime"))
+    implementation(project(":core:atlas-gtfs-static"))
     implementation(project(":core:atlas-map"))
     implementation(project(":core:atlas-map-android"))
     implementation(project(":core:atlas-weather"))
     implementation(project(":core:atlas-scope"))
+    implementation(project(":core:atlas-offline"))
 }
