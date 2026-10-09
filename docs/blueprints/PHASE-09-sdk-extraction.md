@@ -39,5 +39,8 @@ Extract the reusable Atlas engine boundary for other apps.
 ## Artifacts
 - SDK docs, sample host, packaging config.
 
+## Status
+Implemented. `core/atlas-engine` is the public SDK boundary: `AtlasEngine` composes providers, scope resolution, rendering, journey planning and offline capability behind a single entry point, and hosts can adopt capabilities incrementally (every provider is optional). A `PortabilityGuardTest` fails the build if any reusable module imports Android or declares an Android plugin. `sample/host` runs the engine as a plain JVM program (verified output: capabilities, scope resolution at zoom 15.55 / INDIVIDUAL, and a clear "routing unavailable" when no provider is configured).
+
 ## Handoff
 - Product teams can build on Atlas Engine.

@@ -53,3 +53,4 @@
 
 ## Android/device
 - Smoke test app launches, map style loads, permission flow, offline stale indicator.
+- Implemented (`core/atlas-engine`, Phase 09): portability guard (no Android imports or Android plugins in reusable modules), engine operation with zero providers, scope and render available without providers, routing unavailable without a provider, injected routing provider used, provider replaceability, offline capability reporting.

@@ -23,6 +23,8 @@ gradlew.bat lint
 - `core/atlas-scope/` pure Kotlin scope engine (focus -> camera/data/render resolution)
 - `core/atlas-routing/` pure Kotlin routing (journey planner + OTP adapter spike)
 - `core/atlas-offline/` pure Kotlin offline capability (snapshots, staleness, basemap policy)
+- `core/atlas-engine/` public SDK facade + composition root (`AtlasEngine`)
+- `sample/host/` plain JVM host proving the engine runs without Android
 - `core/atlas-weather/` pure Kotlin weather adapters (radar, NWS alerts, layer composer)
 - `core/atlas-transit/` protected prototype adapter; not authoritative until migrated
 

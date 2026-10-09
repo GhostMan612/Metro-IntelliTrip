@@ -31,6 +31,8 @@ Providers
 - `core/atlas-scope/` — pure Kotlin scope engine: `ScopePolicy`, `DefaultScopeResolver`, `ScopeEngine`.
 - `core/atlas-routing/` — pure Kotlin routing: `StaticNetworkPlanner` (walking legs, transit legs, transfer connections) and the OpenTripPlanner adapter spike.
 - `core/atlas-offline/` — pure Kotlin offline capability: `OfflineRegistry`, `StalenessModel`, `BasemapPolicy`.
+- `core/atlas-engine/` — public SDK facade and composition root (`AtlasEngine`, `AtlasProviders`, `AtlasCapabilities`). Hosts the engine; depends only on portable modules.
+- `sample/host/` — plain JVM host proving the engine runs with no Android SDK, activity or Android types.
 - `core/atlas-transit/` — quarantined legacy prototype; not authoritative, pending future authorized migration.
 
 ## Core principles

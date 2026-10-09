@@ -31,7 +31,23 @@ data class DataScope(
     val maxAge: Duration,
     val includeAlerts: Boolean,
     val systemWide: Boolean,
-)
+) {
+    companion object {
+        /** Feed-wide realtime request with no geographic filter. */
+        val DEFAULT_FEED: DataScope = DataScope(
+            agencies = null,
+            routes = null,
+            trips = null,
+            vehicles = null,
+            bounds = null,
+            radius = null,
+            timeWindow = null,
+            maxAge = Duration.ofSeconds(45),
+            includeAlerts = true,
+            systemWide = true,
+        )
+    }
+}
 
 data class RadiusFilter(val center: GeoPoint, val meters: Double)
 data class TimeWindow(val from: Instant, val to: Instant)
