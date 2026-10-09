@@ -15,7 +15,9 @@ import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.layers.RasterLayer
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.android.style.sources.RasterSource
 
 /**
  * MapLibre-backed renderer.
@@ -79,6 +81,58 @@ class MapLibreMapRenderer(
             updateSource(style.getSourceAs<GeoJsonSource>(CLUSTERS_SOURCE), GeoJsonWriter.clusters(snapshot))
             updateSource(style.getSourceAs<GeoJsonSource>(STOPS_SOURCE), GeoJsonWriter.stops(snapshot))
             updateSource(style.getSourceAs<GeoJsonSource>(SHAPES_SOURCE), GeoJsonWriter.shapes(snapshot))
+        }
+    }
+
+    /**
+     * Radar imagery is a raster tile layer rather than a feature layer, so it is
+     * applied separately and sits below the transit layers.
+     */
+    fun applyRadar(tileUrlTemplate: String, opacity: Float) {
+        val target = map ?: return
+        target.getStyle { style ->
+            // The raster tile URL is fixed when the source is created; switching radar
+// frames recreates the source so the latest frame is used.
+            style.removeLayer(RADAR_LAYER)
+            style.removeSource(RADAR_SOURCE)
+            style.addSource(RasterSource(RADAR_SOURCE, tileUrlTemplate, 256))
+            val layer = RasterLayer(RADAR_LAYER, RADAR_SOURCE)
+            layer.setProperties(
+                PropertyFactory.rasterOpacity(opacity),
+                PropertyFactory.rasterFadeDuration(200f),
+            )
+            style.addLayerAbove(layer, SHAPES_LAYER)
+        }
+    }
+
+    fun clearWeatherLayers() {
+        val target = map ?: return
+        target.getStyle { style ->
+            style.removeLayer(RADAR_LAYER)
+            style.removeLayer(ALERTS_LAYER)
+            style.removeSource(RADAR_SOURCE)
+            style.removeSource(ALERTS_SOURCE)
+        }
+    }
+
+    /** Active weather alerts rendered as a bulk point source. */
+    fun applyAlerts(geoJson: String) {
+        val target = map ?: return
+        target.getStyle { style ->
+            val source = style.getSourceAs<GeoJsonSource>(ALERTS_SOURCE)
+                ?: GeoJsonSource(ALERTS_SOURCE).also { style.addSource(it) }
+            source.setGeoJson(geoJson)
+            if (style.getLayer(ALERTS_LAYER) == null) {
+                style.addLayer(
+                    CircleLayer(ALERTS_LAYER, ALERTS_SOURCE).withProperties(
+                        PropertyFactory.circleRadius(7f),
+                        PropertyFactory.circleColor(Expression.get("#DC2626")),
+                        PropertyFactory.circleOpacity(0.9f),
+                        PropertyFactory.circleStrokeWidth(2f),
+                        PropertyFactory.circleStrokeColor(Expression.get("#FFFFFF")),
+                    )
+                )
+            }
         }
     }
 
@@ -152,6 +206,10 @@ class MapLibreMapRenderer(
         const val CLUSTERS_LAYER = "intellitrip-cluster-layer"
         const val STOPS_LAYER = "intellitrip-stop-layer"
         const val SHAPES_LAYER = "intellitrip-shape-layer"
+        const val RADAR_SOURCE = "intellitrip-radar"
+        const val RADAR_LAYER = "intellitrip-radar-layer"
+        const val ALERTS_SOURCE = "intellitrip-weather-alerts"
+        const val ALERTS_LAYER = "intellitrip-weather-alert-layer"
     }
 }
 

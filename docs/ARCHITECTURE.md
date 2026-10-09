@@ -27,6 +27,7 @@ Providers
 - `core/atlas-gtfs-realtime/` — pure Kotlin GTFS-Realtime adapter (vehicle positions, trip updates, service alerts) with explicit static `FeedId` association.
 - `core/atlas-map/` — pure Kotlin render pipeline: spatial filtering, viewport culling, LOD/clustering, interpolation, update throttling, bulk GeoJSON payloads.
 - `core/atlas-map-android/` — Android `MapLibreMapRenderer` adapter; consumes bulk GeoJSON only, never per-feature views.
+- `core/atlas-weather/` — pure Kotlin weather adapters: `RainViewerRadarProvider` (PROVISIONAL per ADR-003), `NwsWeatherAlertProvider`, and `WeatherLayerComposer`.
 - `core/atlas-transit/` — quarantined legacy prototype; not authoritative, pending future authorized migration.
 
 ## Core principles

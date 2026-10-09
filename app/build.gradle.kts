@@ -41,4 +41,5 @@ dependencies {
     implementation(project(":core:atlas-gtfs-realtime"))
     implementation(project(":core:atlas-map"))
     implementation(project(":core:atlas-map-android"))
+    implementation(project(":core:atlas-weather"))
 }

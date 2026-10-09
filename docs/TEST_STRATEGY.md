@@ -41,6 +41,7 @@
 - Radar frame freshness tests.
 - Alert severity mapping tests.
 - Provider outage degradation tests.
+- Implemented (`core/atlas-weather`): RainViewer index parsing (past + nowcast frames, unusable payload rejected), frame filtering by `since`, network-failure propagation, NWS alert mapping (severity, urgency, areas, timestamps), User-Agent enforcement before any NWS call, layer composition order (weather below transit), default-off behaviour, degraded composition.
 
 ## Integration
 - End-to-end provider fetch → domain snapshot → render state using fixtures.
