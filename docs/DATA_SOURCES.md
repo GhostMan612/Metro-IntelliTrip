@@ -10,6 +10,9 @@
 - GTFS-RT alerts: https://svc.metrotransit.org/mtgtfs/alerts.pb
 - GTFS extensions: https://www.metrotransit.org/resources/gtfs-extensions/
 - Public developer info: https://www.metrotransit.org/resources/apps/
+- `FeedId` for this feed is a stable logical namespace (e.g. `metro-transit-regional`); it must not be derived from ZIP hash, feed_version, or download date (ADR-011).
+- GTFS-Realtime feeds must be explicitly associated with the corresponding static `FeedId`; `FeedEntity.id` is not interchangeable with static `FeedId`, and `VehicleDescriptor.id` may be absent (ADR-011, Phase 02 requirement).
+- Static GTFS acquisition uses conditional refresh (`If-Modified-Since`/`If-None-Match`, 304 keep, 200 validate then atomic activation); acquisition is explicit and never runs at app startup.
 
 ## Routing
 - OpenTripPlanner: https://www.opentripplanner.org/ · https://github.com/opentripplanner/OpenTripPlanner

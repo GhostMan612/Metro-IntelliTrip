@@ -40,7 +40,9 @@ All operations are one-shot: `suspend` functions returning `ProviderResult<T>`.
 - `suspend fun transfers(): ProviderResult<List<Transfer>>`
 - `suspend fun feedMetadata(): ProviderResult<FeedMetadata>`
 - Provider DTO mapping stays at the adapter edge.
-- `AgencyId` is Atlas-normalized and globally collision-safe; it is not assumed to equal raw GTFS `agency_id`. Raw agency IDs remain at adapter edge.
+- Static entity keys are feed-scoped (`RouteKey(feedId, routeId)`, etc.); `AgencyId` is agency identity, not a key namespace (ADR-011).
+- GTFS schedule times are exposed as `GtfsServiceTime` (service-day-relative seconds), never `LocalTime`.
+- Adapters that require credentials declare `requiresAuth`; Metro Transit is currently keyless.
 
 ## TransitRealtimeProvider
 - `vehiclePositions(scope: DataScope): Flow<ProviderResult<List<Vehicle>>>`

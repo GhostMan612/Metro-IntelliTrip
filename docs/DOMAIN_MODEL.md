@@ -9,17 +9,24 @@ data class LatLngBounds(val southWest: GeoPoint, val northEast: GeoPoint)
 
 enum class VehicleType { BUS, RAIL, FERRY, OTHER }
 
-// Identity: raw GTFS/provider IDs are NOT assumed globally unique.
-// All cross-provider references use namespaced keys.
-// `AgencyId` is Atlas-normalized and globally collision-safe within Atlas.
-// It is not assumed to equal raw GTFS `agency_id`; adapters synthesize/namespace it.
+// Identity: raw GTFS/provider IDs are NOT assumed globally unique (ADR-011).
+// Static GTFS entity keys are FEED-SCOPED, not agency-scoped.
+// `FeedId` is the stable logical feed namespace, unchanged across versions/hashes.
+// `AgencyId` is a separate Atlas-normalized agency identity; it never namespaces
+// static entity keys and is not assumed to equal raw GTFS `agency_id`.
 @JvmInline value class AgencyId(val value: String)
 @JvmInline value class FeedId(val value: String)
 
-data class RouteKey(val agencyId: AgencyId, val routeId: String)
-data class TripKey(val agencyId: AgencyId, val tripId: String)
-data class StopKey(val agencyId: AgencyId, val stopId: String)
-data class VehicleKey(val agencyId: AgencyId, val vehicleId: String)
+data class RouteKey(val feedId: FeedId, val routeId: String)
+data class TripKey(val feedId: FeedId, val tripId: String)
+data class StopKey(val feedId: FeedId, val stopId: String)
+data class VehicleKey(val feedId: FeedId, val vehicleId: String)
+data class ServiceKey(val feedId: FeedId, val serviceId: String)
+data class ShapeKey(val feedId: FeedId, val shapeId: String)
+
+// GTFS schedule time: nonnegative seconds from the service-day start.
+// Hours above 24 are valid and must never be wrapped at midnight.
+data class GtfsServiceTime(val secondsSinceServiceDayStart: Int)
 
 data class Vehicle(
     val key: VehicleKey,
@@ -33,50 +40,61 @@ data class Vehicle(
     val vehicleType: VehicleType,
 )
 
-data class Agency(val id: AgencyId, val name: String, val url: String?, val timezone: String?)
+data class Agency(
+    val id: AgencyId,
+    val feedId: FeedId,
+    val name: String,
+    val url: String?,
+    val timezone: String?,
+)
 
-data class Route(val key: RouteKey, val shortName: String?, val longName: String?, val color: Int?, val feedId: FeedId?)
+data class Route(
+    val key: RouteKey,
+    val agencyId: AgencyId?,
+    val shortName: String?,
+    val longName: String?,
+    val routeType: Int,
+    val color: Int?,
+)
 
-data class Stop(val key: StopKey, val name: String, val location: GeoPoint, val feedId: FeedId?)
+data class Stop(val key: StopKey, val name: String, val location: GeoPoint, val parentStation: StopKey?)
 
 data class Trip(
     val key: TripKey,
     val routeKey: RouteKey,
-    val serviceId: String,
+    val serviceKey: ServiceKey,
     val headsign: String?,
     val directionId: Int?,
-    val shapeId: String?,
-    val feedId: FeedId?,
+    val shapeKey: ShapeKey?,
 )
 
 data class StopTime(
     val tripKey: TripKey,
     val stopKey: StopKey,
     val stopSequence: Int,
-    val arrival: LocalTime?,
-    val departure: LocalTime?,
+    val arrivalTime: GtfsServiceTime?,
+    val departureTime: GtfsServiceTime?,
 )
 
 data class Calendar(
-    val serviceId: String,
-    val agencyId: AgencyId,
+    val serviceKey: ServiceKey,
     val daysOfWeek: Set<DayOfWeek>,
     val startDate: LocalDate,
     val endDate: LocalDate,
 )
 
 data class CalendarDate(
-    val serviceId: String,
+    val serviceKey: ServiceKey,
     val date: LocalDate,
     val exceptionType: ServiceExceptionType, // ADDED / REMOVED
 )
 
-data class Shape(val id: String, val agencyId: AgencyId, val points: List<GeoPoint>)
+data class Shape(val key: ShapeKey, val points: List<GeoPoint>)
 
 data class Frequency(
     val tripKey: TripKey,
-    val startTime: LocalTime,
-    val endTime: LocalTime,
+    val startTime: GtfsServiceTime,
+    val endTime: GtfsServiceTime,
     val headwaySecs: Int,
 )
 
@@ -216,7 +234,9 @@ enum class ZoomBucket { CLUSTER, SIMPLIFIED, INDIVIDUAL }
 Rules:
 - `ScopeState` is continuous/scalable; do not collapse it into rigid app modes.
 - Camera scope controls what is visible; data scope controls requests/retention; render scope controls detail level.
-- Raw GTFS IDs (`routeId`, `tripId`, `stopId`, `vehicleId`) are only meaningful within an agency; use `RouteKey`/`TripKey`/`StopKey`/`VehicleKey` for cross-provider references.
+- Raw GTFS IDs (`routeId`, `tripId`, `stopId`, `serviceId`, `shapeId`, `vehicleId`) are scoped to the published feed; use `RouteKey`/`TripKey`/`StopKey`/`ServiceKey`/`ShapeKey`/`VehicleKey` for cross-provider references (ADR-011).
+- `AgencyId` is agency identity only; it never namespaces static entity keys, and a stop served by multiple agencies keeps one `StopKey`.
+- GTFS schedule times use `GtfsServiceTime` (service-day-relative seconds), never `LocalTime`; conversion to instants requires the service date and agency timezone.
 - Focus uses namespaced identities; region/system focus spans multiple agencies.
 - Journey-level `confidence` is removed; transfer confidence lives on `TransferConnection` with rationale.
 - Provider-specific DTOs are mapped into these models at the edge.

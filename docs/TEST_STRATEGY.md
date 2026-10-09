@@ -2,7 +2,8 @@
 
 ## Domain
 - Pure unit tests for `ScopeState`, `Vehicle`, `JourneyOption`, stale-data rules, LOD bucket selection.
-- Identity tests: `RouteKey`/`TripKey`/`StopKey`/`VehicleKey` disambiguate same raw IDs across agencies.
+- Identity tests: feed-scoped `RouteKey`/`TripKey`/`StopKey`/`ServiceKey`/`ShapeKey`/`VehicleKey` disambiguate same raw IDs across feeds; shared stops keep one identity within a feed; `AgencyId` does not affect entity identity; `FeedId` survives snapshot version/hash changes (ADR-011).
+- GTFS service-time tests: `GtfsServiceTime` parses strict `H:MM:SS`/`HH:MM:SS`, preserves values beyond 24h, never wraps at midnight, formats deterministically, rejects malformed values.
 - Journey model tests: `Leg.Transit` field mapping, `TripInstance`/service date, `TransferConnection` buffers and rationale; journey no longer carries a journey-level confidence.
 
 ## Provider contracts
