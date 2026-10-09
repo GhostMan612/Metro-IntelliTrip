@@ -11,4 +11,7 @@ data class LatLngBounds(val southWest: GeoPoint, val northEast: GeoPoint) {
     init {
         require(southWest.lat <= northEast.lat)
     }
+
+    fun contains(point: GeoPoint): Boolean =
+        point.lat in southWest.lat..northEast.lat && point.lon in southWest.lon..northEast.lon
 }

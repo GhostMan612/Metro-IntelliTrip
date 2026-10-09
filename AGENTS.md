@@ -17,6 +17,7 @@ gradlew.bat lint
 - `core/atlas-domain/` pure Kotlin identity/scope domain
 - `core/atlas-contracts/` pure Kotlin provider/scope contracts
 - `core/atlas-gtfs-static/` pure Kotlin static GTFS adapter (ZIP, CSV, validation, snapshots)
+- `core/atlas-gtfs-realtime/` pure Kotlin GTFS-Realtime adapter (vehicle positions, trip updates, alerts)
 - `core/atlas-transit/` protected prototype adapter; not authoritative until migrated
 
 ## Docs

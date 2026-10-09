@@ -40,6 +40,10 @@ Ingest GTFS-RT vehicles, trip updates, and alerts through provider contracts.
 
 ## Artifacts
 - GTFS-RT client, fixture replay tests, freshness model.
+- Module `core/atlas-gtfs-realtime` (pure Kotlin/JVM).
+
+## Status
+Implemented (commit recorded on master). Mapping into feed-scoped domain models, conservative polling with failure backoff, stale/malformed handling, and `.pb` replay fixtures are in place. Scope filtering is applied to snapshots; the app still does not consume realtime data at startup.
 
 ## Handoff
 - Phase 03 can render live map layers.

@@ -24,6 +24,7 @@ Providers
 - `core/atlas-domain/` — pure Kotlin domain models (identity, geo, scope, static transit, `GtfsServiceTime`).
 - `core/atlas-contracts/` — pure Kotlin provider contracts (`ProviderResult`, `TransitStaticProvider`, scope resolver).
 - `core/atlas-gtfs-static/` — pure Kotlin static GTFS adapter (ZIP, CSV, validation, acquisition, snapshots).
+- `core/atlas-gtfs-realtime/` — pure Kotlin GTFS-Realtime adapter (vehicle positions, trip updates, service alerts) with explicit static `FeedId` association.
 - `core/atlas-transit/` — quarantined legacy prototype; not authoritative, pending future authorized migration.
 
 ## Core principles
