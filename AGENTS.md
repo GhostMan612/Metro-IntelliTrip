@@ -20,6 +20,7 @@ gradlew.bat lint
 - `core/atlas-gtfs-realtime/` pure Kotlin GTFS-Realtime adapter (vehicle positions, trip updates, alerts)
 - `core/atlas-map/` pure Kotlin render pipeline (cull, LOD, clustering, interpolation, GeoJSON)
 - `core/atlas-map-android/` MapLibre renderer adapter (bulk source/layer updates)
+- `core/atlas-scope/` pure Kotlin scope engine (focus -> camera/data/render resolution)
 - `core/atlas-weather/` pure Kotlin weather adapters (radar, NWS alerts, layer composer)
 - `core/atlas-transit/` protected prototype adapter; not authoritative until migrated
 

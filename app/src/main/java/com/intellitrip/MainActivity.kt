@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.intellitrip.contracts.ProviderResult
 import com.intellitrip.domain.FeedId
+import com.intellitrip.domain.Focus
 import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.LatLngBounds
 import com.intellitrip.domain.RadarFrame
@@ -35,7 +36,9 @@ import com.intellitrip.domain.Vehicle
 import com.intellitrip.domain.VehicleType
 import com.intellitrip.domain.WeatherAlert
 import com.intellitrip.gtfsrt.PollingGtfsRealtimeClient
+import com.intellitrip.gtfsrt.RealtimeScopeFilter
 import com.intellitrip.gtfsrt.UrlGtfsRealtimeFetcher
+import com.intellitrip.scope.ScopeEngine
 import com.intellitrip.map.CameraView
 import com.intellitrip.map.CartoBasemapProvider
 import com.intellitrip.map.RenderInput
@@ -92,7 +95,12 @@ private fun IntelliTripMapScreen() {
     var radarFrame by remember { mutableStateOf<RadarFrame?>(null) }
     var radarEnabled by remember { mutableStateOf(false) }
     var weatherAlerts by remember { mutableStateOf<List<WeatherAlert>>(emptyList()) }
+    var scopeLabel by remember { mutableStateOf("System") }
+    var focus by remember { mutableStateOf<Focus?>(Focus.System) }
     var renderer by remember { mutableStateOf<MapLibreMapRenderer?>(null) }
+
+    val scopeEngine = remember { ScopeEngine() }
+    val scopeState = scopeEngine.currentScope(focus)
 
     val pipeline = remember { TransitRenderPipeline() }
     val throttle = remember { RenderUpdateThrottle() }
@@ -124,29 +132,32 @@ private fun IntelliTripMapScreen() {
         onDispose { mapView.onDestroy() }
     }
 
-    LaunchedEffect(renderer, vehicles) {
+    LaunchedEffect(renderer, vehicles, scopeState) {
         val active = renderer ?: return@LaunchedEffect
-        if (vehicles.isEmpty()) return@LaunchedEffect
         if (!throttle.shouldEmit()) return@LaunchedEffect
-        val camera = active.camera()
+        val dataScope = scopeState.dataScope
+        val visible = RealtimeScopeFilter.filter(vehicles, dataScope)
+        val cameraBounds = dataScope.bounds ?: fallbackBounds()
         active.render(
             pipeline.render(
                 RenderInput(
-                    camera = CameraView(
-                        bounds = camera?.let {
-                            LatLngBounds(
-                                GeoPoint(it.southWestLat, it.southWestLon),
-                                GeoPoint(it.northEastLat, it.northEastLon),
-                            )
-                        } ?: fallbackBounds(),
-                        zoom = camera?.zoom ?: 11.0,
-                    ),
-                    vehicles = vehicles,
+                    camera = CameraView(bounds = cameraBounds, zoom = scopeState.cameraScope.zoom ?: 11.0),
+                    vehicles = visible,
                     stops = emptyList(),
                     shapes = emptyList(),
                     snapshotAt = Instant.now(),
                 )
             )
+        )
+    }
+
+    LaunchedEffect(renderer, focus) {
+        val active = renderer ?: return@LaunchedEffect
+        val camera = scopeState.cameraScope
+        active.moveCamera(
+            camera.bounds?.let { (it.southWest.lat + it.northEast.lat) / 2 } ?: DEFAULT_LAT,
+            camera.bounds?.let { (it.southWest.lon + it.northEast.lon) / 2 } ?: DEFAULT_LON,
+            camera.zoom ?: 11.0,
         )
     }
 
@@ -182,6 +193,21 @@ private fun IntelliTripMapScreen() {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ScopeButton("Nearby") {
+                    scopeLabel = "Nearby (½ mile)"
+                    focus = Focus.Radius(GeoPoint(DEFAULT_LAT, DEFAULT_LON), 805.0)
+                }
+                ScopeButton("Area") {
+                    scopeLabel = "Area (2 miles)"
+                    focus = Focus.Radius(GeoPoint(DEFAULT_LAT, DEFAULT_LON), 3218.0)
+                }
+                ScopeButton("System") {
+                    scopeLabel = "System"
+                    focus = Focus.System
+                }
+            }
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = {
                     status = "Loading live transit…"
@@ -254,6 +280,12 @@ private fun IntelliTripMapScreen() {
                 }) { Text("Alerts") }
             }
 
+            Text(
+                text = "$scopeLabel · ${scopeState.renderScope.zoomBucket} · " +
+                    "${scopeState.renderScope.maxRenderedVehicles} vehicle budget",
+                style = MaterialTheme.typography.labelMedium,
+            )
+
             Text(text = status, style = MaterialTheme.typography.bodyMedium)
         }
     }
@@ -261,6 +293,11 @@ private fun IntelliTripMapScreen() {
 
 private fun fallbackBounds(): LatLngBounds =
     LatLngBounds(GeoPoint(DEFAULT_LAT - 0.25, DEFAULT_LON - 0.35), GeoPoint(DEFAULT_LAT + 0.25, DEFAULT_LON + 0.35))
+
+@Composable
+private fun ScopeButton(label: String, onClick: () -> Unit) {
+    Button(onClick = onClick) { Text(label) }
+}
 
 private fun describe(result: ProviderResult<*>): String = when (result) {
     is ProviderResult.NetworkFailure -> "${result.error.message} [${result.error.cause?.javaClass?.simpleName}]"

@@ -10,7 +10,11 @@ sealed interface Focus {
     data class Radius(val center: GeoPoint, val meters: Double) : Focus
     data class Viewport(val bounds: LatLngBounds) : Focus
     data class Region(val agencyScopes: Set<AgencyId>, val bounds: LatLngBounds) : Focus
-    data class TripCorridor(val tripKey: TripKey, val corridorRadiusMeters: Double) : Focus
+    data class TripCorridor(
+        val tripKey: TripKey,
+        val corridorRadiusMeters: Double,
+        val anchor: GeoPoint? = null,
+    ) : Focus
     data object System : Focus
 }
 

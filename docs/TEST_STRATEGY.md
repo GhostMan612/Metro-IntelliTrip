@@ -14,6 +14,7 @@
 
 ## Scope resolver
 - ScopeResolver maps each Focus (trip, route, vehicle, radius, viewport, region, multiple agencies, system, trip corridor + nearby transit) to expected CameraScope/DataScope/RenderScope.
+- Implemented (`core/atlas-scope`): per-focus resolution, continuous radius zoom (closer radius = closer zoom), camera/data/render independence, agency-scoped region filtering, trip-corridor radius, render budget scaling with LOD bucket.
 - Adapter-broad-fetch-plus-local-filter behavior tests.
 
 ## GTFS / GTFS-RT

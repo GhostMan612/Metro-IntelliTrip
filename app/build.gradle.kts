@@ -42,4 +42,5 @@ dependencies {
     implementation(project(":core:atlas-map"))
     implementation(project(":core:atlas-map-android"))
     implementation(project(":core:atlas-weather"))
+    implementation(project(":core:atlas-scope"))
 }

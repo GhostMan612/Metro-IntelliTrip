@@ -41,5 +41,8 @@ Expand continuous scope into first-class policy/UI/advanced behavior on the Phas
 ## Artifacts
 - Scope models/engine, tests, app controls.
 
+## Status
+Implemented. `core/atlas-scope` provides `ScopePolicy` (tunable zoom, radius, freshness and render budgets), `DefaultScopeResolver` (all focus cases: trip, route, vehicle, radius, viewport, region, trip corridor, system, none) and `ScopeEngine`. Camera, data and render scopes resolve independently, radius zoom is continuous, and the app exposes Nearby/Area/System controls that change LOD bucket and vehicle budget live (verified on-device: Nearby = INDIVIDUAL/500, System = CLUSTER/6000).
+
 ## Handoff
 - Phase 06 can plan within scope boundaries.
