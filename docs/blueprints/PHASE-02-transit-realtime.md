@@ -18,12 +18,14 @@ Ingest GTFS-RT vehicles, trip updates, and alerts through provider contracts.
 - Weather.
 
 ## Components affected
-- `core/atlas-transit`, realtime provider models.
+- A new pure Kotlin/JVM realtime GTFS-RT adapter module (e.g. `core/atlas-gtfs-realtime`), `core/atlas-domain`, `core/atlas-contracts`. The legacy `core/atlas-transit` prototype stays quarantined and is not extended.
 
 ## Requirements
 - Poll conservatively; no assumed websocket.
-- Every payload has timestamp/age.
+- Every payload has timestamp/age and carries `FreshnessMetadata`.
 - Malformed entities isolated and logged without personal data.
+- Realtime feeds are explicitly associated with the static `FeedId` they extend (ADR-011); `FeedEntity.id` is not interchangeable with static `FeedId`.
+- `VehicleKey` uses the feed-scoped source namespace; `VehicleDescriptor.id` may be absent, and no persistent `VehicleKey` may be fabricated from trip ids or coordinates.
 
 ## Tests/gates
 - `.pb` replay tests pass.

@@ -19,6 +19,13 @@ Providers
   - Metro Transit, NOAA/NWS/MRMS/IEM, RainViewer (provisional), CARTO, MapLibre, future agencies/traffic
 ```
 
+## Current modules
+- `app/` — Android Compose shell (non-networked placeholder).
+- `core/atlas-domain/` — pure Kotlin domain models (identity, geo, scope, static transit, `GtfsServiceTime`).
+- `core/atlas-contracts/` — pure Kotlin provider contracts (`ProviderResult`, `TransitStaticProvider`, scope resolver).
+- `core/atlas-gtfs-static/` — pure Kotlin static GTFS adapter (ZIP, CSV, validation, acquisition, snapshots).
+- `core/atlas-transit/` — quarantined legacy prototype; not authoritative, pending future authorized migration.
+
 ## Core principles
 - Domain modules must not import Android framework types.
 - Providers implement generic contracts; provider-specific payloads stay at the edge.

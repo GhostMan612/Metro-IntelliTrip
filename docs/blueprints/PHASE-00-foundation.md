@@ -24,7 +24,7 @@ Establish project structure, docs freeze, build hygiene, and app shell skeleton.
 
 ## Requirements
 - `core/` modules do not import Android framework types; pure Kotlin domain/contracts only.
-- Namespaced identities are established in the domain model: `AgencyId`, `FeedId`, `RouteKey`, `TripKey`, `StopKey`, `VehicleKey`. Raw GTFS IDs are not treated as globally unique.
+- Namespaced identities are established in the domain model: `AgencyId`, `FeedId`, `RouteKey`, `TripKey`, `StopKey`, `VehicleKey`. Raw GTFS IDs are not treated as globally unique. (Later refined by ADR-011: static GTFS entity keys are feed-scoped, and `ServiceKey`/`ShapeKey` were added in Phase 01.)
 - Scope primitives (`ScopeState`, `Focus`, `CameraScope`, `DataScope`, `RenderScope`) and the `Focus -> ScopePolicy/ScopeResolver -> CameraScope/DataScope/RenderScope` resolver contract are established here; Phase 03 consumes them, Phase 05 expands policy/UI/advanced behavior.
 - Prototype code violating the pure-Kotlin/portability rule is audited/quarantined/refactored before being authoritative.
 - No secrets committed.

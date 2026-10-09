@@ -17,8 +17,8 @@
 - Adapter-broad-fetch-plus-local-filter behavior tests.
 
 ## GTFS / GTFS-RT
-- Fixture zips and `.pb` samples.
-- Replay tests for vehicle positions, trip updates, alerts.
+- Static (Phase 01, `core/atlas-gtfs-static`): fixture GTFS ZIP parses; optional files absent is tolerated; missing required file/unknown references rejected; stop times ordered by `stop_sequence`; shape points ordered by `shape_pt_sequence`; service times beyond 24h preserved; snapshot activation and conditional-refresh (304 keep, 200 validate+activate, invalid payload keeps previous snapshot) tests; static provider returns `ProviderResult`.
+- Realtime (Phase 02, not yet implemented): `.pb` replay fixtures for vehicle positions, trip updates, alerts; feed association and `VehicleKey` resolution tests.
 - Shape parsing tests for route polylines.
 
 ## Routing

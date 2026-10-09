@@ -30,7 +30,6 @@ data class GtfsServiceTime(val secondsSinceServiceDayStart: Int)
 
 data class Vehicle(
     val key: VehicleKey,
-    val feedId: FeedId?,
     val routeKey: RouteKey?,
     val tripKey: TripKey?,
     val position: GeoPoint,
@@ -150,8 +149,7 @@ data class JourneyOption(
 sealed interface Leg {
     data class Walk(val from: GeoPoint, val to: GeoPoint, val duration: Duration) : Leg
     data class Transit(
-        val agencyId: AgencyId,
-        val feedId: FeedId?,
+        val agencyId: AgencyId?,
         val routeKey: RouteKey,
         val tripKey: TripKey,
         val serviceDate: LocalDate,
