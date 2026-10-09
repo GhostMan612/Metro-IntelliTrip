@@ -31,5 +31,14 @@ live snapshot
 ## Rendering states
 Renderer consumes immutable scope/snapshot state from the engine. It must not call providers directly.
 
+## Implementation status
+- `core/atlas-map`: `TransitRenderPipeline` performs viewport culling, zoom-bucket LOD (CLUSTER / SIMPLIFIED / INDIVIDUAL), grid clustering, snapshot interpolation with dateline handling, staleness marking, and a rendered-vehicle budget with truncation reporting.
+- `core/atlas-map`: `RenderUpdateThrottle` rate-limits source updates; `GeoJsonWriter` emits one FeatureCollection per layer.
+- `core/atlas-map-android`: `MapLibreMapRenderer` pushes those FeatureCollections into MapLibre sources. No Android view or Compose object is created per vehicle.
+
+## Constraints
+- GTFS-Realtime protobuf bindings must remain Android-compatible; bindings published with newer JVM bytecode cannot be loaded by Android runtimes.
+- Realtime acquisition must run off the main thread.
+
 ## Failure behavior
 If realtime data is stale, show stale markers with reduced confidence styling rather than silently jumping to old locations.

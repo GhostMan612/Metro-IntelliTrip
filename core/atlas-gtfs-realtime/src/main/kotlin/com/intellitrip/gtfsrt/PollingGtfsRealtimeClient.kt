@@ -24,11 +24,14 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 
 class GtfsRealtimeException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
@@ -152,6 +155,7 @@ class PollingGtfsRealtimeClient(
     private val pollIntervalMillis: Long = 10_000,
     private val maxBackoffMillis: Long = 120_000,
     private val clock: () -> Instant = Instant::now,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
     data class RealtimeFeedUrls(
@@ -171,24 +175,29 @@ class PollingGtfsRealtimeClient(
     fun alerts(): Flow<ProviderResult<List<ServiceAlert>>> =
         poll(urls.alerts, mapper::alerts)
 
-    private fun <T> poll(url: String, transform: (GtfsRealtime.FeedMessage) -> T): Flow<ProviderResult<T>> = flow {
+    private fun <T> poll(url: String, transform: (GtfsRealtime.FeedMessage) -> T): Flow<ProviderResult<T>> =
+        flow {
         var backoff = pollIntervalMillis
         while (currentCoroutineContext().isActive) {
             val fetchedAt = clock()
             val result: ProviderResult<T> = try {
-                val bytes = fetcher.fetch(url)
-                val feed = GtfsRealtime.FeedMessage.parseFrom(bytes)
-                val sourceTimestamp = feed.header.timestamp.takeIf { it > 0 }
-                    ?.let { Instant.ofEpochSecond(it) }
-                ProviderResult.Success(
-                    data = transform(feed),
-                    freshness = FreshnessMetadata(
-                        sourceTimestamp = sourceTimestamp,
-                        fetchedAt = fetchedAt,
-                        age = Duration.between(sourceTimestamp ?: fetchedAt, fetchedAt),
-                        providerId = providerId,
-                    ),
-                )
+                // acquisition and parsing run off the caller's thread so callers
+                // may collect from the main dispatcher without blocking it.
+                withContext(ioDispatcher) {
+                    val bytes = fetcher.fetch(url)
+                    val feed = GtfsRealtime.FeedMessage.parseFrom(bytes)
+                    val sourceTimestamp = feed.header.timestamp.takeIf { it > 0 }
+                        ?.let { Instant.ofEpochSecond(it) }
+                    ProviderResult.Success(
+                        data = transform(feed),
+                        freshness = FreshnessMetadata(
+                            sourceTimestamp = sourceTimestamp,
+                            fetchedAt = fetchedAt,
+                            age = Duration.between(sourceTimestamp ?: fetchedAt, fetchedAt),
+                            providerId = providerId,
+                        ),
+                    )
+                }
             } catch (e: com.google.protobuf.InvalidProtocolBufferException) {
                 ProviderResult.MalformedResponse(ProviderError("Malformed GTFS-Realtime payload for $url", e))
             } catch (e: IOException) {

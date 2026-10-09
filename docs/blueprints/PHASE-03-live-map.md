@@ -42,5 +42,8 @@ Render basemap, static network, and live vehicles with scope-aware performance.
 ## Artifacts
 - Map view, snapshot-to-layer pipeline, render-state tests.
 
+## Status
+Implemented. `core/atlas-map` holds the provider-neutral pipeline (viewport culling, zoom buckets, grid clustering, snapshot interpolation, update throttling, bulk GeoJSON output) and `core/atlas-map-android` holds the MapLibre adapter that pushes bulk source updates. The app shell renders the CARTO basemap and loads live transit only on explicit user action; verified on-device with 743 vehicles and no startup network activity.
+
 ## Handoff
 - Phase 04 can add weather layers.

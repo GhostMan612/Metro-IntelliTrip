@@ -25,6 +25,8 @@ Providers
 - `core/atlas-contracts/` — pure Kotlin provider contracts (`ProviderResult`, `TransitStaticProvider`, scope resolver).
 - `core/atlas-gtfs-static/` — pure Kotlin static GTFS adapter (ZIP, CSV, validation, acquisition, snapshots).
 - `core/atlas-gtfs-realtime/` — pure Kotlin GTFS-Realtime adapter (vehicle positions, trip updates, service alerts) with explicit static `FeedId` association.
+- `core/atlas-map/` — pure Kotlin render pipeline: spatial filtering, viewport culling, LOD/clustering, interpolation, update throttling, bulk GeoJSON payloads.
+- `core/atlas-map-android/` — Android `MapLibreMapRenderer` adapter; consumes bulk GeoJSON only, never per-feature views.
 - `core/atlas-transit/` — quarantined legacy prototype; not authoritative, pending future authorized migration.
 
 ## Core principles

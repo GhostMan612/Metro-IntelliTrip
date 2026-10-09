@@ -34,6 +34,7 @@
 - Snapshot immutability tests.
 - Cluster/LOD bucket tests by zoom.
 - Stale vehicle rendering state tests.
+- Implemented (`core/atlas-map`): viewport culling, cluster-vs-individual selection, vehicle budget/truncation reporting, interpolation between realtime snapshots (including no-prior-snapshot case), bulk GeoJSON output, update throttling.
 - Pipeline order tests: snapshot -> spatial filter -> viewport cull -> LOD -> bulk source update.
 
 ## Weather

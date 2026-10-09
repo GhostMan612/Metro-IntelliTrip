@@ -18,6 +18,8 @@ gradlew.bat lint
 - `core/atlas-contracts/` pure Kotlin provider/scope contracts
 - `core/atlas-gtfs-static/` pure Kotlin static GTFS adapter (ZIP, CSV, validation, snapshots)
 - `core/atlas-gtfs-realtime/` pure Kotlin GTFS-Realtime adapter (vehicle positions, trip updates, alerts)
+- `core/atlas-map/` pure Kotlin render pipeline (cull, LOD, clustering, interpolation, GeoJSON)
+- `core/atlas-map-android/` MapLibre renderer adapter (bulk source/layer updates)
 - `core/atlas-transit/` protected prototype adapter; not authoritative until migrated
 
 ## Docs
