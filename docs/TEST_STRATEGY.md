@@ -27,6 +27,7 @@
 - Transfer leg grouping tests.
 - `TransferConnection` computation tests (scheduled/predicted buffer, walking duration, confidence, rationale).
 - Provider-neutral model mapping tests.
+- Implemented (`core/atlas-routing`): multimodal journey shape (walk/transit/walk), transit-leg identity and schedule, direct vs transfer journeys, transfer-connection linkage to its two legs, realtime annotation without schedule rewriting, unreachable-destination `PartialResult`, service-time conversion past midnight, OTP URL construction and unreachable-service behaviour.
 
 ## Scope engine
 - Focus transitions, viewport/data/render scope separation, continuous radius behavior.

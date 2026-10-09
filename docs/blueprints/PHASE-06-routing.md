@@ -42,5 +42,8 @@ Plan origin→destination multimodal journeys through provider-neutral contracts
 ## Artifacts
 - Routing models/provider, selected routing-provider adapter/spike, tests.
 
+## Status
+Implemented for the static-network provider. `core/atlas-routing` contains `RoutingNetwork` (routes/stops/trips/stop times/transfers), `StaticNetworkPlanner` (walking legs, transit legs, transfer connections, service-day time conversion with agency timezone, realtime annotation that never rewrites the schedule) and an `OpenTripPlannerRoutingProvider` spike behind an injectable transport. Journey-level confidence was removed in favour of per-connection `TransferConnection`. The OTP topology research gate (ADR-007) remains OPEN: the adapter assumes only that an OTP-compatible service is reachable, and a full OTP itinerary mapper is deferred until that gate closes and a response fixture is captured.
+
 ## Handoff
 - Phase 07 can score transfer confidence.

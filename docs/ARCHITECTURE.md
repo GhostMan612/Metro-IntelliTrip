@@ -29,6 +29,7 @@ Providers
 - `core/atlas-map-android/` — Android `MapLibreMapRenderer` adapter; consumes bulk GeoJSON only, never per-feature views.
 - `core/atlas-weather/` — pure Kotlin weather adapters: `RainViewerRadarProvider` (PROVISIONAL per ADR-003), `NwsWeatherAlertProvider`, and `WeatherLayerComposer`.
 - `core/atlas-scope/` — pure Kotlin scope engine: `ScopePolicy`, `DefaultScopeResolver`, `ScopeEngine`.
+- `core/atlas-routing/` — pure Kotlin routing: `StaticNetworkPlanner` (walking legs, transit legs, transfer connections) and the OpenTripPlanner adapter spike.
 - `core/atlas-transit/` — quarantined legacy prototype; not authoritative, pending future authorized migration.
 
 ## Core principles
