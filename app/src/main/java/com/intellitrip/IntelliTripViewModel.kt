@@ -46,7 +46,7 @@ data class AppState(
     val journeyWarnings: List<String> = emptyList(),
     val planning: Boolean = false,
     val origin: GeoPoint = GeoPoint(DEFAULT_LAT, DEFAULT_LON),
-    val destination: GeoPoint = GeoPoint(DEFAULT_LAT + 0.03, DEFAULT_LON),
+    val destination: GeoPoint = GeoPoint(DEFAULT_DEST_LAT, DEFAULT_DEST_LON),
     val autoRefresh: Boolean = false,
 )
 

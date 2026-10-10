@@ -3,6 +3,7 @@ package com.intellitrip.offline
 import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.Vehicle
 import com.intellitrip.gtfs.GtfsArchive
+import com.intellitrip.gtfs.GtfsStaticParser
 import com.intellitrip.gtfs.StaticFeed
 import com.intellitrip.gtfs.StaticFeedSnapshotStore
 import java.time.Instant
@@ -72,13 +73,25 @@ class OfflineRegistry(
         )
     }
 
-    /** Loads and parses the stored static snapshot; null when nothing is stored. */
+    /**
+     * Loads and parses the stored static snapshot; null when nothing is stored.
+     *
+     * Stop times are deliberately discarded here: they are already on disk in the
+     * snapshot's stop-time index and are read back on demand by the planner. Letting
+     * the parser collect them would rebuild the whole table in memory on every cold
+     * start, which is what the on-disk index exists to avoid.
+     */
     fun loadStaticFeed(feedId: FeedId): StaticFeed? {
         val snapshot = store.activeSnapshot(feedId) ?: return null
         val payload = runCatching { store.readPayload(feedId) }.getOrNull() ?: return null
         val files = runCatching { GtfsArchive.read(payload).toMutableMap() }.getOrNull() ?: return null
         return runCatching {
-            com.intellitrip.gtfs.GtfsStaticParser.parse(feedId, files, snapshot.metadata)
+            GtfsStaticParser.parse(
+                feedId,
+                files,
+                snapshot.metadata,
+                com.intellitrip.gtfs.StopTimeSink { },
+            )
         }.getOrNull()
     }
 

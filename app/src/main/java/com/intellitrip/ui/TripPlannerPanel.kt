@@ -139,5 +139,5 @@ private fun TransferConfidence.color(): Color = when (this) {
 
 private fun DEFAULT_LAT_ORIGIN() = com.intellitrip.DEFAULT_LAT
 private fun DEFAULT_LON_ORIGIN() = com.intellitrip.DEFAULT_LON
-private fun DEFAULT_LAT_DEST() = com.intellitrip.DEFAULT_LAT + 0.03
-private fun DEFAULT_LON_DEST() = com.intellitrip.DEFAULT_LON
+private fun DEFAULT_LAT_DEST() = com.intellitrip.DEFAULT_DEST_LAT
+private fun DEFAULT_LON_DEST() = com.intellitrip.DEFAULT_DEST_LON

@@ -146,6 +146,15 @@ class StopTimeIndexReader(private val indexPath: Path, private val dataPath: Pat
     private val segments: Map<TripKey, List<Segment>> by lazy { loadIndex().first }
     private val stopIndex: Map<String, Set<TripKey>> by lazy { loadIndex().second }
 
+    /**
+     * Small cache of recently read trips. A planner reads the same trip repeatedly
+     * while building transfer connections, and each miss costs a disk seek; on a
+     * phone that dominates the whole plan.
+     */
+    private val cache = object : LinkedHashMap<TripKey, List<StopTime>>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<TripKey, List<StopTime>>) = size > 512
+    }
+
     /** Trips that serve a stop, letting a planner skip unrelated trips. */
     fun tripsServing(stop: StopKey): Set<TripKey> = stopIndex[stop.stopId].orEmpty()
 
@@ -157,6 +166,7 @@ class StopTimeIndexReader(private val indexPath: Path, private val dataPath: Pat
 
     /** Reads all stop times for one trip in stored order. */
     fun stopTimesFor(trip: TripKey, stopKeyOf: (String) -> StopKey): List<StopTime> {
+        synchronized(cache) { cache[trip] }?.let { return it }
         val ranges = segments[trip] ?: return emptyList()
         val file = channel ?: return emptyList()
         val total = ranges.sumOf { it.count }
@@ -187,7 +197,9 @@ class StopTimeIndexReader(private val indexPath: Path, private val dataPath: Pat
                 }
             }
         }
-        return result.sortedBy { it.stopSequence }
+        val sorted = result.sortedBy { it.stopSequence }
+        synchronized(cache) { cache[trip] = sorted }
+        return sorted
     }
 
     /** All trips that have stop times, for callers that need to page through them. */

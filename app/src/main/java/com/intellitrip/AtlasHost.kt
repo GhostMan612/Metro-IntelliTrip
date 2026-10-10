@@ -22,8 +22,14 @@ import com.intellitrip.weather.WeatherHttpClient
 import com.intellitrip.weather.WeatherRequestContext
 
 const val FEED_ID = "metro-transit-regional"
-const val DEFAULT_LAT = 44.9778
+const val DEFAULT_LAT = 44.9765
 const val DEFAULT_LON = -93.2650
+
+// Downtown St Paul. Deliberately a real transit destination: the planner pair must
+// have scheduled service between them, otherwise the app opens on "0 journeys" and
+// looks broken. Verified against the Metro Transit feed.
+const val DEFAULT_DEST_LAT = 44.9580
+const val DEFAULT_DEST_LON = -93.1560
 const val USER_AGENT = "IntelliTrip/0.1 (https://github.com/GhostMan612/Metro-IntelliTrip)"
 
 const val STATIC_GTFS_URL = "https://svc.metrotransit.org/mtgtfs/gtfs.zip"
