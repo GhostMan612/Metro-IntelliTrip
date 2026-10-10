@@ -22,6 +22,24 @@ class StaticFeedSnapshotStore(private val root: Path) {
 
     data class Snapshot(val metadata: FeedMetadata, val snapshotDir: Path)
 
+    /** Opens a stop-time sink writing into a staging area; call [close] to finalize. */
+    fun newStopTimeSink(): StopTimeSinkHandle {
+        val staging = Files.createDirectories(root.resolve(STAGING_DIR))
+        return StopTimeSinkHandle(
+            writer = StopTimeIndexWriter(Files.newOutputStream(staging.resolve(STOP_TIME_DATA))),
+            dataPath = staging.resolve(STOP_TIME_DATA),
+            indexPath = staging.resolve(STOP_TIME_INDEX),
+        )
+    }
+
+    fun stopTimeReader(feedId: FeedId): StopTimeIndexReader? {
+        val snapshot = activeSnapshot(feedId) ?: return null
+        val data = snapshot.snapshotDir.resolve(STOP_TIME_DATA)
+        val index = snapshot.snapshotDir.resolve(STOP_TIME_INDEX)
+        if (!Files.exists(data) || !Files.exists(index)) return null
+        return StopTimeIndexReader(index, data)
+    }
+
     fun activeSnapshot(feedId: FeedId): Snapshot? {
         val pointer = feedDir(feedId).resolve(POINTER_FILE)
         if (!Files.exists(pointer)) return null
@@ -67,6 +85,13 @@ class StaticFeedSnapshotStore(private val root: Path) {
             metadata.validTo?.let { "validTo=${it.format(DATE_FORMAT)}" },
             metadata.sourceUrl?.let { "sourceUrl=$it" },
         ))
+        // Carry the staged stop-time index into the snapshot when present.
+        listOf(STOP_TIME_DATA, STOP_TIME_INDEX).forEach { name ->
+            val staged = root.resolve(STAGING_DIR).resolve(name)
+            if (Files.exists(staged)) {
+                Files.move(staged, staging.resolve(name), StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
         val pointer = feedDir(feedId).resolve(POINTER_FILE)
         val pointerTemp = feedDir(feedId).resolve("$POINTER_FILE.tmp")
         Files.write(pointerTemp, listOf(snapshotName))
@@ -88,6 +113,9 @@ class StaticFeedSnapshotStore(private val root: Path) {
         private const val FEED_ID_FILE = "feed-id"
         private const val POINTER_FILE = "active"
         private const val SNAPSHOTS_DIR = "snapshots"
+        private const val STAGING_DIR = "staging-stop-times"
+        private const val STOP_TIME_DATA = "stop-times.dat"
+        private const val STOP_TIME_INDEX = "stop-times.idx"
         private val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.BASIC_ISO_DATE
     }
 }

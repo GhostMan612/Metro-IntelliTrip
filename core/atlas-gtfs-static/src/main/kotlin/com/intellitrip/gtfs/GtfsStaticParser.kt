@@ -24,6 +24,7 @@ import com.intellitrip.domain.Trip
 import com.intellitrip.domain.TripKey
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /** The complete normalized static network for a single published feed. */
@@ -45,9 +46,7 @@ data class StaticFeed(
     val stopsByKey: Map<StopKey, Stop> by lazy { stops.associateBy { it.key } }
     val tripsByKey: Map<TripKey, Trip> by lazy { trips.associateBy { it.key } }
     val shapesByKey: Map<ShapeKey, Shape> by lazy { shapes.associateBy { it.key } }
-    val stopTimesByTrip: Map<TripKey, List<StopTime>> by lazy {
-        stopTimes.groupBy { it.tripKey }
-    }
+    val stopTimesByTrip: Map<TripKey, List<StopTime>> by lazy { stopTimes.groupBy { it.tripKey } }
 
     fun routesForAgency(agencyId: AgencyId?): List<Route> =
         if (agencyId == null) routes else routes.filter { it.agencyId == agencyId }
@@ -67,18 +66,60 @@ data class StaticFeed(
 class GtfsValidationException(message: String) : Exception(message)
 
 /**
- * Parses GTFS Schedule tables into a feed-scoped [StaticFeed]. Required-field
- * validation follows the GTFS specification; optional files are tolerated.
+ * Parses GTFS Schedule tables into a feed-scoped [StaticFeed].
+ *
+ * Each table is streamed row by row and its raw bytes are released immediately
+ * afterwards. Required-field validation follows the GTFS specification; optional
+ * files are tolerated when absent.
  */
+/**
+ * Receives stop-time rows as they stream out of the parser. Hosts that cannot
+ * retain hundreds of thousands of rows (Android) write them to disk instead.
+ */
+fun interface StopTimeSink {
+    fun accept(stopTime: StopTime)
+}
+
+private class CollectingStopTimeSink : StopTimeSink {
+    val rows = mutableListOf<StopTime>()
+    override fun accept(stopTime: StopTime) {
+        rows += stopTime
+    }
+}
+
 object GtfsStaticParser {
 
     private val dateFormat: DateTimeFormatter = DateTimeFormatter.BASIC_ISO_DATE
 
-    fun parse(feedId: FeedId, files: Map<String, String>, metadata: FeedMetadata): StaticFeed {
+    private val DAY_FIELDS = listOf(
+        "monday" to DayOfWeek.MONDAY,
+        "tuesday" to DayOfWeek.TUESDAY,
+        "wednesday" to DayOfWeek.WEDNESDAY,
+        "thursday" to DayOfWeek.THURSDAY,
+        "friday" to DayOfWeek.FRIDAY,
+        "saturday" to DayOfWeek.SATURDAY,
+        "sunday" to DayOfWeek.SUNDAY,
+    )
+
+    /** Convenience overload for tests and callers that already hold decoded text. */
+    fun parse(feedId: FeedId, files: Map<String, String>, metadata: FeedMetadata): StaticFeed =
+        parse(feedId, files.mapValues { it.value.toByteArray() }.toMutableMap(), metadata)
+
+    @JvmName("parseBytes")
+    fun parse(feedId: FeedId, files: MutableMap<String, ByteArray>, metadata: FeedMetadata): StaticFeed =
+        parse(feedId, files, metadata, null)
+
+    @JvmName("parseWithSink")
+    fun parse(
+        feedId: FeedId,
+        files: MutableMap<String, ByteArray>,
+        metadata: FeedMetadata,
+        stopTimeSink: StopTimeSink?,
+    ): StaticFeed {
         val required = listOf("routes.txt", "stops.txt", "trips.txt", "stop_times.txt")
-        val missingRequired = required.filterNot { files.containsKey(it) }
-        if (missingRequired.isNotEmpty()) {
-            throw GtfsValidationException("Missing required GTFS files: $missingRequired")
+        val missing = required.filterNot { files.containsKey(it) }
+        if (missing.isNotEmpty()) {
+            throw GtfsValidationException("Missing required GTFS files: $missing")
         }
         if (!files.containsKey("agency.txt") &&
             !files.containsKey("calendar.txt") &&
@@ -87,16 +128,19 @@ object GtfsStaticParser {
             throw GtfsValidationException("Missing required GTFS files: agency.txt")
         }
 
-        val agencies = parseAgencies(feedId, files["agency.txt"])
-        val routes = parseRoutes(feedId, files.getValue("routes.txt"), agencies)
-        val stops = parseStops(feedId, files.getValue("stops.txt"))
-        val trips = parseTrips(feedId, files.getValue("trips.txt"))
-        val stopTimes = parseStopTimes(feedId, files.getValue("stop_times.txt"), trips, stops)
-        val calendars = files["calendar.txt"]?.let { parseCalendars(feedId, it) } ?: emptyList()
-        val calendarDates = files["calendar_dates.txt"]?.let { parseCalendarDates(feedId, it) } ?: emptyList()
-        val shapes = files["shapes.txt"]?.let { parseShapes(feedId, it) } ?: emptyList()
-        val frequencies = files["frequencies.txt"]?.let { parseFrequencies(feedId, it) } ?: emptyList()
-        val transfers = files["transfers.txt"]?.let { parseTransfers(feedId, it) } ?: emptyList()
+        val agencies = files.consume("agency.txt") { parseAgencies(feedId, it) } ?: emptyList()
+        val routes = files.consume("routes.txt") { parseRoutes(feedId, it, agencies) } ?: emptyList()
+        val stops = files.consume("stops.txt") { parseStops(feedId, it) } ?: emptyList()
+        val trips = files.consume("trips.txt") { parseTrips(feedId, it) } ?: emptyList()
+        val collector = if (stopTimeSink == null) CollectingStopTimeSink() else null
+        val stopTimes = files.consume("stop_times.txt") {
+            parseStopTimes(feedId, it, trips, stops, collector, stopTimeSink)
+        } ?: emptyList()
+        val calendars = files.consume("calendar.txt") { parseCalendars(feedId, it) } ?: emptyList()
+        val calendarDates = files.consume("calendar_dates.txt") { parseCalendarDates(feedId, it) } ?: emptyList()
+        val shapes = files.consume("shapes.txt") { parseShapes(feedId, it) } ?: emptyList()
+        val frequencies = files.consume("frequencies.txt") { parseFrequencies(feedId, it) } ?: emptyList()
+        val transfers = files.consume("transfers.txt") { parseTransfers(feedId, it) } ?: emptyList()
 
         validateReferences(trips, stops, stopTimes, shapes, routes)
 
@@ -116,219 +160,283 @@ object GtfsStaticParser {
         )
     }
 
-    private fun parseAgencies(feedId: FeedId, content: String?): List<Agency> {
-        if (content == null) return emptyList()
-        return GtfsCsv.parse(content).rows.mapIndexedNotNull { index, row ->
-            val rawId = GtfsCsv.read(row, "agency_id")
-            val name = GtfsCsv.read(row, "agency_name")
-            if (name == null) {
-                throw GtfsValidationException("agency.txt row ${index + 2} missing agency_name")
+    /**
+     * Streams a single table and releases its bytes afterwards so large tables do
+     * not accumulate in memory.
+     */
+    private inline fun <T> MutableMap<String, ByteArray>.consume(
+        name: String,
+        parse: (ByteArray) -> T,
+    ): T? {
+        val bytes = remove(name) ?: return null
+        return try {
+            parse(bytes)
+        } finally {
+            // Help the collector reclaim the largest buffers promptly.
+            @Suppress("UNUSED_EXPRESSION")
+            bytes
+        }
+    }
+
+    private fun parseAgencies(feedId: FeedId, bytes: ByteArray): List<Agency> {
+        val result = mutableListOf<Agency>()
+        GtfsCsv.forEachRow(
+            bytes = bytes,
+            onHeader = {},
+            onRow = { columns, values ->
+                val name = GtfsCsv.value(values, columns, "agency_name")
+                    ?: throw GtfsValidationException("agency.txt row is missing agency_name")
+                result += Agency(
+                    id = AgencyId(agencyIdentity(feedId, GtfsCsv.value(values, columns, "agency_id"))),
+                    feedId = feedId,
+                    name = name,
+                    url = GtfsCsv.value(values, columns, "agency_url"),
+                    timezone = GtfsCsv.value(values, columns, "agency_timezone")?.let {
+                        runCatching { ZoneId.of(it) }.getOrNull()
+                    },
+                    lang = GtfsCsv.value(values, columns, "agency_lang"),
+                    phone = GtfsCsv.value(values, columns, "agency_phone"),
+                    fareUrl = GtfsCsv.value(values, columns, "agency_fare_url"),
+                    email = GtfsCsv.value(values, columns, "agency_email"),
+                )
+            },
+        )
+        return result
+    }
+
+    /** GTFS allows single-agency feeds to omit `agency_id`. */
+    private fun agencyIdentity(feedId: FeedId, rawAgencyId: String?): String =
+        "${feedId.value}/${rawAgencyId?.takeIf { it.isNotEmpty() } ?: "default"}"
+
+    private fun parseRoutes(feedId: FeedId, bytes: ByteArray, agencies: List<Agency>): List<Route> {
+        val singleAgency = agencies.singleOrNull()
+        val result = mutableListOf<Route>()
+        GtfsCsv.forEachRow(bytes, onHeader = {}, onRow = { columns, values ->
+            val routeId = GtfsCsv.value(values, columns, "route_id")
+                ?: throw GtfsValidationException("routes.txt row is missing route_id")
+            val routeType = GtfsCsv.int(values, columns, "route_type")
+                ?: throw GtfsValidationException("routes.txt row is missing route_type")
+            val agencyId = agencies
+                .firstOrNull { it.id.value == agencyIdentity(feedId, GtfsCsv.value(values, columns, "agency_id")) }
+                ?.id
+                ?: singleAgency?.id
+            result += Route(
+                key = RouteKey(feedId, routeId),
+                agencyId = agencyId,
+                shortName = GtfsCsv.value(values, columns, "route_short_name"),
+                longName = GtfsCsv.value(values, columns, "route_long_name"),
+                description = GtfsCsv.value(values, columns, "route_desc"),
+                routeType = routeType,
+                url = GtfsCsv.value(values, columns, "route_url"),
+                color = GtfsCsv.value(values, columns, "route_color"),
+                textColor = GtfsCsv.value(values, columns, "route_text_color"),
+                sortOrder = GtfsCsv.int(values, columns, "route_sort_order"),
+            )
+        })
+        return result
+    }
+
+    private fun parseStops(feedId: FeedId, bytes: ByteArray): List<Stop> {
+        val result = mutableListOf<Stop>()
+        GtfsCsv.forEachRow(bytes, onHeader = {}, onRow = { columns, values ->
+            val stopId = GtfsCsv.value(values, columns, "stop_id")
+                ?: throw GtfsValidationException("stops.txt row is missing stop_id")
+            val lat = GtfsCsv.double(values, columns, "stop_lat")
+            val lon = GtfsCsv.double(values, columns, "stop_lon")
+            if (lat == null || lon == null) {
+                throw GtfsValidationException("stops.txt row is missing coordinates")
             }
-            Agency(
-                id = AgencyId(agencyIdentity(feedId, rawId)),
-                feedId = feedId,
-                name = name,
-                url = GtfsCsv.read(row, "agency_url"),
-                timezone = GtfsCsv.read(row, "agency_timezone")?.let { java.time.ZoneId.of(it) },
-                lang = GtfsCsv.read(row, "agency_lang"),
-                phone = GtfsCsv.read(row, "agency_phone"),
-                fareUrl = GtfsCsv.read(row, "agency_fare_url"),
-                email = GtfsCsv.read(row, "agency_email"),
+            result += Stop(
+                key = StopKey(feedId, stopId),
+                code = GtfsCsv.value(values, columns, "stop_code"),
+                name = GtfsCsv.value(values, columns, "stop_name") ?: stopId,
+                description = GtfsCsv.value(values, columns, "stop_desc"),
+                location = GeoPoint(lat, lon),
+                url = GtfsCsv.value(values, columns, "stop_url"),
+                locationType = GtfsCsv.int(values, columns, "location_type"),
+                parentStation = GtfsCsv.value(values, columns, "parent_station")?.let { StopKey(feedId, it) },
+                zoneId = GtfsCsv.value(values, columns, "zone_id"),
+            )
+        })
+        return result
+    }
+
+    private fun parseTrips(feedId: FeedId, bytes: ByteArray): List<Trip> {
+        val result = mutableListOf<Trip>()
+        GtfsCsv.forEachRow(bytes, onHeader = {}, onRow = { columns, values ->
+            val tripId = GtfsCsv.value(values, columns, "trip_id")
+                ?: throw GtfsValidationException("trips.txt row is missing trip_id")
+            val routeId = GtfsCsv.value(values, columns, "route_id")
+                ?: throw GtfsValidationException("trips.txt row is missing route_id")
+            val serviceId = GtfsCsv.value(values, columns, "service_id")
+                ?: throw GtfsValidationException("trips.txt row is missing service_id")
+            result += Trip(
+                key = TripKey(feedId, tripId),
+                routeKey = RouteKey(feedId, routeId),
+                serviceKey = ServiceKey(feedId, serviceId),
+                headsign = GtfsCsv.value(values, columns, "trip_headsign"),
+                directionId = GtfsCsv.int(values, columns, "direction_id"),
+                blockId = GtfsCsv.value(values, columns, "block_id"),
+                shapeKey = GtfsCsv.value(values, columns, "shape_id")?.let { ShapeKey(feedId, it) },
+                wheelchairAccessible = GtfsCsv.int(values, columns, "wheelchair_accessible"),
+            )
+        })
+        return result
+    }
+
+    private fun parseStopTimes(
+        feedId: FeedId,
+        bytes: ByteArray,
+        trips: List<Trip>,
+        stops: List<Stop>,
+        collector: CollectingStopTimeSink?,
+        sink: StopTimeSink?,
+    ): List<StopTime> {
+        // Key interning: stop_times is by far the largest table (hundreds of
+        // thousands of rows) and every row repeats trip/stop ids. Allocating a
+        // fresh key per row exhausted an Android heap, so keys are canonicalized
+        // against the already-parsed trips and stops.
+        val tripKeyById = HashMap<String, TripKey>(trips.size * 2)
+        trips.forEach { tripKeyById[it.key.tripId] = it.key }
+        val stopKeyById = HashMap<String, StopKey>(stops.size * 2)
+        stops.forEach { stopKeyById[it.key.stopId] = it.key }
+
+        // When the host supplies a sink, rows go straight to it (off-heap). When it
+        // does not, they are collected so callers get an in-memory feed.
+        val target: StopTimeSink = sink ?: collector ?: StopTimeSink { }
+        GtfsCsv.forEachRow(bytes, onHeader = {}, onRow = { columns, values ->
+            val tripId = GtfsCsv.value(values, columns, "trip_id")
+                ?: throw GtfsValidationException("stop_times.txt row is missing trip_id")
+            val stopId = GtfsCsv.value(values, columns, "stop_id")
+                ?: throw GtfsValidationException("stop_times.txt row is missing stop_id")
+            val stopSequence = GtfsCsv.int(values, columns, "stop_sequence")
+                ?: throw GtfsValidationException("stop_times.txt row is missing stop_sequence")
+            val tripKey = tripKeyById[tripId]
+                ?: throw GtfsValidationException("stop_times.txt references unknown trip $tripId")
+            val stopKey = stopKeyById[stopId]
+                ?: throw GtfsValidationException("stop_times.txt references unknown stop $stopId")
+            target.accept(
+                StopTime(
+                    tripKey = tripKey,
+                    stopKey = stopKey,
+                    stopSequence = stopSequence,
+                    arrivalTime = GtfsCsv.value(values, columns, "arrival_time")?.let { GtfsServiceTime.parse(it) },
+                    departureTime = GtfsCsv.value(values, columns, "departure_time")?.let { GtfsServiceTime.parse(it) },
+                    pickupType = GtfsCsv.int(values, columns, "pickup_type"),
+                    dropOffType = GtfsCsv.int(values, columns, "drop_off_type"),
+                    timepoint = GtfsCsv.int(values, columns, "timepoint"),
+                    shapeDistTraveled = GtfsCsv.double(values, columns, "shape_dist_traveled"),
+                )
+            )
+        })
+        return collector?.rows?.sortedWith(STOP_TIME_ORDER) ?: emptyList()
+    }
+
+    private val STOP_TIME_ORDER = compareBy<StopTime>({ it.tripKey.tripId }, { it.stopSequence })
+
+    private fun parseCalendars(feedId: FeedId, bytes: ByteArray): List<Calendar> {
+        val result = mutableListOf<Calendar>()
+        GtfsCsv.forEachRow(bytes, onHeader = {}, onRow = { columns, values ->
+            val serviceId = GtfsCsv.value(values, columns, "service_id")
+                ?: throw GtfsValidationException("calendar.txt row is missing service_id")
+            val startDate = GtfsCsv.value(values, columns, "start_date")
+                ?: throw GtfsValidationException("calendar.txt row is missing start_date")
+            val endDate = GtfsCsv.value(values, columns, "end_date")
+                ?: throw GtfsValidationException("calendar.txt row is missing end_date")
+            result += Calendar(
+                serviceKey = ServiceKey(feedId, serviceId),
+                daysOfWeek = DAY_FIELDS.mapNotNull { (field, day) ->
+                    if (GtfsCsv.int(values, columns, field) == 1) day else null
+                }.toSet(),
+                startDate = LocalDate.parse(startDate, dateFormat),
+                endDate = LocalDate.parse(endDate, dateFormat),
+            )
+        })
+        return result
+    }
+
+    private fun parseCalendarDates(feedId: FeedId, bytes: ByteArray): List<CalendarDate> {
+        val result = mutableListOf<CalendarDate>()
+        GtfsCsv.forEachRow(bytes, onHeader = {}, onRow = { columns, values ->
+            val serviceId = GtfsCsv.value(values, columns, "service_id")
+                ?: throw GtfsValidationException("calendar_dates.txt row is missing service_id")
+            val date = GtfsCsv.value(values, columns, "date")
+                ?: throw GtfsValidationException("calendar_dates.txt row is missing date")
+            val exception = GtfsCsv.int(values, columns, "exception_type")
+                ?: throw GtfsValidationException("calendar_dates.txt row is missing exception_type")
+            result += CalendarDate(
+                serviceKey = ServiceKey(feedId, serviceId),
+                date = LocalDate.parse(date, dateFormat),
+                exceptionType = if (exception == 2) ServiceExceptionType.REMOVED else ServiceExceptionType.ADDED,
+            )
+        })
+        return result
+    }
+
+    private fun parseShapes(feedId: FeedId, bytes: ByteArray): List<Shape> {
+        val points = HashMap<String, MutableList<Pair<Int, GeoPoint>>>()
+        GtfsCsv.forEachRow(bytes, onHeader = {}, onRow = { columns, values ->
+            val shapeId = GtfsCsv.value(values, columns, "shape_id")
+                ?: throw GtfsValidationException("shapes.txt row is missing shape_id")
+            val lat = GtfsCsv.double(values, columns, "shape_pt_lat")
+            val lon = GtfsCsv.double(values, columns, "shape_pt_lon")
+            val sequence = GtfsCsv.int(values, columns, "shape_pt_sequence")
+            if (lat == null || lon == null || sequence == null) {
+                throw GtfsValidationException("shapes.txt row has an incomplete shape point")
+            }
+            points.getOrPut(shapeId) { mutableListOf() }.add(sequence to GeoPoint(lat, lon))
+        })
+        return points.map { (shapeId, entries) ->
+            Shape(
+                key = ShapeKey(feedId, shapeId),
+                points = downsample(entries.sortedBy { it.first }.map { it.second }),
             )
         }
     }
 
     /**
-     * GTFS allows a feed to omit `agency_id` on single-agency feeds. Raw agency
-     * identifiers are feed-scoped and may be absent, so Atlas agency identities
-     * are synthesized from the feed namespace.
+     * Caps points per shape at parse time. A system-wide feed carries hundreds of
+     * thousands of shape points; retaining them all exhausted a phone heap, and
+     * the renderer only ever draws viewport-clipped, zoom-appropriate geometry.
      */
-    private fun agencyIdentity(feedId: FeedId, rawAgencyId: String?): String =
-        "${feedId.value}/${rawAgencyId?.takeIf { it.isNotEmpty() } ?: "default"}"
-
-    private fun parseRoutes(feedId: FeedId, content: String, agencies: List<Agency>): List<Route> {
-        val table = GtfsCsv.parse(content)
-        val singleAgency = agencies.singleOrNull()
-        return table.rows.mapIndexed { index, row ->
-            val routeId = GtfsCsv.read(row, "route_id")
-                ?: throw GtfsValidationException("routes.txt row ${index + 2} missing route_id")
-            val routeType = GtfsCsv.readInt(row, "route_type")
-                ?: throw GtfsValidationException("routes.txt row ${index + 2} missing route_type")
-            val agencyId = agencies
-                .firstOrNull { it.id.value == agencyIdentity(feedId, GtfsCsv.read(row, "agency_id")) }
-                ?.id
-                ?: singleAgency?.id
-            Route(
-                key = RouteKey(feedId, routeId),
-                agencyId = agencyId,
-                shortName = GtfsCsv.read(row, "route_short_name"),
-                longName = GtfsCsv.read(row, "route_long_name"),
-                description = GtfsCsv.read(row, "route_desc"),
-                routeType = routeType,
-                url = GtfsCsv.read(row, "route_url"),
-                color = GtfsCsv.read(row, "route_color"),
-                textColor = GtfsCsv.read(row, "route_text_color"),
-                sortOrder = GtfsCsv.readInt(row, "route_sort_order"),
-            )
+    private fun downsample(points: List<GeoPoint>, maxPoints: Int = MAX_SHAPE_POINTS_PER_SHAPE): List<GeoPoint> {
+        if (points.size <= maxPoints) return points
+        val step = (points.size / maxPoints).coerceAtLeast(1)
+        val reduced = ArrayList<GeoPoint>(maxPoints + 1)
+        var index = 0
+        while (index < points.size) {
+            reduced += points[index]
+            index += step
         }
+        if (reduced.last() != points.last()) reduced += points.last()
+        return reduced
     }
 
-    private fun parseStops(feedId: FeedId, content: String): List<Stop> {
-        return GtfsCsv.parse(content).rows.mapIndexed { index, row ->
-            val stopId = GtfsCsv.read(row, "stop_id")
-                ?: throw GtfsValidationException("stops.txt row ${index + 2} missing stop_id")
-            val lat = GtfsCsv.readDouble(row, "stop_lat")
-            val lon = GtfsCsv.readDouble(row, "stop_lon")
-            if (lat == null || lon == null) {
-                throw GtfsValidationException("stops.txt row ${index + 2} missing coordinates")
-            }
-            Stop(
-                key = StopKey(feedId, stopId),
-                code = GtfsCsv.read(row, "stop_code"),
-                name = GtfsCsv.read(row, "stop_name") ?: stopId,
-                description = GtfsCsv.read(row, "stop_desc"),
-                location = GeoPoint(lat, lon),
-                url = GtfsCsv.read(row, "stop_url"),
-                locationType = GtfsCsv.readInt(row, "location_type"),
-                parentStation = GtfsCsv.read(row, "parent_station")?.let { StopKey(feedId, it) },
-                zoneId = GtfsCsv.read(row, "zone_id"),
-            )
-        }
-    }
+    internal const val MAX_SHAPE_POINTS_PER_SHAPE = 1_500
 
-    private fun parseTrips(feedId: FeedId, content: String): List<Trip> {
-        return GtfsCsv.parse(content).rows.mapIndexed { index, row ->
-            val tripId = GtfsCsv.read(row, "trip_id")
-                ?: throw GtfsValidationException("trips.txt row ${index + 2} missing trip_id")
-            val routeId = GtfsCsv.read(row, "route_id")
-                ?: throw GtfsValidationException("trips.txt row ${index + 2} missing route_id")
-            val serviceId = GtfsCsv.read(row, "service_id")
-                ?: throw GtfsValidationException("trips.txt row ${index + 2} missing service_id")
-            Trip(
-                key = TripKey(feedId, tripId),
-                routeKey = RouteKey(feedId, routeId),
-                serviceKey = ServiceKey(feedId, serviceId),
-                headsign = GtfsCsv.read(row, "trip_headsign"),
-                directionId = GtfsCsv.readInt(row, "direction_id"),
-                blockId = GtfsCsv.read(row, "block_id"),
-                shapeKey = GtfsCsv.read(row, "shape_id")?.let { ShapeKey(feedId, it) },
-                wheelchairAccessible = GtfsCsv.readInt(row, "wheelchair_accessible"),
-            )
-        }
-    }
-
-    private fun parseStopTimes(
-        feedId: FeedId,
-        content: String,
-        trips: List<Trip>,
-        stops: List<Stop>,
-    ): List<StopTime> {
-        val tripIds = trips.map { it.key.tripId }.toSet()
-        val stopIds = stops.map { it.key.stopId }.toSet()
-        return GtfsCsv.parse(content).rows.mapIndexed { index, row ->
-            val tripId = GtfsCsv.read(row, "trip_id")
-                ?: throw GtfsValidationException("stop_times.txt row ${index + 2} missing trip_id")
-            val stopId = GtfsCsv.read(row, "stop_id")
-                ?: throw GtfsValidationException("stop_times.txt row ${index + 2} missing stop_id")
-            val stopSequence = GtfsCsv.readInt(row, "stop_sequence")
-                ?: throw GtfsValidationException("stop_times.txt row ${index + 2} missing stop_sequence")
-            if (tripId !in tripIds) {
-                throw GtfsValidationException("stop_times.txt row ${index + 2} references unknown trip $tripId")
-            }
-            if (stopId !in stopIds) {
-                throw GtfsValidationException("stop_times.txt row ${index + 2} references unknown stop $stopId")
-            }
-            StopTime(
-                tripKey = TripKey(feedId, tripId),
-                stopKey = StopKey(feedId, stopId),
-                stopSequence = stopSequence,
-                arrivalTime = GtfsCsv.read(row, "arrival_time")?.let { GtfsServiceTime.parse(it) },
-                departureTime = GtfsCsv.read(row, "departure_time")?.let { GtfsServiceTime.parse(it) },
-                pickupType = GtfsCsv.readInt(row, "pickup_type"),
-                dropOffType = GtfsCsv.readInt(row, "drop_off_type"),
-                timepoint = GtfsCsv.readInt(row, "timepoint"),
-                shapeDistTraveled = GtfsCsv.readDouble(row, "shape_dist_traveled"),
-            )
-        }.sortedWith(compareBy({ it.tripKey.tripId }, { it.stopSequence }))
-    }
-
-    private fun parseCalendars(feedId: FeedId, content: String): List<Calendar> {
-        return GtfsCsv.parse(content).rows.mapIndexed { index, row ->
-            val serviceId = GtfsCsv.read(row, "service_id")
-                ?: throw GtfsValidationException("calendar.txt row ${index + 2} missing service_id")
-            val startDate = GtfsCsv.read(row, "start_date")
-                ?: throw GtfsValidationException("calendar.txt row ${index + 2} missing start_date")
-            val endDate = GtfsCsv.read(row, "end_date")
-                ?: throw GtfsValidationException("calendar.txt row ${index + 2} missing end_date")
-            Calendar(
-                serviceKey = ServiceKey(feedId, serviceId),
-                daysOfWeek = DAY_FIELDS.mapNotNull { (field, day) ->
-                    if (GtfsCsv.readInt(row, field) == 1) day else null
-                }.toSet(),
-                startDate = LocalDate.parse(startDate, dateFormat),
-                endDate = LocalDate.parse(endDate, dateFormat),
-            )
-        }
-    }
-
-    private fun parseCalendarDates(feedId: FeedId, content: String): List<CalendarDate> {
-        return GtfsCsv.parse(content).rows.mapIndexed { index, row ->
-            val serviceId = GtfsCsv.read(row, "service_id")
-                ?: throw GtfsValidationException("calendar_dates.txt row ${index + 2} missing service_id")
-            val date = GtfsCsv.read(row, "date")
-                ?: throw GtfsValidationException("calendar_dates.txt row ${index + 2} missing date")
-            val exception = GtfsCsv.readInt(row, "exception_type")
-                ?: throw GtfsValidationException("calendar_dates.txt row ${index + 2} missing exception_type")
-            CalendarDate(
-                serviceKey = ServiceKey(feedId, serviceId),
-                date = LocalDate.parse(date, dateFormat),
-                exceptionType = if (exception == 2) ServiceExceptionType.REMOVED else ServiceExceptionType.ADDED,
-            )
-        }
-    }
-
-    private fun parseShapes(feedId: FeedId, content: String): List<Shape> {
-        val points = LinkedHashMap<String, MutableList<Pair<Int, GeoPoint>>>()
-        GtfsCsv.parse(content).rows.forEachIndexed { index, row ->
-            val shapeId = GtfsCsv.read(row, "shape_id")
-                ?: throw GtfsValidationException("shapes.txt row ${index + 2} missing shape_id")
-            val lat = GtfsCsv.readDouble(row, "shape_pt_lat")
-            val lon = GtfsCsv.readDouble(row, "shape_pt_lon")
-            val sequence = GtfsCsv.readInt(row, "shape_pt_sequence")
-            if (lat == null || lon == null || sequence == null) {
-                throw GtfsValidationException("shapes.txt row ${index + 2} incomplete shape point")
-            }
-            points.getOrPut(shapeId) { mutableListOf() }.add(sequence to GeoPoint(lat, lon))
-        }
-        return points.map { (shapeId, entries) ->
-            Shape(
-                key = ShapeKey(feedId, shapeId),
-                points = entries.sortedBy { it.first }.map { it.second },
-            )
-        }
-    }
-
-    private fun parseFrequencies(feedId: FeedId, content: String): List<Frequency> {
-        return GtfsCsv.parse(content).rows.mapIndexed { index, row ->
-            val tripId = GtfsCsv.read(row, "trip_id")
-                ?: throw GtfsValidationException("frequencies.txt row ${index + 2} missing trip_id")
-            val startTime = GtfsCsv.read(row, "start_time")
-                ?: throw GtfsValidationException("frequencies.txt row ${index + 2} missing start_time")
-            val endTime = GtfsCsv.read(row, "end_time")
-                ?: throw GtfsValidationException("frequencies.txt row ${index + 2} missing end_time")
-            val headway = GtfsCsv.readInt(row, "headway_secs")
-                ?: throw GtfsValidationException("frequencies.txt row ${index + 2} missing headway_secs")
-            Frequency(
+    private fun parseFrequencies(feedId: FeedId, bytes: ByteArray): List<Frequency> {
+        val result = mutableListOf<Frequency>()
+        GtfsCsv.forEachRow(bytes, onHeader = {}, onRow = { columns, values ->
+            val tripId = GtfsCsv.value(values, columns, "trip_id")
+                ?: throw GtfsValidationException("frequencies.txt row is missing trip_id")
+            val startTime = GtfsCsv.value(values, columns, "start_time")
+                ?: throw GtfsValidationException("frequencies.txt row is missing start_time")
+            val endTime = GtfsCsv.value(values, columns, "end_time")
+                ?: throw GtfsValidationException("frequencies.txt row is missing end_time")
+            val headway = GtfsCsv.int(values, columns, "headway_secs")
+                ?: throw GtfsValidationException("frequencies.txt row is missing headway_secs")
+            result += Frequency(
                 tripKey = TripKey(feedId, tripId),
                 startTime = GtfsServiceTime.parse(startTime),
                 endTime = GtfsServiceTime.parse(endTime),
                 headwaySeconds = headway,
-                exactTimes = GtfsCsv.readInt(row, "exact_times"),
+                exactTimes = GtfsCsv.int(values, columns, "exact_times"),
             )
-        }
+        })
+        return result
     }
 
-    private fun parseTransfers(feedId: FeedId, content: String): List<Transfer> {
+    private fun parseTransfers(feedId: FeedId, bytes: ByteArray): List<Transfer> {
         val typeMap = mapOf(
             0 to TransferType.RECOMMENDED,
             1 to TransferType.TIMED,
@@ -337,16 +445,18 @@ object GtfsStaticParser {
             4 to TransferType.RECOMMENDED,
             5 to TransferType.TIMED,
         )
-        return GtfsCsv.parse(content).rows.mapNotNull { row ->
-            val fromStop = GtfsCsv.read(row, "from_stop_id") ?: return@mapNotNull null
-            val toStop = GtfsCsv.read(row, "to_stop_id") ?: return@mapNotNull null
-            Transfer(
+        val result = mutableListOf<Transfer>()
+        GtfsCsv.forEachRow(bytes, onHeader = {}, onRow = { columns, values ->
+            val fromStop = GtfsCsv.value(values, columns, "from_stop_id") ?: return@forEachRow
+            val toStop = GtfsCsv.value(values, columns, "to_stop_id") ?: return@forEachRow
+            result += Transfer(
                 fromStopKey = StopKey(feedId, fromStop),
                 toStopKey = StopKey(feedId, toStop),
-                type = typeMap[GtfsCsv.readInt(row, "transfer_type")] ?: TransferType.RECOMMENDED,
-                minTransferSeconds = GtfsCsv.readInt(row, "min_transfer_time"),
+                type = typeMap[GtfsCsv.int(values, columns, "transfer_type")] ?: TransferType.RECOMMENDED,
+                minTransferSeconds = GtfsCsv.int(values, columns, "min_transfer_time"),
             )
-        }
+        })
+        return result
     }
 
     private fun validateReferences(
@@ -356,32 +466,22 @@ object GtfsStaticParser {
         shapes: List<Shape>,
         routes: List<Route>,
     ) {
-        val routeKeys = routes.map { it.key }.toSet()
-        val stopKeys = stops.map { it.key }.toSet()
-        val shapeKeys = shapes.map { it.key }.toSet()
+        val routeKeys = routes.mapTo(HashSet(routes.size * 2)) { it.key }
+        val stopKeys = stops.mapTo(HashSet(stops.size * 2)) { it.key }
+        val shapeKeys = shapes.mapTo(HashSet(shapes.size * 2)) { it.key }
         trips.forEach { trip ->
-            if (trip.routeKey !in routeKeys) {
+            if (!routeKeys.contains(trip.routeKey)) {
                 throw GtfsValidationException("trip ${trip.key.tripId} references unknown route ${trip.routeKey.routeId}")
             }
             val shapeKey = trip.shapeKey
-            if (shapeKey != null && shapeKeys.isNotEmpty() && shapeKey !in shapeKeys) {
+            if (shapeKey != null && shapeKeys.isNotEmpty() && !shapeKeys.contains(shapeKey)) {
                 throw GtfsValidationException("trip ${trip.key.tripId} references unknown shape ${shapeKey.shapeId}")
             }
         }
         stopTimes.forEach { stopTime ->
-            if (stopTime.stopKey !in stopKeys) {
+            if (!stopKeys.contains(stopTime.stopKey)) {
                 throw GtfsValidationException("stop_time references unknown stop ${stopTime.stopKey.stopId}")
             }
         }
     }
-
-    private val DAY_FIELDS: List<Pair<String, DayOfWeek>> = listOf(
-        "monday" to DayOfWeek.MONDAY,
-        "tuesday" to DayOfWeek.TUESDAY,
-        "wednesday" to DayOfWeek.WEDNESDAY,
-        "thursday" to DayOfWeek.THURSDAY,
-        "friday" to DayOfWeek.FRIDAY,
-        "saturday" to DayOfWeek.SATURDAY,
-        "sunday" to DayOfWeek.SUNDAY,
-    )
 }

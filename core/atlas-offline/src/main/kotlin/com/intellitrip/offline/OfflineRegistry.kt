@@ -76,7 +76,7 @@ class OfflineRegistry(
     fun loadStaticFeed(feedId: FeedId): StaticFeed? {
         val snapshot = store.activeSnapshot(feedId) ?: return null
         val payload = runCatching { store.readPayload(feedId) }.getOrNull() ?: return null
-        val files = runCatching { GtfsArchive.read(payload) }.getOrNull() ?: return null
+        val files = runCatching { GtfsArchive.read(payload).toMutableMap() }.getOrNull() ?: return null
         return runCatching {
             com.intellitrip.gtfs.GtfsStaticParser.parse(feedId, files, snapshot.metadata)
         }.getOrNull()

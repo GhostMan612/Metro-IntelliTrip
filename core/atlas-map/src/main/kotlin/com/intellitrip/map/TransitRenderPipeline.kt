@@ -22,6 +22,11 @@ class TransitRenderPipeline(
     private val individualMinZoom: Double = 14.0,
 ) {
 
+    companion object {
+        /** Upper bound on points emitted per rendered shape line. */
+        const val MAX_SHAPE_POINTS = 2_000
+    }
+
     fun zoomBucket(zoom: Double): ZoomBucket = when {
         zoom < clusterMaxZoom -> ZoomBucket.CLUSTER
         zoom < individualMinZoom -> ZoomBucket.SIMPLIFIED
@@ -36,11 +41,21 @@ class TransitRenderPipeline(
             .filter { input.camera.bounds.contains(it.location) }
             .map { StopRender(it.key.stopId, it.location.lon, it.location.lat) }
 
-        val shapeLines = input.shapes.map { shape ->
-            ShapeLineRender(
-                id = shape.key.shapeId,
-                coordinates = shape.points.map { listOf(it.lon, it.lat) },
-            )
+        // Route geometry is large (hundreds of thousands of points system-wide), so
+        // shapes are culled to the viewport and dropped entirely when clustered.
+        val shapeLines = when (bucket) {
+            ZoomBucket.CLUSTER -> emptyList()
+            else -> input.shapes.mapNotNull { shape ->
+                val clipped = shape.points.filter { input.camera.bounds.contains(it) }
+                if (clipped.size < 2) {
+                    null
+                } else {
+                    ShapeLineRender(
+                        id = shape.key.shapeId,
+                        coordinates = simplify(clipped).map { listOf(it.lon, it.lat) },
+                    )
+                }
+            }
         }
 
         val interpolated = interpolate(input.previousVehicles, visibleVehicles, input.snapshotAt)
@@ -122,6 +137,23 @@ class TransitRenderPipeline(
         while (lon > 180.0) lon -= 360.0
         while (lon < -180.0) lon += 360.0
         return lon
+    }
+
+    /**
+     * Drops points that are visually indistinguishable at the current zoom so a
+     * 320k-point feed does not become a multi-megabyte render payload.
+     */
+    private fun simplify(points: List<GeoPoint>): List<GeoPoint> {
+        if (points.size <= MAX_SHAPE_POINTS) return points
+        val step = (points.size / MAX_SHAPE_POINTS).coerceAtLeast(1)
+        val reduced = ArrayList<GeoPoint>(MAX_SHAPE_POINTS + 1)
+        var index = 0
+        while (index < points.size) {
+            reduced += points[index]
+            index += step
+        }
+        if (reduced.last() !== points.last()) reduced += points.last()
+        return reduced
     }
 
     /** Grid-based clustering keeps the renderer free of per-feature objects. */

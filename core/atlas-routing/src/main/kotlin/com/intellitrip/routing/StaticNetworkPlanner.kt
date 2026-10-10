@@ -35,14 +35,50 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/** The static network a planner searches: routes, stops, trips, stop times, transfers. */
+/** Supplies a trip's ordered stop times; backed by memory or by the disk index. */
+/**
+ * Supplies a trip's ordered stop times; backed by memory or by the disk index.
+ * Sources that can answer "which trips serve this stop" should override
+ * [tripsServing] so a planner can skip irrelevant trips.
+ */
+interface StopTimeSource {
+    fun stopTimesFor(trip: TripKey): List<StopTime>
+    fun tripsServing(stop: StopKey): Set<TripKey> = emptySet()
+
+    companion object {
+        fun of(stopTimes: List<StopTime>): StopTimeSource =
+            indexed(
+                stopTimes.groupBy { it.tripKey }
+                    .mapValues { (_, rows) -> rows.sortedBy { it.stopSequence } },
+                stopTimes.groupBy { it.stopKey }
+                    .mapValues { (_, rows) -> rows.map { it.tripKey }.toSet() },
+            )
+
+        fun indexed(
+            stopTimesByTrip: Map<TripKey, List<StopTime>>,
+            tripsByStop: Map<StopKey, Set<TripKey>>,
+        ): StopTimeSource = IndexedStopTimeSource(stopTimesByTrip, tripsByStop)
+    }
+}
+
+/** In-memory source that can also answer "which trips serve this stop". */
+class IndexedStopTimeSource(
+    private val byTrip: Map<TripKey, List<StopTime>>,
+    private val byStop: Map<StopKey, Set<TripKey>>,
+) : StopTimeSource {
+    override fun stopTimesFor(trip: TripKey): List<StopTime> = byTrip[trip].orEmpty()
+    override fun tripsServing(stop: StopKey): Set<TripKey> = byStop[stop].orEmpty()
+}
+
+/** The static network a planner searches: routes, stops, trips and stop times. */
 class RoutingNetwork(
     val feedId: FeedId,
     val metadata: FeedMetadata,
     val routes: List<Route>,
     val stops: List<Stop>,
     val trips: List<Trip>,
-    val stopTimes: List<StopTime>,
+    stopTimes: List<StopTime> = emptyList(),
+    private val stopTimeSource: StopTimeSource? = null,
     val transfers: List<Transfer> = emptyList(),
     val activeServiceDates: Set<LocalDate> = emptySet(),
 ) {
@@ -51,9 +87,28 @@ class RoutingNetwork(
     val routesByKey: Map<RouteKey, Route> = routes.associateBy { it.key }
 
     /** Stop times stay ordered so boarding/alighting sequences are stable. */
-    val stopTimesByTrip: Map<TripKey, List<StopTime>> = stopTimes
-        .groupBy { it.tripKey }
-        .mapValues { (_, values) -> values.sortedBy { it.stopSequence } }
+    val stopTimesByTrip: Map<TripKey, List<StopTime>> by lazy {
+        if (stopTimeSource != null) {
+            emptyMap()
+        } else {
+            stopTimes.groupBy { it.tripKey }.mapValues { (_, values) -> values.sortedBy { it.stopSequence } }
+        }
+    }
+
+    /** Reads a trip's stop times from the disk index when configured. */
+    fun stopTimesFor(trip: TripKey): List<StopTime> =
+        stopTimeSource?.stopTimesFor(trip)
+            ?: stopTimesByTrip[trip]
+            ?: emptyList()
+
+    /**
+     * Trips that can be boarded at a stop. Uses the stop-time source's reverse
+     * index when available so a large feed is not scanned trip by trip.
+     */
+    fun tripsServing(stop: StopKey): List<Trip> {
+        val keys = stopTimeSource?.tripsServing(stop) ?: return trips
+        return keys.mapNotNull { tripsByKey[it] }
+    }
 
     fun isActive(serviceKey: ServiceKey, date: LocalDate): Boolean =
         activeServiceDates.isEmpty() || date in activeServiceDates && activeServiceDates.contains(date)
@@ -122,9 +177,13 @@ class StaticNetworkPlanner(
         val options = mutableListOf<JourneyOption>()
         val maxTransfers = request.maxTransfers ?: 1
 
-        for (origin in originStops) {
-            for (trip in network.trips) {
-                val times = network.stopTimesByTrip[trip.key] ?: continue
+for (origin in originStops) {
+            // Only trips that actually serve a nearby origin stop are considered;
+            // without this a system-wide feed is scanned in full on every plan.
+            val candidates = network.tripsServing(origin.stop.key)
+            for (trip in candidates) {
+                val times = network.stopTimesFor(trip.key)
+                if (times.isEmpty()) continue
                 val boardIndex = times.indexOfFirst { it.stopKey == origin.stop.key }
                 if (boardIndex < 0) continue
 
@@ -192,7 +251,7 @@ class StaticNetworkPlanner(
         val destinationKeys = destinationStops.map { it.stop.key }.toSet()
         val connection = earliestConnection(firstAlight, serviceDate, destinationKeys) ?: return null
         val (secondTrip, secondBoard) = connection
-        val secondTimes = network.stopTimesByTrip[secondBoard.tripKey] ?: return null
+        val secondTimes = network.stopTimesFor(secondBoard.tripKey).ifEmpty { return null }
         val boardIndex = secondTimes.indexOf(secondBoard)
         val finalAlight = secondTimes.drop(boardIndex + 1).firstOrNull { it.stopKey in destinationKeys } ?: return null
         val destination = destinationStops.firstOrNull { it.stop.key == finalAlight.stopKey } ?: return null
@@ -244,7 +303,8 @@ class StaticNetworkPlanner(
         var bestDeparture: Instant? = null
         for (trip in network.trips) {
             if (trip.key == firstAlight.tripKey) continue
-            val times = network.stopTimesByTrip[trip.key] ?: continue
+            val times = network.stopTimesFor(trip.key)
+                if (times.isEmpty()) continue
             val candidate = times.firstOrNull { time ->
                 time.stopKey == firstAlight.stopKey &&
                     (time.departureTime?.instantOn(serviceDate, agencyZone) ?: Instant.MIN)

@@ -10,6 +10,20 @@ gradlew.bat assembleDebug
 ```
 gradlew.bat test
 gradlew.bat lint
+gradlew.bat :app:connectedDebugAndroidTest   # requires a connected device/emulator
+```
+
+## Real-feed verification (optional)
+The static GTFS parser can be verified against the live Metro Transit feed:
+```
+curl -o gtfs-metro-transit.zip https://svc.metrotransit.org/mtgtfs/gtfs.zip
+gradlew.bat :core:atlas-gtfs-static:test --tests "*RealFeedSmokeTest" --rerun-tasks ^
+  -Dintellitrip.gtfs.fixture=gtfs-metro-transit.zip
+```
+
+## JVM sample host
+```
+gradlew.bat :sample:host:run
 ```
 
 ## Modules

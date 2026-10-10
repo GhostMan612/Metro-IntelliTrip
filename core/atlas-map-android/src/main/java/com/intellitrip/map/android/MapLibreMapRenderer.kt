@@ -29,17 +29,29 @@ import org.maplibre.android.style.sources.RasterSource
 class MapLibreMapRenderer(
     private val mapView: MapView,
     private val onReady: (MapLibreMapRenderer) -> Unit = {},
+    private val onCameraMoved: (lat: Double, lon: Double, zoom: Double) -> Unit = { _, _, _ -> },
 ) : MapRenderer {
 
     private var map: MapLibreMap? = null
     private var styleApplied = false
+    private var lastReportedZoom = Double.NaN
 
     init {
         MapLibre.getInstance(mapView.context.applicationContext)
         mapView.getMapAsync { mapLibreMap ->
             map = mapLibreMap
+            mapLibreMap.addOnCameraMoveListener { reportCameraIfChanged() }
             if (!styleApplied) onReady(this)
         }
+    }
+
+    /** Reports camera changes so the host can derive scope from user gestures. */
+    private fun reportCameraIfChanged() {
+        val position = map?.cameraPosition ?: return
+        if (position.zoom == lastReportedZoom) return
+        lastReportedZoom = position.zoom
+        val target = position.target ?: return
+        onCameraMoved(target.latitude, target.longitude, position.zoom)
     }
 
     val mapViewRef: MapView get() = mapView

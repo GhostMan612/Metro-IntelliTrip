@@ -3,6 +3,9 @@ package com.intellitrip.gtfs
 import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.FeedMetadata
 import java.time.Instant
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 sealed interface RefreshOutcome {
     data class NotModified(val feedId: FeedId) : RefreshOutcome
@@ -21,9 +24,17 @@ class StaticFeedRefresher(
     private val acquirer: GtfsFeedAcquirer,
     private val store: StaticFeedSnapshotStore,
     private val clock: () -> Instant = Instant::now,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
-    fun refresh(): RefreshOutcome {
+    /**
+     * Acquires, validates and activates the feed. Suspends on an IO dispatcher:
+     * callers may invoke this from the main thread without blocking it.
+     */
+    suspend fun refresh(): RefreshOutcome = withContext(ioDispatcher) { refreshBlocking() }
+
+    /** Blocking refresh for hosts that already run on a background thread. */
+    fun refreshBlocking(): RefreshOutcome {
         val active = store.activeSnapshot(feedId)
         val acquisition = acquirer.acquire(feedId, sourceUrl)
         return when (acquisition) {
@@ -43,8 +54,13 @@ class StaticFeedRefresher(
                     sourceUrl = sourceUrl,
                 )
                 val feed = try {
-                    val files = GtfsArchive.read(acquisition.payload)
-                    GtfsStaticParser.parse(feedId, files, metadata)
+                    val files = GtfsArchive.read(acquisition.payload).toMutableMap()
+                    // Stop times dominate the feed's memory profile, so they are
+                    // streamed into a disk-backed index instead of being retained.
+                    val stopTimeSink = store.newStopTimeSink()
+                    val parsed = GtfsStaticParser.parse(feedId, files, metadata, stopTimeSink)
+                    stopTimeSink.close()
+                    parsed
                 } catch (e: Exception) {
                     return RefreshOutcome.Rejected(feedId, e.message ?: "Validation failed")
                 }

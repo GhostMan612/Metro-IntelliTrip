@@ -10,6 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 
 class StaticFeedRefreshTest {
 
@@ -24,13 +25,14 @@ class StaticFeedRefreshTest {
         val root = createTempDirectory("gtfs-store")
         val transport = GtfsFeedAcquirer.HttpTransport { GtfsFeedAcquirer.HttpResponse(200, zip, mapOf("ETag" to "v1")) }
         val refresher = StaticFeedRefresher(
-            feedId,
-            "https://svc.metrotransit.org/mtgtfs/gtfs.zip",
-            acquirer(transport),
-            StaticFeedSnapshotStore(root),
-        ) { Instant.parse("2026-10-07T00:00:00Z") }
+            feedId = feedId,
+            sourceUrl = "https://svc.metrotransit.org/mtgtfs/gtfs.zip",
+            acquirer = acquirer(transport),
+            store = StaticFeedSnapshotStore(root),
+            clock = { Instant.parse("2026-10-07T00:00:00Z") },
+        )
 
-        val outcome = refresher.refresh()
+        val outcome = runBlocking { refresher.refresh() }
         assertIs<RefreshOutcome.Activated>(outcome)
         val store = StaticFeedSnapshotStore(root)
         assertEquals(feedId, store.activeSnapshot(feedId)?.metadata?.feedId)
@@ -41,12 +43,14 @@ class StaticFeedRefreshTest {
     fun conditionalRefreshReturnsNotModified() {
         val root = createTempDirectory("gtfs-store")
         val transport = GtfsFeedAcquirer.HttpTransport { GtfsFeedAcquirer.HttpResponse(304, ByteArray(0), emptyMap()) }
-        val outcome = StaticFeedRefresher(
-            feedId,
-            "https://svc.metrotransit.org/mtgtfs/gtfs.zip",
-            acquirer(transport),
-            StaticFeedSnapshotStore(root),
-        ).refresh()
+        val outcome = runBlocking {
+            StaticFeedRefresher(
+                feedId,
+                "https://svc.metrotransit.org/mtgtfs/gtfs.zip",
+                acquirer(transport),
+                StaticFeedSnapshotStore(root),
+            ).refresh()
+        }
         assertIs<RefreshOutcome.NotModified>(outcome)
         assertNull(StaticFeedSnapshotStore(root).activeSnapshot(feedId))
     }
@@ -59,7 +63,7 @@ class StaticFeedRefreshTest {
         store.activate(feedId, zip, metadata)
 
         val transport = GtfsFeedAcquirer.HttpTransport { GtfsFeedAcquirer.HttpResponse(200, "not-a-zip".toByteArray(), emptyMap()) }
-        val outcome = StaticFeedRefresher(feedId, "https://example/gtfs.zip", acquirer(transport), store).refresh()
+        val outcome = runBlocking { StaticFeedRefresher(feedId, "https://example/gtfs.zip", acquirer(transport), store).refresh() }
         assertIs<RefreshOutcome.Rejected>(outcome)
         assertEquals("oldhash", store.activeSnapshot(feedId)?.metadata?.hash)
     }
@@ -76,7 +80,7 @@ class StaticFeedRefreshTest {
             seen = request
             GtfsFeedAcquirer.HttpResponse(304, ByteArray(0), emptyMap())
         }
-        StaticFeedRefresher(feedId, "https://example/gtfs.zip", acquirer(transport), store).refresh()
+        runBlocking { StaticFeedRefresher(feedId, "https://example/gtfs.zip", acquirer(transport), store).refresh() }
         assertTrue(seen != null)
     }
 
