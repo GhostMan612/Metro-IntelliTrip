@@ -295,17 +295,36 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
             return
         }
         update { it.copy(locationDenied = false, status = "Locating…") }
+        // Tapping locate means "show me where I am", so it always re-centres on the
+        // first fix regardless of the current scope. Only *subsequent* fixes respect
+        // the follow limits below.
+        var firstFix = true
         locationJob?.cancel()
         locationJob = viewModelScope.launch {
             host.location.positions().collect { fix ->
-                update { it.copy(userLocation = fix, status = "Location accuracy ±${fix.accuracyMeters.toInt()} m") }
-                // Follow the user only while they are zoomed into an area view; at
-                // System scope a moving camera is disorienting and the user is not lost.
+                update { it.copy(userLocation = fix, status = locationStatus(fix)) }
+                // A stale fix is shown as "last known" but must never move the camera.
+                // Indoors the platform hands back a fix hours or days old; framing on it
+                // would fling the map somewhere the user is not and cannot undo.
+                if (!fix.isPrecise()) return@collect
                 val current = _state.value
-                if (current.focus is Focus.Radius && current.focus.meters <= FOLLOW_METERS) {
+                val isAreaView = current.focus is Focus.Radius && current.focus.meters <= FOLLOW_METERS
+                if (firstFix || isAreaView) {
+                    firstFix = false
                     setScope("You", Focus.Radius(fix.position, followRadius(fix)))
                 }
             }
+        }
+    }
+
+    /** Says what the fix actually is, rather than implying it is live. */
+    private fun locationStatus(fix: UserLocation): String {
+        val ageSeconds = java.time.Duration.between(fix.timestamp, Instant.now()).seconds
+        return if (fix.isPrecise()) {
+            "Location ±${fix.accuracyMeters.toInt()} m"
+        } else {
+            val age = if (ageSeconds > 86_400) "${ageSeconds / 86_400}d old" else "${ageSeconds / 60} min old"
+            "Last known location, $age"
         }
     }
 
@@ -314,7 +333,12 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         locationJob = null
     }
 
-    /** Radius that frames the user at their own accuracy, with a margin. */
+    /**
+     * Radius that frames the user at their own accuracy, with a margin.
+     *
+     * Capped well below the System extent: a poor indoor fix can report hundreds of
+     * metres, and a viewport sized to that would be indistinguishable from no zoom.
+     */
     private fun followRadius(fix: UserLocation): Double =
         (fix.accuracyMeters * 3).coerceIn(MIN_FOLLOW_METERS, MAX_FOLLOW_METERS)
 

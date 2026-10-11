@@ -82,7 +82,11 @@ class DefaultScopeResolver(private val policy: ScopePolicy = ScopePolicy()) : Sc
             )
 
             is Focus.Radius -> resolution(
-                camera = CameraScope(policy.systemBounds, zoomForRadius(focus.meters)),
+                // Camera follows the radius centre, not the system extent. Framing
+                // systemBounds here made every Radius scope show the whole metro, so
+                // a focus elsewhere in the city (following the user's own location,
+                // say) centred nowhere near its subject.
+                camera = CameraScope(boundsAround(focus.center, focus.meters), zoomForRadius(focus.meters)),
                 data = dataScope(
                     bounds = boundsAround(focus.center, focus.meters),
                     radius = com.intellitrip.domain.RadiusFilter(focus.center, focus.meters),

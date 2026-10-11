@@ -61,9 +61,13 @@ class AndroidLocationProvider(context: Context) : LocationProvider {
             override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) = Unit
         }
 
-        // Seed with the best last-known fix so the map has something to show
-        // immediately instead of an empty viewport while GPS warms up.
-        bestLastKnown()?.let { trySend(it.toUserLocation()) }
+        // Deliberately NOT seeding from getLastKnownLocation. Indoors that returns a
+        // fix from days ago, and a user is better served by nothing than by a stale
+        // dot that looks identical to a live one. Live updates arrive once GPS warms.
+        runCatching { bestLastKnown() }
+            .getOrNull()
+            ?.takeIf { System.currentTimeMillis() - it.time <= LAST_KNOWN_MAX_AGE_MS }
+            ?.let { trySend(it.toUserLocation()) }
 
         // Prefer GPS, fall back to network: indoors a coarse network fix beats none.
         val provider = when {
@@ -117,5 +121,8 @@ class AndroidLocationProvider(context: Context) : LocationProvider {
         const val MIN_DISTANCE_M = 5f
         const val MIN_REPORTED_ACCURACY_M = 5.0
         const val DEFAULT_ACCURACY_M = 50.0
+
+        /** Older than this and the "last known" fix is not worth showing. */
+        const val LAST_KNOWN_MAX_AGE_MS = 2 * 60 * 1000L
     }
 }

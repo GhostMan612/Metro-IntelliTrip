@@ -53,6 +53,14 @@ class AtlasHost(context: Context) {
     val feedId: FeedId = FeedId(FEED_ID)
 
     /** Platform GPS. A contract, so the engine never sees an Android type. */
+    /**
+     * Platform GPS. A contract, so the engine never sees an Android type.
+     *
+     * Last-known fixes are not pre-seeded on purpose: the platform happily returns
+     * one from days ago when GPS has never warmed up indoors, and presenting that as
+     * the user's position would be worse than showing nothing. Callers get a fix only
+     * once something live arrives.
+     */
     val location: LocationProvider = AndroidLocationProvider(context)
 
     val snapshotStore = StaticFeedSnapshotStore(context.filesDir.toPath())

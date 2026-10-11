@@ -254,10 +254,30 @@ PropertyFactory.lineColor("#DC2626"),
                         CircleLayer(USER_LOCATION_DOT_LAYER, USER_LOCATION_SOURCE).withProperties(
                             PropertyFactory.circleRadius(7f),
                             // White core with a blue ring reads clearly over both the
-                            // pale basemap and the darker vehicle clusters.
-                            PropertyFactory.circleColor(Expression.literal("#FFFFFF")),
+                            // pale basemap and the darker vehicle clusters. A stale fix
+                            // goes hollow, so "last known" cannot be mistaken for live.
+                            PropertyFactory.circleColor(
+                                Expression.match(
+                                    Expression.get("fresh"),
+                                    Expression.literal("#FFFFFF"),
+                                    Expression.stop(
+                                        Expression.literal(false),
+                                        Expression.literal("#FFFFFF00"),
+                                    ),
+                                )
+                            ),
                             PropertyFactory.circleStrokeWidth(3f),
-                            PropertyFactory.circleStrokeColor(Expression.literal("#1D4ED8")),
+                            // A hollow dot needs an opaque ring to stay visible.
+                            PropertyFactory.circleStrokeColor(
+                                Expression.match(
+                                    Expression.get("fresh"),
+                                    Expression.literal("#1D4ED8"),
+                                    Expression.stop(
+                                        Expression.literal(false),
+                                        Expression.literal("#9CA3AF"),
+                                    ),
+                                )
+                            ),
                         )
                     )
                 }
