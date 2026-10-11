@@ -26,17 +26,22 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # `bash ./gradlew` rather than `./gradlew`. The wrapper's executable bit is
+      # recorded as 100755 in git, but a checkout that loses it (or a runner that
+      # does not honor it) fails with exit 126 "Permission denied" before Gradle
+      # starts — which silently skips every later step. Invoking bash explicitly
+      # makes the workflow independent of file mode.
       - name: Unit tests
-        run: ./gradlew test --console=plain
+        run: bash ./gradlew test --console=plain
 
       - name: Android lint
-        run: ./gradlew lint --console=plain
+        run: bash ./gradlew lint --console=plain
 
       - name: Assemble debug
-        run: ./gradlew assembleDebug --console=plain
+        run: bash ./gradlew assembleDebug --console=plain
 
       - name: Portable JVM sample host
-        run: ./gradlew :sample:host:run --console=plain
+        run: bash ./gradlew :sample:host:run --console=plain
 
   android-tests:
     name: Instrumented tests
@@ -66,5 +71,5 @@ jobs:
           api-level: 34
           arch: x86_64
           profile: pixel_6
-          script: ./gradlew :app:connectedDebugAndroidTest --console=plain
+          script: bash ./gradlew :app:connectedDebugAndroidTest --console=plain
           disable-animations: true

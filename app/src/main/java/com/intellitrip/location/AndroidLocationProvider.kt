@@ -33,10 +33,25 @@ class AndroidLocationProvider(context: Context) : LocationProvider {
     private val manager =
         appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
 
-    override fun hasPermission(): Boolean =
+    /**
+     * Fine is required for GPS. Coarse is a genuinely different capability: it
+     * permits the network provider, which is enough to place a rider on the map
+     * but not to give street-level precision. Reporting coarse as "no permission"
+     * made a rider who declined precise location see an authorized UI and then
+     * never get a position.
+     */
+    override fun hasPermission(): Boolean = hasFinePermission() || hasCoarsePermission()
+
+    private fun hasFinePermission(): Boolean =
         manager != null && ContextCompat.checkSelfPermission(
             appContext,
             Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+
+    private fun hasCoarsePermission(): Boolean =
+        manager != null && ContextCompat.checkSelfPermission(
+            appContext,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
         ) == PackageManager.PERMISSION_GRANTED
 
 
@@ -69,10 +84,15 @@ class AndroidLocationProvider(context: Context) : LocationProvider {
             ?.takeIf { System.currentTimeMillis() - it.time <= LAST_KNOWN_MAX_AGE_MS }
             ?.let { trySend(it.toUserLocation()) }
 
-        // Prefer GPS, fall back to network: indoors a coarse network fix beats none.
+        // Provider choice respects what was actually granted. GPS needs fine; the network
+        // provider works on coarse alone. Offering GPS to a coarse-only rider would
+        // throw a SecurityException at request time and kill the flow.
+        val gpsAllowed = hasFinePermission() &&
+            locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        val networkAllowed = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
         val provider = when {
-            locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
-            locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
+            gpsAllowed -> LocationManager.GPS_PROVIDER
+            networkAllowed -> LocationManager.NETWORK_PROVIDER
             else -> null
         }
         if (provider == null) {

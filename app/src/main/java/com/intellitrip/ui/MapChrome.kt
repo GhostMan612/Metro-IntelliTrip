@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.TravelExplore
+import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +55,22 @@ import com.intellitrip.domain.GeoPoint
 /** Which overlay sheet is showing. Only one at a time, or none. */
 enum class Sheet { None, Data, Scope, Plan }
 
+/** Results shown in the plan sheet before it stops being scannable. */
+private const val MAX_RESULTS = 5
+
+/**
+ * Destinations a rider can plan to. Each has scheduled service from the default
+ * origin; a preset that produced no journeys would be a dead end.
+ */
+private val PLACE_OPTIONS: List<Pair<String, GeoPoint>> = listOf(
+    "Downtown Minneapolis" to GeoPoint(44.9765, -93.2650),
+    "Downtown St Paul" to GeoPoint(44.9580, -93.1560),
+    "Mall of America" to GeoPoint(44.8557, -93.2367),
+    "Minneapolis-St Paul airport" to GeoPoint(44.8820, -93.2218),
+    "University of Minnesota" to GeoPoint(44.9712, -93.2432),
+    "Edina" to GeoPoint(44.9062, -93.2870),
+)
+
 /**
  * Full-screen map chrome.
  *
@@ -73,6 +90,10 @@ fun MapChrome(
     onToggleAutoRefresh: () -> Unit,
     onLocateMe: () -> Unit,
     locationPermissionGranted: Boolean,
+    onSetOrigin: (GeoPoint) -> Unit,
+    onSetDestination: (GeoPoint) -> Unit,
+    onPlan: () -> Unit,
+    onSelectJourney: (String) -> Unit,
 ) {
     var sheet by remember { mutableStateOf(Sheet.None) }
 
@@ -153,7 +174,13 @@ fun MapChrome(
                         locationPermissionGranted = locationPermissionGranted,
                     )
                     Sheet.Scope -> ScopeSheet(state = state, onScope = onScope)
-                    Sheet.Plan -> PlanSheet(state = state)
+                    Sheet.Plan -> PlanSheet(
+                        state = state,
+                        onSetOrigin = onSetOrigin,
+                        onSetDestination = onSetDestination,
+                        onPlan = onPlan,
+                        onSelectJourney = onSelectJourney,
+                    )
                     Sheet.None -> Unit
                 }
             }
@@ -294,44 +321,142 @@ private fun ScopeSheet(state: AppState, onScope: (String, Focus?) -> Unit) {
 private fun current(state: AppState, label: String): String =
     if (state.scopeLabel.startsWith(label)) "current" else ""
 
+/**
+ * The planner is the product's central task, so the sheet is a real flow: choose
+ * endpoints, swap them, plan, then select a result to draw it on the map.
+ *
+ * Endpoints are named places rather than raw coordinates. A rider does not know
+ * that the origin is 44.9765,-93.2650, and typing coordinates on a phone is not a
+ * planning UI. Until geocoding exists these presets are the honest minimum: they
+ * are real transit destinations with scheduled service.
+ */
 @Composable
-private fun PlanSheet(state: AppState) {
-    SheetHeader("Plan")
+private fun PlanSheet(
+    state: AppState,
+    onSetOrigin: (GeoPoint) -> Unit,
+    onSetDestination: (GeoPoint) -> Unit,
+    onPlan: () -> Unit,
+    onSelectJourney: (String) -> Unit,
+) {
+    SheetHeader("Plan a trip")
+
     if (state.staticFeed == null) {
         Text(
-            "Load the static network before planning.",
+            "Download the local transit network first.",
             style = MaterialTheme.typography.bodyMedium,
         )
         return
     }
-    if (state.journeys.isEmpty()) {
-        Text("No journeys yet.", style = MaterialTheme.typography.bodyMedium)
-        return
+
+    PlaceRow("From", labelFor(state.origin), state.origin) {
+        PLACE_OPTIONS.forEach { (label, point) -> PlaceChoice(label) { onSetOrigin(point) } }
     }
-    state.journeys.take(5).forEach { journey ->
+    PlaceRow("To", labelFor(state.destination), state.destination) {
+        PLACE_OPTIONS.forEach { (label, point) -> PlaceChoice(label) { onSetDestination(point) } }
+    }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(
+            onClick = {
+                val from = state.origin
+                onSetOrigin(state.destination)
+                onSetDestination(from)
+            },
+            modifier = Modifier.weight(1f),
+        ) { Text("Swap") }
+        Button(
+            onClick = onPlan,
+            enabled = !state.planning,
+            modifier = Modifier.weight(2f),
+        ) { Text(if (state.planning) "Planning…" else "Plan trip") }
+    }
+
+    if (state.journeyWarnings.isNotEmpty()) {
+        state.journeyWarnings.forEach { warning ->
+            Text(
+                text = "! $warning",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+    }
+
+    val activeId = state.selectedJourneyId ?: state.journeys.minByOrNull { it.arrival }?.id
+    state.journeys.take(MAX_RESULTS).forEach { journey ->
+        val selected = journey.id == activeId
         Surface(
+            onClick = { onSelectJourney(journey.id) },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 4.dp),
             shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            color = if (selected) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            },
         ) {
-            Column(modifier = Modifier.padding(10.dp)) {
+            Column(modifier = Modifier.padding(12.dp)) {
                 Text(
                     text = journeyHeadline(journey.departure, journey.arrival, journey.duration.toMinutes()),
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium,
                 )
                 journey.legs.forEach { leg ->
                     Text(
                         text = legSummary(leg),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+                if (selected) {
+                    Text(
+                        text = "Shown on map",
                         style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(top = 2.dp),
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(top = 6.dp),
                     )
                 }
             }
         }
     }
 }
+
+/** One origin/destination row; tapping opens the place picker for that end. */
+@Composable
+private fun PlaceRow(label: String, value: String, point: GeoPoint, onPick: @Composable () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.padding(bottom = 6.dp)) {
+        TextButton(
+            onClick = { expanded = !expanded },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("$label  $value", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    if (expanded) "-" else "+",
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        }
+        if (expanded) onPick()
+    }
+}
+
+@Composable
+private fun PlaceChoice(label: String, onPick: () -> Unit) {
+    TextButton(onClick = onPick, modifier = Modifier.fillMaxWidth()) {
+        Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 16.dp))
+    }
+}
+
+/** A preset name when the point matches one, otherwise the raw coordinates. */
+private fun labelFor(point: GeoPoint): String =
+    PLACE_OPTIONS.firstOrNull { it.second == point }?.first
+        ?: "%.4f, %.4f".format(point.lat, point.lon)
 
 @Composable
 private fun SheetRow(label: String, value: String, onClick: () -> Unit) {
