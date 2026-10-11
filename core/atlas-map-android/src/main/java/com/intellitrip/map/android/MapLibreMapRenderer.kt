@@ -217,6 +217,56 @@ PropertyFactory.lineColor("#DC2626"),
         }
     }
 
+    /**
+     * The user's own position: an accuracy halo showing how much the fix can be
+     * trusted, with a solid dot inside it. Rendered as its own source so it is not
+     * culled with the transit network — the user is not a vehicle.
+     */
+    fun applyUserLocation(geoJson: String?) {
+        val target = map ?: return
+        target.getStyle { style ->
+            val source = style.getSourceAs<GeoJsonSource>(USER_LOCATION_SOURCE)
+                ?: GeoJsonSource(USER_LOCATION_SOURCE).also { style.addSource(it) }
+            if (geoJson == null) {
+                source.setGeoJson(EMPTY_COLLECTION)
+            } else {
+                source.setGeoJson(geoJson)
+                if (style.getLayer(USER_LOCATION_HALO_LAYER) == null) {
+                    // Halo first so the dot draws on top of it.
+                    style.addLayer(
+                        CircleLayer(USER_LOCATION_HALO_LAYER, USER_LOCATION_SOURCE).withProperties(
+                            PropertyFactory.circleRadius(
+                                // Accuracy is a data-driven radius: expression, not a
+                                // fixed value, so a 30 m fix is visibly smaller than a
+                                // 500 m one.
+                                Expression.interpolate(
+                                    Expression.linear(),
+                                    Expression.toNumber(Expression.get("accuracy")),
+                                    Expression.stop(0.0, 4.0),
+                                    Expression.stop(500.0, 64.0),
+                                )
+                            ),
+                            PropertyFactory.circleColor(Expression.literal("#1D4ED8")),
+                            PropertyFactory.circleOpacity(0.15f),
+                        )
+                    )
+                    style.addLayer(
+                        CircleLayer(USER_LOCATION_DOT_LAYER, USER_LOCATION_SOURCE).withProperties(
+                            PropertyFactory.circleRadius(7f),
+                            // White core with a blue ring reads clearly over both the
+                            // pale basemap and the darker vehicle clusters.
+                            PropertyFactory.circleColor(Expression.literal("#FFFFFF")),
+                            PropertyFactory.circleStrokeWidth(3f),
+                            PropertyFactory.circleStrokeColor(Expression.literal("#1D4ED8")),
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearUserLocation() = applyUserLocation(null)
+
     /** Active weather alerts rendered as a bulk point source. */
     fun applyAlerts(geoJson: String) {
         val target = map ?: return
@@ -347,6 +397,12 @@ PropertyFactory.lineColor("#DC2626"),
         const val ALERTS_LAYER = "intellitrip-weather-alert-layer"
         const val ROUTES_SOURCE = "intellitrip-routes"
         const val ROUTES_LAYER = "intellitrip-route-layer"
+        const val USER_LOCATION_SOURCE = "intellitrip-user-location"
+        const val USER_LOCATION_HALO_LAYER = "intellitrip-user-location-halo"
+        const val USER_LOCATION_DOT_LAYER = "intellitrip-user-location-dot"
+
+        /** Valid empty FeatureCollection; `null` GeoJSON would throw in setGeoJson. */
+        private const val EMPTY_COLLECTION = """{"type":"FeatureCollection","features":[]}"""
     }
 }
 

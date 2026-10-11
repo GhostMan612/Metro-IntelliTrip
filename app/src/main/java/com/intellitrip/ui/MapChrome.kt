@@ -71,7 +71,8 @@ fun MapChrome(
     onLoadRadar: () -> Unit,
     onLoadAlerts: () -> Unit,
     onToggleAutoRefresh: () -> Unit,
-    onRecenter: () -> Unit,
+    onLocateMe: () -> Unit,
+    locationPermissionGranted: Boolean,
 ) {
     var sheet by remember { mutableStateOf(Sheet.None) }
 
@@ -99,11 +100,21 @@ fun MapChrome(
                 modifier = Modifier.size(44.dp),
             ) { Icon(Icons.Default.Layers, contentDescription = "Data and layers") }
             FloatingActionButton(
-                onClick = onRecenter,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
+                onClick = onLocateMe,
+                // Tinted when a fix is active, so the button reports state instead
+                // of just being a control you have already pressed.
+                containerColor = if (state.userLocation != null) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.surface
+                },
+                contentColor = if (state.userLocation != null) {
+                    MaterialTheme.colorScheme.onPrimary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
                 modifier = Modifier.size(44.dp),
-            ) { Icon(Icons.Default.MyLocation, contentDescription = "Recenter") }
+            ) { Icon(Icons.Default.MyLocation, contentDescription = "Show my location") }
         }
 
         Surface(
@@ -138,6 +149,8 @@ fun MapChrome(
                         onLoadRadar = onLoadRadar,
                         onLoadAlerts = onLoadAlerts,
                         onToggleAutoRefresh = onToggleAutoRefresh,
+                        onLocateMe = onLocateMe,
+                        locationPermissionGranted = locationPermissionGranted,
                     )
                     Sheet.Scope -> ScopeSheet(state = state, onScope = onScope)
                     Sheet.Plan -> PlanSheet(state = state)
@@ -220,6 +233,8 @@ private fun DataSheet(
     onLoadRadar: () -> Unit,
     onLoadAlerts: () -> Unit,
     onToggleAutoRefresh: () -> Unit,
+    onLocateMe: () -> Unit,
+    locationPermissionGranted: Boolean,
 ) {
     SheetHeader("Data")
     SheetRow("Static network", state.staticFeed?.let { "${it.routes.size} routes" } ?: "not loaded", onLoadStatic)
@@ -230,6 +245,17 @@ private fun DataSheet(
         "Weather alerts",
         if (state.weatherAlerts.isEmpty()) "none loaded" else "${state.weatherAlerts.size}",
         onLoadAlerts,
+    )
+    SheetRow(
+        "My location",
+        when {
+            state.userLocation != null ->
+                "±${state.userLocation.accuracyMeters.toInt()} m"
+            state.locationDenied -> "permission denied"
+            locationPermissionGranted -> "tap to locate"
+            else -> "permission needed"
+        },
+        onLocateMe,
     )
     state.status.takeIf { it.isNotBlank() }?.let {
         Text(

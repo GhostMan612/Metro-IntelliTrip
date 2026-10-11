@@ -56,6 +56,22 @@ object GeoJsonWriter {
      * Planned journeys, drawn above the network. [RouteLine.id] is carried as a
      * property so a leg can be styled or highlighted independently.
      */
+    /**
+     * The user's position as a point carrying its accuracy radius. A null location
+     * renders as an empty collection rather than being skipped, so clearing the
+     * layer does not require the caller to track that separately.
+     */
+    fun userLocation(location: com.intellitrip.domain.UserLocation?): String {
+        if (location == null) return """{"type":"FeatureCollection","features":[]}"""
+        return buildString {
+            append("""{"type":"FeatureCollection","features":[{"type":"Feature",""")
+            append(""""geometry":{"type":"Point","coordinates":[""")
+            append(location.position.lon).append(',').append(location.position.lat)
+            append("""],"properties":{"accuracy":""").append(location.accuracyMeters)
+            append(""","fresh":""").append(location.isPrecise()).append("}}}]}")
+        }
+    }
+
     fun routes(lines: List<RouteLine>): String =
         lineStrings(lines.map { line -> line.id to line.coordinates.map { listOf(it[0], it[1]) } })
 

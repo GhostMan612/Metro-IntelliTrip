@@ -1,18 +1,22 @@
 package com.intellitrip
 
+import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.intellitrip.domain.GeoPoint
 import com.intellitrip.ui.MapCanvas
 import com.intellitrip.ui.MapChrome
 
@@ -46,6 +50,23 @@ private fun IntelliTripApp() {
 private fun IntelliTripContent(host: AtlasHost, model: IntelliTripViewModel) {
     val state by model.state.collectAsStateWithLifecycle()
 
+    // Location permission is requested only when the user taps the locate button.
+    // Nothing here runs at startup, so the app never asks before it has been used.
+    var permissionGranted by remember { mutableStateOf(host.location.hasPermission()) }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        permissionGranted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        model.onLocateMe(permissionGranted)
+    }
+
+    val requestLocation = {
+        permissionLauncher.launch(
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         MapCanvas(
             state = state,
@@ -63,7 +84,8 @@ private fun IntelliTripContent(host: AtlasHost, model: IntelliTripViewModel) {
             onLoadRadar = model::loadRadar,
             onLoadAlerts = model::loadWeatherAlerts,
             onToggleAutoRefresh = model::toggleAutoRefresh,
-            onRecenter = { model.recentre(GeoPoint(DEFAULT_LAT, DEFAULT_LON)) },
+            onLocateMe = requestLocation,
+            locationPermissionGranted = permissionGranted,
         )
     }
 }

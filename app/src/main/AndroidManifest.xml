@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Coarse is enough for transit wayfinding and is requested alongside fine, so
+         a user who declines precise location still gets a usable (less exact) fix. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <application
         android:label="IntelliTrip"
         android:largeHeap="true"

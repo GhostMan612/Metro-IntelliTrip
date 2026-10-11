@@ -3,7 +3,9 @@ package com.intellitrip
 import android.content.Context
 import com.intellitrip.engine.AtlasEngine
 import com.intellitrip.engine.AtlasProviders
+import com.intellitrip.contracts.LocationProvider
 import com.intellitrip.domain.FeedId
+import com.intellitrip.location.AndroidLocationProvider
 import com.intellitrip.gtfs.GtfsFeedAcquirer
 import com.intellitrip.gtfs.StaticFeedRefresher
 import com.intellitrip.gtfs.StaticFeedSnapshotStore
@@ -49,6 +51,9 @@ val REALTIME_URLS = PollingGtfsRealtimeClient.RealtimeFeedUrls(
 class AtlasHost(context: Context) {
 
     val feedId: FeedId = FeedId(FEED_ID)
+
+    /** Platform GPS. A contract, so the engine never sees an Android type. */
+    val location: LocationProvider = AndroidLocationProvider(context)
 
     val snapshotStore = StaticFeedSnapshotStore(context.filesDir.toPath())
     val offlineRegistry = OfflineRegistry(snapshotStore)

@@ -127,6 +127,16 @@ fun MapCanvas(
         )
     }
 
+    LaunchedEffect(renderer, ready, state.userLocation) {
+        val active = renderer ?: return@LaunchedEffect
+        if (!ready) return@LaunchedEffect
+        // A null location clears the layer; the renderer takes an empty collection
+        // rather than needing a separate "clear" call it could forget.
+        active.applyUserLocation(
+            withContext(Dispatchers.Default) { GeoJsonWriter.userLocation(state.userLocation) }
+        )
+    }
+
     LaunchedEffect(renderer, ready, routeGeometry) {
         val active = renderer ?: return@LaunchedEffect
         if (!ready) return@LaunchedEffect

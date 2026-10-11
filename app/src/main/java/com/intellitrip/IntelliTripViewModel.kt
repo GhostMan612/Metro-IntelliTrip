@@ -14,6 +14,7 @@ import com.intellitrip.domain.RadarFrame
 import com.intellitrip.domain.ScopeState
 import com.intellitrip.scope.ScopeEngine
 import com.intellitrip.domain.TripPlanRequest
+import com.intellitrip.domain.UserLocation
 import com.intellitrip.domain.Vehicle
 import com.intellitrip.domain.WeatherAlert
 import com.intellitrip.gtfs.RefreshOutcome
@@ -48,6 +49,9 @@ data class AppState(
     val radarFrame: RadarFrame? = null,
     val radarEnabled: Boolean = false,
     val weatherAlerts: List<WeatherAlert> = emptyList(),
+    val userLocation: UserLocation? = null,
+    /** True once permission is denied, so the UI can explain rather than re-prompt. */
+    val locationDenied: Boolean = false,
     val journeys: List<JourneyOption> = emptyList(),
     /** The journey drawn on the map; defaults to the earliest arrival. */
     val selectedJourneyId: String? = null,
@@ -68,6 +72,8 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     val state: StateFlow<AppState> = _state.asStateFlow()
 
     private var viewportJob: Job? = null
+
+    private var locationJob: Job? = null
 
     private var refreshJob: Job? = null
 
@@ -278,6 +284,40 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         setScope("System", Focus.Radius(point, 3_218.0))
     }
 
+    /**
+     * Centres on the user and starts tracking. Permission is requested here, from
+     * an explicit tap, never at startup — a map app that asks for location before
+     * the user has touched anything is the behaviour people distrust.
+     */
+    fun onLocateMe(permissionGranted: Boolean) {
+        if (!permissionGranted) {
+            update { it.copy(locationDenied = true, status = "Location permission denied") }
+            return
+        }
+        update { it.copy(locationDenied = false, status = "Locating…") }
+        locationJob?.cancel()
+        locationJob = viewModelScope.launch {
+            host.location.positions().collect { fix ->
+                update { it.copy(userLocation = fix, status = "Location accuracy ±${fix.accuracyMeters.toInt()} m") }
+                // Follow the user only while they are zoomed into an area view; at
+                // System scope a moving camera is disorienting and the user is not lost.
+                val current = _state.value
+                if (current.focus is Focus.Radius && current.focus.meters <= FOLLOW_METERS) {
+                    setScope("You", Focus.Radius(fix.position, followRadius(fix)))
+                }
+            }
+        }
+    }
+
+    fun stopFollowing() {
+        locationJob?.cancel()
+        locationJob = null
+    }
+
+    /** Radius that frames the user at their own accuracy, with a margin. */
+    private fun followRadius(fix: UserLocation): Double =
+        (fix.accuracyMeters * 3).coerceIn(MIN_FOLLOW_METERS, MAX_FOLLOW_METERS)
+
     /** Selects a journey, draws it on the map, and frames it. */
     fun selectJourney(id: String) {
         _state.value = _state.value.copy(selectedJourneyId = id)
@@ -335,6 +375,11 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
 
         /** Settles a camera gesture before it changes scope, so panning stays smooth. */
         private const val VIEWPORT_DEBOUNCE_MS = 250L
+
+        /** Above this the camera stops following, so System view stays put. */
+        private const val FOLLOW_METERS = 5_000.0
+        private const val MIN_FOLLOW_METERS = 500.0
+        private const val MAX_FOLLOW_METERS = 4_000.0
 
         fun factory(host: AtlasHost): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
