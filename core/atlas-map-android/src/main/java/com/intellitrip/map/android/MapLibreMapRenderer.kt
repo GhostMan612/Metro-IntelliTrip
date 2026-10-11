@@ -228,10 +228,10 @@ PropertyFactory.lineColor("#DC2626"),
                 style.addLayer(
                     CircleLayer(ALERTS_LAYER, ALERTS_SOURCE).withProperties(
                         PropertyFactory.circleRadius(7f),
-                        PropertyFactory.circleColor(Expression.get("#DC2626")),
+                        PropertyFactory.circleColor(Expression.literal("#DC2626")),
                         PropertyFactory.circleOpacity(0.9f),
                         PropertyFactory.circleStrokeWidth(2f),
-                        PropertyFactory.circleStrokeColor(Expression.get("#FFFFFF")),
+                        PropertyFactory.circleStrokeColor(Expression.literal("#FFFFFF")),
                     )
                 )
             }
@@ -267,7 +267,7 @@ PropertyFactory.lineColor("#DC2626"),
         style.addLayer(
             CircleLayer(STOPS_LAYER, STOPS_SOURCE).withProperties(
                 PropertyFactory.circleRadius(3f),
-                PropertyFactory.circleColor(Expression.get("#444444")),
+                PropertyFactory.circleColor(Expression.literal("#444444")),
                 PropertyFactory.circleOpacity(0.6f),
             )
         )
@@ -298,22 +298,22 @@ PropertyFactory.lineColor("#DC2626"),
                 PropertyFactory.circleRadius(5f),
                 PropertyFactory.circleColor(
                     // `match`, not `step`: `stale` is a boolean and step compares
-                    // numbers, so the old expression never evaluated and every
-                    // vehicle fell through to the default paint.
+                    // numbers. Colours must be `literal` — `get` looks up a feature
+                    // property, so `get("#0078D4")` finds nothing and paints black.
                     Expression.match(
                         Expression.get("stale"),
-                        Expression.get("#0078D4"),
-                        Expression.stop(Expression.literal(true), Expression.get("#9CA3AF")),
+                        Expression.literal("#0078D4"),
+                        Expression.stop(Expression.literal(true), Expression.literal("#9CA3AF")),
                     )
                 ),
                 PropertyFactory.circleStrokeWidth(1.5f),
-                PropertyFactory.circleStrokeColor(Expression.get("#FFFFFF")),
+                PropertyFactory.circleStrokeColor(Expression.literal("#FFFFFF")),
             )
         )
         // Planned journeys sit above everything so a route reads clearly over the network.
         style.addLayer(
             LineLayer(ROUTES_LAYER, ROUTES_SOURCE).withProperties(
-                PropertyFactory.lineColor(Expression.get("#DC2626")),
+                PropertyFactory.lineColor(Expression.literal("#DC2626")),
                 PropertyFactory.lineWidth(5f),
                 PropertyFactory.lineOpacity(0.85f),
                 PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
