@@ -42,6 +42,7 @@ fun MapCanvas(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var renderer by remember { mutableStateOf<MapLibreMapRenderer?>(null) }
+    var ready by remember { mutableStateOf(false) }
 
     val mapView = remember {
         MapView(context).apply {
@@ -53,22 +54,35 @@ fun MapCanvas(
         }
     }
 
-    AndroidView(
-        factory = {
-            MapLibreMapRenderer(mapView, onCameraMoved = onViewportChanged).also { created ->
-                renderer = created
-                created.applyBasemap(CartoBasemapProvider.style())
-                created.moveCamera(com.intellitrip.DEFAULT_LAT, com.intellitrip.DEFAULT_LON, 11.0)
-            }
-            mapView
-        },
-        modifier = Modifier.fillMaxSize(),
-    )
+    // The renderer is created here but is not usable until MapLibre's async map and
+    // style are ready. Everything pushed before that point would be dropped, so the
+    // Compose side waits for [ready] before rendering anything.
+    val rendererCreated = remember {
+        MapLibreMapRenderer(
+            mapView = mapView,
+            onReady = { ready = true },
+            onCameraMoved = onViewportChanged,
+        ).also { created ->
+            created.applyBasemap(CartoBasemapProvider.style())
+            created.moveCamera(
+                com.intellitrip.DEFAULT_LAT,
+                com.intellitrip.DEFAULT_LON,
+                11.0,
+            )
+        }
+    }
+
+    AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+
+    LaunchedEffect(rendererCreated) { renderer = rendererCreated }
 
     DisposableEffect(Unit) { onDispose { mapView.onDestroy() } }
 
-    LaunchedEffect(renderer, state.vehicles, state.staticFeed, state.scope) {
+    // `ready` is part of every key: without it the first render fires before layers exist
+    // and is thrown away, and nothing ever repaints because no other key changed.
+    LaunchedEffect(renderer, ready, state.vehicles, state.staticFeed, state.scope) {
         val active = renderer ?: return@LaunchedEffect
+        if (!ready) return@LaunchedEffect
         if (!throttle.shouldEmit()) return@LaunchedEffect
         val feed = state.staticFeed
         // Rendering and GeoJSON encoding can touch hundreds of thousands of points,
@@ -84,14 +98,18 @@ fun MapCanvas(
                     stops = feed?.stops ?: emptyList(),
                     shapes = feed?.shapes ?: emptyList(),
                     snapshotAt = Instant.now(),
+                    // Fetch time, not "now": this is what decides whether a vehicle
+                    // paints as stale, and it must match the status line.
+                    fetchedAt = state.vehiclesFetchedAt,
                 )
             )
         }
         active.render(snapshot)
     }
 
-    LaunchedEffect(renderer, state.scope) {
+    LaunchedEffect(renderer, ready, state.scope) {
         val active = renderer ?: return@LaunchedEffect
+        if (!ready) return@LaunchedEffect
         val camera = state.scope?.cameraScope ?: return@LaunchedEffect
         val bounds = camera.bounds
         active.moveCamera(
@@ -101,8 +119,9 @@ fun MapCanvas(
         )
     }
 
-    LaunchedEffect(renderer, routeGeometry) {
+    LaunchedEffect(renderer, ready, routeGeometry) {
         val active = renderer ?: return@LaunchedEffect
+        if (!ready) return@LaunchedEffect
         if (routeGeometry.isEmpty()) {
             active.clearRoutes()
         } else {
@@ -112,8 +131,9 @@ fun MapCanvas(
         }
     }
 
-    LaunchedEffect(renderer, state.radarFrame, state.radarEnabled, state.weatherAlerts) {
+    LaunchedEffect(renderer, ready, state.radarFrame, state.radarEnabled, state.weatherAlerts) {
         val active = renderer ?: return@LaunchedEffect
+        if (!ready) return@LaunchedEffect
         val composed = WeatherLayerComposer.compose(
             state = WeatherLayerState(
                 radarEnabled = state.radarEnabled,

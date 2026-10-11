@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.intellitrip.gtfs.StaticFeedSnapshotStore
 import com.intellitrip.gtfs.StaticFeedSnapshotStore as Store
+import com.intellitrip.map.RouteGeometry
 import com.intellitrip.offline.OfflineRegistry
 import com.intellitrip.routing.RoutingNetwork
 import com.intellitrip.routing.StaticNetworkPlanner
@@ -150,7 +151,7 @@ class AtlasHostInstrumentedTest {
                     departure = departure,
                     arrival = departure.plusSeconds(600),
                     vehicleKey = null,
-                    realtimeStatus = com.intellitrip.domain.RealtimeStatus.Scheduled,
+                    realtimeStatus = com.intellitrip.domain.RealtimeStatus.SCHEDULED,
                     delaySeconds = null,
                     scheduledDeparture = null,
                     scheduledArrival = null,
@@ -198,16 +199,20 @@ class AtlasHostInstrumentedTest {
 }
 
 /** Small deterministic GTFS archive used by device tests (no network). */
-internal class GtfsFixture {
+internal class GtfsFixture(private val withShapes: Boolean = false) {
     fun zip(): ByteArray {
         val files = linkedMapOf(
             "agency.txt" to "agency_id,agency_name,agency_url,agency_timezone\n1,Metro Transit,https://www.metrotransit.org,America/Chicago\n",
             "routes.txt" to "route_id,agency_id,route_short_name,route_long_name,route_type\n901,1,A,Blue Line,0\n",
             "stops.txt" to "stop_id,stop_name,stop_lat,stop_lon\nS1,First,44.9700,-93.2600\nS2,Second,44.9850,-93.2650\n",
-            "trips.txt" to "route_id,service_id,trip_id,shape_id\n901,SVC,T1,SH1\n",
+            "trips.txt" to "trip_id,route_id,service_id,shape_id\nT1,901,SVC,${if (withShapes) "SH1" else ""}\n",
             "stop_times.txt" to "trip_id,arrival_time,departure_time,stop_id,stop_sequence\nT1,08:00:00,08:00:00,S1,1\nT1,25:30:00,25:30:00,S2,2\n",
             "calendar.txt" to "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\nSVC,1,1,1,1,1,0,0,20261001,20261231\n",
         )
+        if (withShapes) {
+            files["shapes.txt"] = "shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\n" +
+                "SH1,44.9700,-93.2600,1\nSH1,44.9750,-93.2620,2\nSH1,44.9800,-93.2640,3\nSH1,44.9850,-93.2650,4\n"
+        }
         val out = java.io.ByteArrayOutputStream()
         java.util.zip.ZipOutputStream(out).use { zip ->
             files.forEach { (name, content) ->

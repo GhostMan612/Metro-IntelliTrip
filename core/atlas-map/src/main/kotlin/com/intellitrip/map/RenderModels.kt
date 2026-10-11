@@ -18,6 +18,15 @@ data class RenderInput(
     val shapes: List<Shape>,
     val snapshotAt: Instant,
     val previousVehicles: List<Vehicle> = emptyList(),
+    /**
+     * When this data was fetched from the provider.
+     *
+     * Distinct from the vehicle's own `updatedAt`: operators may omit per-vehicle
+     * timestamps and reuse a stale header timestamp, so fetch time is the more
+     * reliable freshness signal. Null means "not supplied", in which case each
+     * vehicle's own timestamp is authoritative on its own.
+     */
+    val fetchedAt: Instant? = null,
 )
 
 data class CameraView(

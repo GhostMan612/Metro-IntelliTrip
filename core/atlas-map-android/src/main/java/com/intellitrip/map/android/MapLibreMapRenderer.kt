@@ -33,7 +33,17 @@ class MapLibreMapRenderer(
 ) : MapRenderer {
 
     private var map: MapLibreMap? = null
-    private var styleApplied = false
+    private var layersAttached = false
+
+    // getMapAsync is asynchronous, but callers legitimately want to configure the
+    // renderer the moment they construct it. Anything requested before the map
+    // exists is queued here and drained once it arrives; previously these calls
+    // hit `map ?: return` and were silently dropped, leaving a blank map.
+    private var pendingStyle: BasemapStyle? = null
+    private var pendingCamera: Triple<Double, Double, Double>? = null
+
+    private var lastReportedLat = Double.NaN
+    private var lastReportedLon = Double.NaN
     private var lastReportedZoom = Double.NaN
 
     init {
@@ -41,20 +51,47 @@ class MapLibreMapRenderer(
         mapView.getMapAsync { mapLibreMap ->
             map = mapLibreMap
             mapLibreMap.addOnCameraMoveListener { reportCameraIfChanged() }
-            if (!styleApplied) onReady(this)
+            // Drain in the order the caller originally made the calls, so a basemap
+            // is attached before layers are added on top of it.
+            pendingStyle?.let { style ->
+                pendingStyle = null
+                applyBasemap(style)
+            }
+            pendingCamera?.let { (lat, lon, zoom) ->
+                pendingCamera = null
+                moveCamera(lat, lon, zoom)
+            }
         }
     }
 
-    /** Reports camera changes so the host can derive scope from user gestures. */
+    /**
+     * Reports camera changes so the host can derive scope from user gestures.
+     * Panning counts, not just zooming: a user dragging the map expects the scope to
+     * follow. Sub-degree jitter is filtered so settling gestures do not thrash state.
+     */
     private fun reportCameraIfChanged() {
         val position = map?.cameraPosition ?: return
-        if (position.zoom == lastReportedZoom) return
-        lastReportedZoom = position.zoom
         val target = position.target ?: return
-        onCameraMoved(target.latitude, target.longitude, position.zoom)
+        val lat = target.latitude
+        val lon = target.longitude
+        val zoom = position.zoom
+        val moved = kotlin.math.abs(lat - lastReportedLat) > CAMERA_EPSILON_DEGREES ||
+            kotlin.math.abs(lon - lastReportedLon) > CAMERA_EPSILON_DEGREES ||
+            kotlin.math.abs(zoom - lastReportedZoom) > CAMERA_EPSILON_ZOOM
+        if (!moved) return
+        lastReportedLat = lat
+        lastReportedLon = lon
+        lastReportedZoom = zoom
+        onCameraMoved(lat, lon, zoom)
     }
 
     val mapViewRef: MapView get() = mapView
+
+    /**
+     * True once sources and layers exist. Callers must wait for [onReady] before
+     * pushing data, otherwise updates are discarded because no source exists yet.
+     */
+    val isReady: Boolean get() = map != null && layersAttached
 
     fun camera(): CameraViewCompat? {
         val position = map?.cameraPosition ?: return null
@@ -69,25 +106,46 @@ class MapLibreMapRenderer(
     }
 
     fun moveCamera(lat: Double, lon: Double, zoom: Double) {
-        map?.cameraPosition = CameraPosition.Builder()
+        val target = map
+        if (target == null) {
+            pendingCamera = Triple(lat, lon, zoom)
+            return
+        }
+        target.cameraPosition = CameraPosition.Builder()
             .target(LatLng(lat, lon))
             .zoom(zoom)
             .build()
     }
 
     override fun applyBasemap(style: BasemapStyle) {
-        styleApplied = true
-        val target = map ?: return
+        val target = map
+        if (target == null) {
+            // Queued, not dropped: the map is still being created.
+            pendingStyle = style
+            return
+        }
         val styleUri = style.styleUrl
         if (styleUri != null) {
-            target.setStyle(styleUri) { attachLayers() }
+            target.setStyle(styleUri) { onStyleLoaded() }
         } else {
-            attachLayers()
+            onStyleLoaded()
         }
+    }
+
+    /**
+     * Runs once the style is usable. `setStyle` replaces the style object, so any
+     * previously attached sources and layers are gone; they are re-added here and
+     * [onReady] fires afterwards so callers can push data only once layers exist.
+     */
+    private fun onStyleLoaded() {
+        layersAttached = attachLayers()
+        if (!layersAttached) return
+        onReady(this)
     }
 
     override fun render(snapshot: RenderSnapshot) {
         val target = map ?: return
+        if (!layersAttached) return
         target.getStyle { style ->
             updateSource(style.getSourceAs<GeoJsonSource>(VEHICLES_SOURCE), GeoJsonWriter.vehicles(snapshot))
             updateSource(style.getSourceAs<GeoJsonSource>(CLUSTERS_SOURCE), GeoJsonWriter.clusters(snapshot))
@@ -139,7 +197,7 @@ class MapLibreMapRenderer(
             source.setGeoJson(geoJson)
             if (style.getLayer(ROUTES_LAYER) == null) {
                 val layer = LineLayer(ROUTES_LAYER, ROUTES_SOURCE).withProperties(
-                    PropertyFactory.lineColor(Expression.get("#DC2626")),
+PropertyFactory.lineColor("#DC2626"),
                     PropertyFactory.lineWidth(5f),
                     PropertyFactory.lineOpacity(0.85f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
@@ -184,20 +242,24 @@ class MapLibreMapRenderer(
         mapView.onDestroy()
     }
 
-    private fun attachLayers() {
-        val style = map?.style ?: return
-        if (style.getSource(VEHICLES_SOURCE) != null) return
-        style.addSource(GeoJsonSource(VEHICLES_SOURCE))
-        style.addSource(GeoJsonSource(CLUSTERS_SOURCE))
-        style.addSource(GeoJsonSource(STOPS_SOURCE))
-        style.addSource(GeoJsonSource(SHAPES_SOURCE))
-        // Created here rather than lazily so route layers always stack above it,
-        // even when the first plan is drawn after the style settles.
-        if (style.getSource(ROUTES_SOURCE) == null) style.addSource(GeoJsonSource(ROUTES_SOURCE))
+    /**
+     * Adds every source and layer, in stacking order. Safe to call again after a style
+     * change: sources are only added when missing, and layers are re-added against the
+     * new style object. Returns false when the style is not ready yet.
+     */
+    private fun attachLayers(): Boolean {
+        val style = map?.style ?: return false
+        listOf(VEHICLES_SOURCE, CLUSTERS_SOURCE, STOPS_SOURCE, SHAPES_SOURCE, ROUTES_SOURCE).forEach { name ->
+            if (style.getSource(name) == null) style.addSource(GeoJsonSource(name))
+        }
+        // Remove-then-add so a restyled map does not retain layers bound to the old style.
+        listOf(SHAPES_LAYER, STOPS_LAYER, CLUSTERS_LAYER, VEHICLES_LAYER, ROUTES_LAYER).forEach {
+            if (style.getLayer(it) != null) style.removeLayer(it)
+        }
 
         style.addLayer(
             LineLayer(SHAPES_LAYER, SHAPES_SOURCE).withProperties(
-                PropertyFactory.lineColor(Expression.get("#0B5FA5")),
+                PropertyFactory.lineColor("#0B5FA5"),
                 PropertyFactory.lineWidth(2f),
                 PropertyFactory.lineOpacity(0.7f),
             )
@@ -212,32 +274,53 @@ class MapLibreMapRenderer(
         style.addLayer(
             CircleLayer(CLUSTERS_LAYER, CLUSTERS_SOURCE).withProperties(
                 PropertyFactory.circleRadius(
+                    // Singleton cells render at the 10px base size.
                     Expression.step(
-                        Expression.get("count"),
+                        Expression.toNumber(Expression.get("count")),
                         Expression.literal(10.0),
-                        Expression.stop(10.0, 14.0),
-                        Expression.stop(50.0, 20.0),
-                        Expression.stop(200.0, 28.0),
+                        Expression.stop(2.0, 14.0),
+                        Expression.stop(10.0, 18.0),
+                        Expression.stop(50.0, 24.0),
+                        Expression.stop(200.0, 30.0),
                     )
                 ),
-                PropertyFactory.circleColor(Expression.get("#1D4ED8")),
-                PropertyFactory.circleOpacity(0.8f),
+                // Plain string literals, not Expression.get: a colour is not a
+                // feature property, and wrapping one in `get` silently yields the
+                // default black paint.
+                PropertyFactory.circleColor("#1D4ED8"),
+                PropertyFactory.circleOpacity(0.85f),
+                PropertyFactory.circleStrokeWidth(1.5f),
+                PropertyFactory.circleStrokeColor("#FFFFFF"),
             )
         )
         style.addLayer(
             CircleLayer(VEHICLES_LAYER, VEHICLES_SOURCE).withProperties(
                 PropertyFactory.circleRadius(5f),
                 PropertyFactory.circleColor(
-                    Expression.step(
+                    // `match`, not `step`: `stale` is a boolean and step compares
+                    // numbers, so the old expression never evaluated and every
+                    // vehicle fell through to the default paint.
+                    Expression.match(
                         Expression.get("stale"),
                         Expression.get("#0078D4"),
-                        Expression.stop(Expression.literal(true), Expression.get("#9CA3AF"))
+                        Expression.stop(Expression.literal(true), Expression.get("#9CA3AF")),
                     )
                 ),
                 PropertyFactory.circleStrokeWidth(1.5f),
                 PropertyFactory.circleStrokeColor(Expression.get("#FFFFFF")),
             )
         )
+        // Planned journeys sit above everything so a route reads clearly over the network.
+        style.addLayer(
+            LineLayer(ROUTES_LAYER, ROUTES_SOURCE).withProperties(
+                PropertyFactory.lineColor(Expression.get("#DC2626")),
+                PropertyFactory.lineWidth(5f),
+                PropertyFactory.lineOpacity(0.85f),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            )
+        )
+        return true
     }
 
     private fun updateSource(source: GeoJsonSource?, geoJson: String) {
@@ -245,6 +328,11 @@ class MapLibreMapRenderer(
     }
 
     companion object {
+        /** Roughly a metre; below this a pan is treated as camera jitter. */
+        private const val CAMERA_EPSILON_DEGREES = 0.00001
+
+        /** Sub-pixel zoom noise; prevents scope churn while the map settles. */
+        private const val CAMERA_EPSILON_ZOOM = 0.01
         const val VEHICLES_SOURCE = "intellitrip-vehicles"
         const val CLUSTERS_SOURCE = "intellitrip-clusters"
         const val STOPS_SOURCE = "intellitrip-stops"

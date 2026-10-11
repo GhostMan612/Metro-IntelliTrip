@@ -72,7 +72,13 @@ class TransitRenderPipeline(
                     lat = vehicle.position.lat,
                     bearing = vehicle.bearing,
                     vehicleType = vehicle.vehicleType,
-                    stale = vehicle.updatedAt < staleAfter,
+                    // Prefer fetch time when known: some operators omit per-vehicle
+                    // timestamps and reuse a stale header value, which would otherwise
+                    // mark every vehicle stale the instant it is fetched. Without a
+                    // fetch time the vehicle's own timestamp stands alone.
+                    stale = (input.fetchedAt ?: vehicle.updatedAt).let { newest ->
+                        maxOf(newest, vehicle.updatedAt) < staleAfter
+                    },
                     interpolated = moved,
                 )
             }
@@ -157,6 +163,14 @@ class TransitRenderPipeline(
     }
 
     /** Grid-based clustering keeps the renderer free of per-feature objects. */
+    /**
+     * Grid-clusters vehicles for the CLUSTER bucket.
+     *
+     * Every cell produces a cluster, including cells holding a single vehicle. The
+     * CLUSTER bucket suppresses individual vehicle rendering, so dropping one-vehicle
+     * cells would make those vehicles invisible — the layer would claim fewer
+     * vehicles than it is actually showing. Singletons render as a radius-10 dot.
+     */
     private fun cluster(vehicles: List<com.intellitrip.domain.Vehicle>): List<ClusterRender> {
         val cells = LinkedHashMap<String, MutableList<com.intellitrip.domain.Vehicle>>()
         vehicles.forEach { vehicle ->
@@ -164,12 +178,10 @@ class TransitRenderPipeline(
             val cellLon = (vehicle.position.lon / clusterCellDegrees).roundToInt()
             cells.getOrPut("$cellLat:$cellLon") { mutableListOf() }.add(vehicle)
         }
-        return cells.entries
-            .filter { it.value.size > 1 }
-            .map { (cell, members) ->
-                val lat = members.sumOf { it.position.lat } / members.size
-                val lon = members.sumOf { normalizeLongitude(it.position.lon) } / members.size
-                ClusterRender(id = "cluster-$cell", lon = lon, lat = lat, count = members.size)
-            }
+        return cells.entries.map { (cell, members) ->
+            val lat = members.sumOf { it.position.lat } / members.size
+            val lon = members.sumOf { normalizeLongitude(it.position.lon) } / members.size
+            ClusterRender(id = "cluster-$cell", lon = lon, lat = lat, count = members.size)
+        }
     }
 }
