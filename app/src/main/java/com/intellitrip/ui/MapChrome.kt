@@ -270,9 +270,9 @@ private fun DataSheet(
 @Composable
 private fun ScopeSheet(state: AppState, onScope: (String, Focus?) -> Unit) {
     SheetHeader("Scope")
-    val centre = GeoPoint(DEFAULT_LAT, DEFAULT_LON)
-    SheetRow("Nearby (½ mile)", current(state, "Nearby"), { onScope("Nearby", Focus.Radius(centre, 805.0)) })
-    SheetRow("Area (2 miles)", current(state, "Area"), { onScope("Area", Focus.Radius(centre, 3218.0)) })
+    val center = GeoPoint(DEFAULT_LAT, DEFAULT_LON)
+    SheetRow("Nearby (1/2 mile)", current(state, "Nearby"), { onScope("Nearby", Focus.Radius(center, 805.0)) })
+    SheetRow("Area (2 miles)", current(state, "Area"), { onScope("Area", Focus.Radius(center, 3218.0)) })
     SheetRow("System", current(state, "System"), { onScope("System", Focus.System) })
     state.scope.let { scope ->
         Text(

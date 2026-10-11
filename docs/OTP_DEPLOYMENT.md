@@ -68,7 +68,7 @@ val planner = HybridRoutingProvider(local, remote)
 ```
 
 `HybridRoutingProvider` calls local first and only contacts the remote when local
-returns nothing, so with no remote configured the behaviour is exactly the current
+returns nothing, so with no remote configured the behavior is exactly the current
 one. Set `remoteFallback = false` for a strict offline mode that never touches the
 network.
 

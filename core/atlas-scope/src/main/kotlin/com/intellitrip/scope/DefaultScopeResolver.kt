@@ -12,7 +12,7 @@ import com.intellitrip.domain.ZoomBucket
 import java.time.Duration
 
 /**
- * Tunable scope behaviour. Phase 03 already consumes the scope primitives; this
+ * Tunable scope behavior. Phase 03 already consumes the scope primitives; this
  * policy supplies the continuous values the resolver derives from a [Focus].
  */
 data class ScopePolicy(
@@ -82,10 +82,10 @@ class DefaultScopeResolver(private val policy: ScopePolicy = ScopePolicy()) : Sc
             )
 
             is Focus.Radius -> resolution(
-                // Camera follows the radius centre, not the system extent. Framing
+                // Camera follows the radius center, not the system extent. Framing
                 // systemBounds here made every Radius scope show the whole metro, so
                 // a focus elsewhere in the city (following the user's own location,
-                // say) centred nowhere near its subject.
+                // say) centered nowhere near its subject.
                 camera = CameraScope(boundsAround(focus.center, focus.meters), zoomForRadius(focus.meters)),
                 data = dataScope(
                     bounds = boundsAround(focus.center, focus.meters),

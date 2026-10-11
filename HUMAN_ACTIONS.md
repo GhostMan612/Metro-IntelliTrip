@@ -83,7 +83,7 @@ shipping a tile extract would mean committing hundreds of megabytes.
 
 ### Free routes
 
-1. **Do nothing.** Offline shows transit data over a blank/grey map. Legitimate.
+1. **Do nothing.** Offline shows transit data over a blank/gray map. Legitimate.
 2. **Generate your own.** Download a Geofabrik metro extract and build vector tiles
    with [tilemaker](https://github.com/systemed/tilemaker), then:
    ```

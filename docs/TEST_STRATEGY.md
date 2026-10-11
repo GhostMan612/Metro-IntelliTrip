@@ -36,7 +36,7 @@
 - Transfer leg grouping tests.
 - `TransferConnection` computation tests (scheduled/predicted buffer, walking duration, confidence, rationale).
 - Provider-neutral model mapping tests.
-- Implemented (`core/atlas-routing`): multimodal journey shape (walk/transit/walk), transit-leg identity and schedule, direct vs transfer journeys, transfer-connection linkage to its two legs, realtime annotation without schedule rewriting, unreachable-destination `PartialResult`, service-time conversion past midnight, OTP URL construction and unreachable-service behaviour.
+- Implemented (`core/atlas-routing`): multimodal journey shape (walk/transit/walk), transit-leg identity and schedule, direct vs transfer journeys, transfer-connection linkage to its two legs, realtime annotation without schedule rewriting, unreachable-destination `PartialResult`, service-time conversion past midnight, OTP URL construction and unreachable-service behavior.
 - Transfer intelligence (`core/atlas-routing`): no-realtime and stale-realtime connections score `SCHEDULED_UNKNOWN`; generous buffer scores `HIGH`; tight buffer `MEDIUM`; buffer below the `transfers.txt` minimum transfer time `LOW`; negative predicted buffer `LOW`; canceled departure `LOW`; every outcome carries a rationale; journeys without transfers report no confidence.
 
 ## Scope engine
@@ -53,7 +53,7 @@
 - Radar frame freshness tests.
 - Alert severity mapping tests.
 - Provider outage degradation tests.
-- Implemented (`core/atlas-weather`): RainViewer index parsing (past + nowcast frames, unusable payload rejected), frame filtering by `since`, network-failure propagation, NWS alert mapping (severity, urgency, areas, timestamps), User-Agent enforcement before any NWS call, layer composition order (weather below transit), default-off behaviour, degraded composition.
+- Implemented (`core/atlas-weather`): RainViewer index parsing (past + nowcast frames, unusable payload rejected), frame filtering by `since`, network-failure propagation, NWS alert mapping (severity, urgency, areas, timestamps), User-Agent enforcement before any NWS call, layer composition order (weather below transit), default-off behavior, degraded composition.
 
 ## Integration
 - End-to-end provider fetch → domain snapshot → render state using fixtures.

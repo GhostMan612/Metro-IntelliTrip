@@ -354,7 +354,7 @@ PropertyFactory.lineColor("#DC2626"),
                         Expression.stop(200.0, 30.0),
                     )
                 ),
-                // Plain string literals, not Expression.get: a colour is not a
+                // Plain string literals, not Expression.get: a color is not a
                 // feature property, and wrapping one in `get` silently yields the
                 // default black paint.
                 PropertyFactory.circleColor("#1D4ED8"),
@@ -368,7 +368,7 @@ PropertyFactory.lineColor("#DC2626"),
                 PropertyFactory.circleRadius(5f),
                 PropertyFactory.circleColor(
                     // `match`, not `step`: `stale` is a boolean and step compares
-                    // numbers. Colours must be `literal` — `get` looks up a feature
+                    // numbers. Colors must be `literal` — `get` looks up a feature
                     // property, so `get("#0078D4")` finds nothing and paints black.
                     Expression.match(
                         Expression.get("stale"),
@@ -398,7 +398,7 @@ PropertyFactory.lineColor("#DC2626"),
     }
 
     companion object {
-        /** Roughly a metre; below this a pan is treated as camera jitter. */
+        /** Roughly a meter; below this a pan is treated as camera jitter. */
         private const val CAMERA_EPSILON_DEGREES = 0.00001
 
         /** Sub-pixel zoom noise; prevents scope churn while the map settles. */

@@ -42,7 +42,7 @@ sealed class InstallResult {
  * [BasemapPolicy] needs.
  *
  * Free and key-free by design: packages are produced from OpenStreetMap data, whose
- * licence permits this. No tile vendor account is needed, which is the whole point —
+ * license permits this. No tile vendor account is needed, which is the whole point —
  * the previous approach was blocked on commercial API keys.
  */
 class OfflineBasemapStore(

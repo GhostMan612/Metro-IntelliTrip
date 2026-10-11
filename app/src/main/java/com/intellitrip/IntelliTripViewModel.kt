@@ -105,14 +105,14 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
      * debounced and skips updates that would not change the scope meaningfully.
      */
     fun onViewportChanged(lat: Double, lon: Double, zoom: Double) {
-        val metres = METERS_PER_LAT_DEGREE * 360.0 / (1 shl zoom.coerceIn(3.0, 20.0).toInt())
-        val focus = Focus.Radius(GeoPoint(lat, lon), metres.coerceIn(200.0, 60_000.0))
+        val meters = METERS_PER_LAT_DEGREE * 360.0 / (1 shl zoom.coerceIn(3.0, 20.0).toInt())
+        val focus = Focus.Radius(GeoPoint(lat, lon), meters.coerceIn(200.0, 60_000.0))
         val current = _state.value.focus
         if (current is Focus.Radius) {
-            val sameCentre = current.center.lat == lat && current.center.lon == lon
+            val sameCenter = current.center.lat == lat && current.center.lon == lon
             // Within ~2% the label and bounds would churn without telling the user
             // anything new.
-            if (sameCentre && kotlin.math.abs(current.meters - focus.meters) < metres * 0.02) return
+            if (sameCenter && kotlin.math.abs(current.meters - focus.meters) < meters * 0.02) return
         }
         viewportJob?.cancel()
         viewportJob = viewModelScope.launch {
@@ -280,14 +280,14 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         }
 
     /** Re-frames the map on the default view, after a gesture moved it elsewhere. */
-    fun recentre(point: GeoPoint) {
+    fun recenter(point: GeoPoint) {
         setScope("System", Focus.Radius(point, 3_218.0))
     }
 
     /**
-     * Centres on the user and starts tracking. Permission is requested here, from
+     * Centers on the user and starts tracking. Permission is requested here, from
      * an explicit tap, never at startup — a map app that asks for location before
-     * the user has touched anything is the behaviour people distrust.
+     * the user has touched anything is the behavior people distrust.
      */
     fun onLocateMe(permissionGranted: Boolean) {
         if (!permissionGranted) {
@@ -295,7 +295,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
             return
         }
         update { it.copy(locationDenied = false, status = "Locating…") }
-        // Tapping locate means "show me where I am", so it always re-centres on the
+        // Tapping locate means "show me where I am", so it always re-centers on the
         // first fix regardless of the current scope. Only *subsequent* fixes respect
         // the follow limits below.
         var firstFix = true
@@ -337,7 +337,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
      * Radius that frames the user at their own accuracy, with a margin.
      *
      * Capped well below the System extent: a poor indoor fix can report hundreds of
-     * metres, and a viewport sized to that would be indistinguishable from no zoom.
+     * meters, and a viewport sized to that would be indistinguishable from no zoom.
      */
     private fun followRadius(fix: UserLocation): Double =
         (fix.accuracyMeters * 3).coerceIn(MIN_FOLLOW_METERS, MAX_FOLLOW_METERS)
@@ -354,13 +354,13 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         val lines = routeGeometry().ifEmpty { return null }
         val lats = lines.flatMap { line -> line.coordinates.map { it[1] } }
         val lons = lines.flatMap { line -> line.coordinates.map { it[0] } }
-        val centre = GeoPoint(
+        val center = GeoPoint(
             (lats.min() + lats.max()) / 2,
             (lons.min() + lons.max()) / 2,
         )
         // Generous margin so the drawn line is not flush against the screen edge.
-        val metres = METERS_PER_LAT_DEGREE * (lats.max() - lats.min()) * 0.75
-        return Focus.Radius(centre, metres.coerceIn(300.0, 60_000.0))
+        val meters = METERS_PER_LAT_DEGREE * (lats.max() - lats.min()) * 0.75
+        return Focus.Radius(center, meters.coerceIn(300.0, 60_000.0))
     }
 
     fun offlineCapabilities() = host.offlineRegistry.capabilities(

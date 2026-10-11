@@ -47,7 +47,7 @@ Implemented. `core/atlas-engine` is the public SDK boundary: `AtlasEngine` compo
 
 ## Phase 10 - App completion (added after Phase 09 closed)
 
-Not a blueprint phase; recorded here because it changed module behaviour after the
+Not a blueprint phase; recorded here because it changed module behavior after the
 Phase 09 freeze.
 
 - App shell split into a composition root (`AtlasHost`), a `ViewModel`, and focused

@@ -139,7 +139,7 @@ class StaticNetworkPlannerTest {
 }
 
 /**
- * Transport-level behaviour of the OTP adapter. Response mapping is covered by
+ * Transport-level behavior of the OTP adapter. Response mapping is covered by
  * OpenTripPlannerRoutingProviderTest in its own file.
  */
 class OtpTransportTest {
