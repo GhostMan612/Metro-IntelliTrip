@@ -79,18 +79,36 @@ Hosting targets Oracle Cloud Always Free as the only durable free tier; see
 `docs/OTP_DEPLOYMENT.md`. No endpoint is committed and none is required — with no
 URL configured the app runs local-only.
 
-### Open items carried forward (not phase work)
+### UI/UX pass
 
-These remain genuinely open and are not claimed as done:
+The map is the product, so it fills the viewport edge to edge with no control
+panel permanently laid over it. What remains on screen is a right-hand column of
+three floating actions (plan, data, recenter) and one quiet scope chip. Everything
+else lives in a bottom sheet that is hidden until asked for. Verified on-device:
+scope switching reframes the camera and swaps the render bucket live
+(System/CLUSTER/6000 -> Nearby/INDIVIDUAL/500).
 
-- **Live OTP verification.** The mapper is tested against a hand-authored OTP 2.x
-  payload, not a live capture from a running instance. Field drift between OTP
-  versions is possible and untested.
-- **Offline vector tile package** (Phase 08) is not bundled. `BasemapPolicy` and the
-  hook exist; no package ships yet, so offline is data-only.
-- **RainViewer** (ADR-003) is PROVISIONAL / RESEARCH-GATED on terms, limits and
-  licensing.
-- **`core/atlas-transit`** remains a quarantined prototype, not authoritative, until
-  authorized migration.
-- **Realtime at startup** is deliberately not wired: live data loads only on
-  explicit user action or the auto-refresh toggle.
+### Open items carried forward
+
+All four previously-open items now have decisions recorded. What remains is
+verification, not specification:
+
+- **Live OTP verification** (ADR-007). The adapter, mapper and hybrid policy are
+  implemented and tested, but only against a hand-authored OTP 2.x payload. A live
+  call against a running instance has not been made, so field drift between OTP
+  versions is unproven either way. Needs a deployment; `docs/OTP_DEPLOYMENT.md`
+  has the recipe.
+- **Offline basemap package.** `OfflineBasemapStore` manages packages and
+  `BasemapPolicy` reports a missing one, but no package is bundled and none has
+  been installed on a device. The install path is therefore untested end to end.
+- **RainViewer** (ADR-003). Resolved to "RainViewer primary with mandatory
+  attribution, IEM/NWS fallback", on the grounds that it is free and key-free. Its
+  usage limits are still not contractually guaranteed; that risk is documented
+  rather than eliminated.
+- **`core/atlas-transit`** (ADR-014). Verified to have zero dependents and zero
+  imports, and formally retired. The files remain on disk because they are
+  protected user work; deleting them is the user's call.
+
+Also outstanding, and not open items but unfinished features: there is no release
+signing config, no ProGuard rules and no Play store listing, so the app builds and
+runs but is not publishable as-is.

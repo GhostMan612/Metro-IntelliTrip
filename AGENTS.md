@@ -48,6 +48,10 @@ gradlew.bat :sample:host:run
 - `core/atlas-weather/` pure Kotlin weather adapters (radar, NWS alerts, layer composer)
 - `core/atlas-transit/` protected prototype adapter; not authoritative until migrated
 
+## Optional setup
+`HUMAN_ACTIONS.md` covers signups, costs and optional configuration. Nothing there
+is required to build or run the app: no API keys, no accounts.
+
 ## Phase status
 Phases 00-09 are closed; `docs/blueprints/PHASE-09-sdk-extraction.md` records the
 post-freeze app completion work and the open items carried forward (live OTP

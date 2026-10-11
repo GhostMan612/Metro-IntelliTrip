@@ -12,6 +12,7 @@ import com.intellitrip.map.RouteGeometry
 import com.intellitrip.map.RouteLine
 import com.intellitrip.domain.RadarFrame
 import com.intellitrip.domain.ScopeState
+import com.intellitrip.scope.ScopeEngine
 import com.intellitrip.domain.TripPlanRequest
 import com.intellitrip.domain.Vehicle
 import com.intellitrip.domain.WeatherAlert
@@ -37,7 +38,10 @@ data class AppState(
     val status: String = "Idle",
     val scopeLabel: String = "System",
     val focus: Focus? = Focus.System,
-    val scope: ScopeState? = null,
+    // Resolved from Focus.System rather than null: a null scope leaves the render
+    // pipeline with no budget, so the map would be blank on a cold start before any
+    // provider has been called.
+    val scope: ScopeState = ScopeEngine().currentScope(Focus.System),
     val vehicles: List<Vehicle> = emptyList(),
     val vehiclesFetchedAt: Instant? = null,
     val staticFeed: StaticFeed? = null,
@@ -268,6 +272,11 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
             val id = _state.value.selectedJourneyId
             return journeys.firstOrNull { it.id == id } ?: journeys.minByOrNull { it.arrival }
         }
+
+    /** Re-frames the map on the default view, after a gesture moved it elsewhere. */
+    fun recentre(point: GeoPoint) {
+        setScope("System", Focus.Radius(point, 3_218.0))
+    }
 
     /** Selects a journey, draws it on the map, and frames it. */
     fun selectJourney(id: String) {

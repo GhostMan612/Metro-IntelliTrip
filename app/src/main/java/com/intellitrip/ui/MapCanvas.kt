@@ -107,10 +107,18 @@ fun MapCanvas(
         active.render(snapshot)
     }
 
+    // The camera follows scope only after the user changes it. Applying it on the
+    // initial composition would snap the view to the System extent on every cold
+    // start, when the app already opens on a sensible default framing.
+    var cameraFramed by remember { mutableStateOf(false) }
     LaunchedEffect(renderer, ready, state.scope) {
         val active = renderer ?: return@LaunchedEffect
         if (!ready) return@LaunchedEffect
         val camera = state.scope?.cameraScope ?: return@LaunchedEffect
+        if (!cameraFramed) {
+            cameraFramed = true
+            return@LaunchedEffect
+        }
         val bounds = camera.bounds
         active.moveCamera(
             bounds?.let { (it.southWest.lat + it.northEast.lat) / 2 } ?: com.intellitrip.DEFAULT_LAT,
