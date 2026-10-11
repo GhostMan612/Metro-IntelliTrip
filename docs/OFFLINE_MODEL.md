@@ -43,4 +43,5 @@
 - `core/atlas-gtfs-static`: `StaticFeedSnapshotStore` keeps immutable versioned snapshots and swaps the active pointer atomically.
 - `core/atlas-offline`: `StalenessModel` (FRESH/STALE/EXPIRED/ABSENT), `OfflineRegistry` (capability report + offline feed loading + live-vehicle gating), `BasemapPolicy` (online / offline package / missing).
 - Cached realtime data is retained with its fetch time and is only rendered as live while fresh; otherwise the engine reports realtime unavailable instead of drawing stale positions.
-- OPEN: no offline vector tile package is bundled yet; the policy hook exists so a package can be added without architectural change.
+- A cold start discards stop times while reloading a snapshot (`OfflineRegistry.loadStaticFeed` passes a no-op sink). They are already on disk in the snapshot's stop-time index and are read back on demand, so offline reload no longer rebuilds the whole table in memory.
+- OPEN: no offline vector tile package is bundled yet; the policy hook exists so a package can be added without architectural change. Offline today is data-only, not basemap.

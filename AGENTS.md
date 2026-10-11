@@ -20,6 +20,12 @@ curl -o gtfs-metro-transit.zip https://svc.metrotransit.org/mtgtfs/gtfs.zip
 gradlew.bat :core:atlas-gtfs-static:test --tests "*RealFeedSmokeTest" --rerun-tasks ^
   -Dintellitrip.gtfs.fixture=gtfs-metro-transit.zip
 ```
+Planner latency against the same feed, through the disk-index path the app uses:
+```
+gradlew.bat :core:atlas-routing:test --tests "*RealFeedPlanTimeTest" --rerun-tasks ^
+  -Dintellitrip.gtfs.fixture=gtfs-metro-transit.zip
+```
+Both skip when the fixture is absent rather than passing silently.
 
 ## JVM sample host
 ```
@@ -41,6 +47,12 @@ gradlew.bat :sample:host:run
 - `sample/host/` plain JVM host proving the engine runs without Android
 - `core/atlas-weather/` pure Kotlin weather adapters (radar, NWS alerts, layer composer)
 - `core/atlas-transit/` protected prototype adapter; not authoritative until migrated
+
+## Phase status
+Phases 00-09 are closed; `docs/blueprints/PHASE-09-sdk-extraction.md` records the
+post-freeze app completion work and the open items carried forward (OTP routing
+topology research gate, offline basemap package, RainViewer licensing,
+`core/atlas-transit` migration). Nothing in that list is claimed as done.
 
 ## Docs
 - Architecture: docs/ARCHITECTURE.md

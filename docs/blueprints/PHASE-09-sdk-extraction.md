@@ -44,3 +44,40 @@ Implemented. `core/atlas-engine` is the public SDK boundary: `AtlasEngine` compo
 
 ## Handoff
 - Product teams can build on Atlas Engine.
+
+## Phase 10 - App completion (added after Phase 09 closed)
+
+Not a blueprint phase; recorded here because it changed module behaviour after the
+Phase 09 freeze.
+
+- App shell split into a composition root (`AtlasHost`), a `ViewModel`, and focused
+  Compose panels for scope, data, planner and status.
+- Explicit network actions only. No provider is contacted at startup.
+- Static GTFS, trip planning, live transit, radar and alerts are reachable from the
+  UI and verified on-device against the real Metro Transit feed.
+- Planned journeys are drawn on the map as their own bulk GeoJSON layer, following
+  each trip's GTFS shape trimmed to the portion ridden.
+- Map gestures drive scope; the viewport is adopted as the active `Focus.Radius`
+  after a debounce.
+- Planner search is bounded (departure window, nearest-stop cap, candidate cap) and
+  reads stop times through an LRU over the on-disk index, so planning on a
+  system-wide feed is responsive rather than unbounded.
+- `OfflineRegistry.loadStaticFeed` discards stop times rather than collecting them,
+  so a cold start does not rebuild the whole table in memory.
+- CI runs build, test, lint, the JVM sample host, and the emulator instrumented suite.
+
+### Open items carried forward (not phase work)
+
+These remain genuinely open and are not claimed as done:
+
+- **OTP routing topology** (ADR-007) is an unresolved research gate. The static
+  planner is the implemented provider; the OTP adapter is a spike behind an
+  injectable transport with no captured response fixture.
+- **Offline vector tile package** (Phase 08) is not bundled. `BasemapPolicy` and the
+  hook exist; no package ships yet, so offline is data-only.
+- **RainViewer** (ADR-003) is PROVISIONAL / RESEARCH-GATED on terms, limits and
+  licensing.
+- **`core/atlas-transit`** remains a quarantined prototype, not authoritative, until
+  authorized migration.
+- **Realtime at startup** is deliberately not wired: live data loads only on
+  explicit user action or the auto-refresh toggle.

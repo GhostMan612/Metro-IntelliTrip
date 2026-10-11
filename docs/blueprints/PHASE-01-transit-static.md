@@ -48,3 +48,6 @@ Model and load static transit network data.
 
 ## Handoff
 - Phase 02 can add realtime streams using same static identities.
+
+## Status
+Closed. `core/atlas-gtfs-static` parses the full GTFS model with feed-scoped identities and `GtfsServiceTime`, performs `If-Modified-Since`/`Last-Modified` conditional refresh with atomic snapshot swap, and is verified against both fixtures and the real Metro Transit feed. Parsing streams rather than materialising: stop times live in a sorted on-disk index with a stop-to-trip reverse index, and shapes are downsampled, so a system-wide feed loads on a phone without exhausting the heap.

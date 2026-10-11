@@ -20,8 +20,16 @@
 ## GTFS / GTFS-RT
 - Static (Phase 01, `core/atlas-gtfs-static`): fixture GTFS ZIP parses; optional files absent is tolerated; missing required file/unknown references rejected; stop times ordered by `stop_sequence`; shape points ordered by `shape_pt_sequence`; service times beyond 24h preserved; snapshot activation and conditional-refresh (304 keep, 200 validate+activate, invalid payload keeps previous snapshot) tests; static provider returns `ProviderResult`.
 - Offline (`core/atlas-offline`, Phase 08): staleness classification across fresh/stale/expired/absent, only-fresh realtime presentable as live, static usable while not expired, stored snapshot enables offline planning, corrupt payload rejected offline, missing offline basemap reported, basemap preference selection.
-- Realtime (Phase 02, not yet implemented): `.pb` replay fixtures for vehicle positions, trip updates, alerts; feed association and `VehicleKey` resolution tests.
+- Realtime (Phase 02, `core/atlas-gtfs-realtime`): `.pb` replay fixtures for vehicle positions, trip updates, alerts; feed association and `VehicleKey` resolution tests.
 - Shape parsing tests for route polylines.
+- Bounded-memory parsing (Phase 01 hardening): streaming CSV/archive readers, stop-time disk index round-trip including its stop-to-trip reverse index, and an opt-in `RealFeedSmokeTest` that validates the parser against the live Metro Transit ZIP.
+- Planner latency (`RealFeedPlanTimeTest`): plans the real feed through the disk index — the path the app uses — and asserts a latency budget, so a regression back to unbounded search fails loudly instead of merely feeling slow.
+
+## Map / rendering
+- `RouteGeometryTest`: transit legs follow the trip's shape trimmed to the ridden
+  portion, GeoJSON `[lon, lat]` ordering, straight-connector fallback when a feed
+  carries no shapes, and degenerate legs (zero-length, unknown stops) dropped rather
+  than emitted as invalid geometry.
 
 ## Routing
 - Golden tests for origin–destination journey options.

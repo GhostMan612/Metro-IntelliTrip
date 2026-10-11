@@ -47,3 +47,6 @@ Establish project structure, docs freeze, build hygiene, and app shell skeleton.
 
 ## Handoff
 - Phase 01 may parse static GTFS and models using namespaced identities and established scope primitives.
+
+## Status
+Closed. Gradle module layout, the authoritative docs chain, the namespaced identity model (later refined by ADR-011) and the scope primitives are in place; `assembleDebug`, `test` and `lint` pass from a clean scaffold. The quarantined `core/atlas-transit` prototype predates this and remains non-authoritative pending authorized migration.
