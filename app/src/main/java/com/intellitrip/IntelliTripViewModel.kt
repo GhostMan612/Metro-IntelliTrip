@@ -8,6 +8,8 @@ import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.Focus
 import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.JourneyOption
+import com.intellitrip.map.RouteGeometry
+import com.intellitrip.map.RouteLine
 import com.intellitrip.domain.RadarFrame
 import com.intellitrip.domain.ScopeState
 import com.intellitrip.domain.TripPlanRequest
@@ -43,6 +45,8 @@ data class AppState(
     val radarEnabled: Boolean = false,
     val weatherAlerts: List<WeatherAlert> = emptyList(),
     val journeys: List<JourneyOption> = emptyList(),
+    /** The journey drawn on the map; defaults to the earliest arrival. */
+    val selectedJourneyId: String? = null,
     val journeyWarnings: List<String> = emptyList(),
     val planning: Boolean = false,
     val origin: GeoPoint = GeoPoint(DEFAULT_LAT, DEFAULT_LON),
@@ -58,6 +62,8 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
 
     private val _state = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = _state.asStateFlow()
+
+    private var viewportJob: Job? = null
 
     private var refreshJob: Job? = null
 
@@ -81,6 +87,28 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
             focus = focus,
             scope = host.scopeEngine.currentScope(focus),
         )
+    }
+
+    /**
+     * Adopts the map viewport as the active scope, so panning the map rescales the
+     * rendered network. Gestures arrive on every animation frame, so this is
+     * debounced and skips updates that would not change the scope meaningfully.
+     */
+    fun onViewportChanged(lat: Double, lon: Double, zoom: Double) {
+        val metres = METERS_PER_LAT_DEGREE * 360.0 / (1 shl zoom.coerceIn(3.0, 20.0).toInt())
+        val focus = Focus.Radius(GeoPoint(lat, lon), metres.coerceIn(200.0, 60_000.0))
+        val current = _state.value.focus
+        if (current is Focus.Radius) {
+            val sameCentre = current.center.lat == lat && current.center.lon == lon
+            // Within ~2% the label and bounds would churn without telling the user
+            // anything new.
+            if (sameCentre && kotlin.math.abs(current.meters - focus.meters) < metres * 0.02) return
+        }
+        viewportJob?.cancel()
+        viewportJob = viewModelScope.launch {
+            delay(VIEWPORT_DEBOUNCE_MS)
+            setScope("Map viewport", focus)
+        }
     }
 
     fun setOrigin(point: GeoPoint) = update { it.copy(origin = point) }
@@ -186,6 +214,9 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                             planning = false,
                             journeys = report.map { r -> r.journey },
                             journeyWarnings = report.flatMap { r -> r.warnings }.distinct(),
+                            // A new plan replaces the previous selection rather than
+                            // leaving an id that no longer matches any journey.
+                            selectedJourneyId = null,
                             status = "${report.size} journeys planned",
                         )
                     }
@@ -215,6 +246,48 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                 }
             }
         }
+    }
+
+    /** The selected journey as map geometry; empty when there is nothing to draw. */
+    fun routeGeometry(): List<RouteLine> {
+        val feed = _state.value.staticFeed ?: return emptyList()
+        val journey = selectedJourney ?: return emptyList()
+        return RouteGeometry.build(
+            journey = journey,
+            shapes = feed.shapes,
+            stops = feed.stops,
+            trips = feed.trips,
+        )
+    }
+
+    /** The journey currently drawn, falling back to the best one available. */
+    private val selectedJourney: JourneyOption?
+        get() {
+            val journeys = _state.value.journeys
+            if (journeys.isEmpty()) return null
+            val id = _state.value.selectedJourneyId
+            return journeys.firstOrNull { it.id == id } ?: journeys.minByOrNull { it.arrival }
+        }
+
+    /** Selects a journey, draws it on the map, and frames it. */
+    fun selectJourney(id: String) {
+        _state.value = _state.value.copy(selectedJourneyId = id)
+        val focus = focusJourney(id) ?: return
+        setScope("Selected journey", focus)
+    }
+
+    /** Frames a journey's extent on the map so the plan is visible without hunting. */
+    fun focusJourney(id: String): Focus.Radius? {
+        val lines = routeGeometry().ifEmpty { return null }
+        val lats = lines.flatMap { line -> line.coordinates.map { it[1] } }
+        val lons = lines.flatMap { line -> line.coordinates.map { it[0] } }
+        val centre = GeoPoint(
+            (lats.min() + lats.max()) / 2,
+            (lons.min() + lons.max()) / 2,
+        )
+        // Generous margin so the drawn line is not flush against the screen edge.
+        val metres = METERS_PER_LAT_DEGREE * (lats.max() - lats.min()) * 0.75
+        return Focus.Radius(centre, metres.coerceIn(300.0, 60_000.0))
     }
 
     fun offlineCapabilities() = host.offlineRegistry.capabilities(
@@ -248,6 +321,12 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     }
 
     companion object {
+        /** Metres of latitude spanned by one degree at the equator. */
+        private const val METERS_PER_LAT_DEGREE = 111_320.0
+
+        /** Settles a camera gesture before it changes scope, so panning stays smooth. */
+        private const val VIEWPORT_DEBOUNCE_MS = 250L
+
         fun factory(host: AtlasHost): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")

@@ -127,6 +127,38 @@ class MapLibreMapRenderer(
         }
     }
 
+    /**
+     * Planned journeys, drawn above the network in their own bulk source so the
+     * layer can be styled without touching the feed layers.
+     */
+    fun applyRoutes(geoJson: String) {
+        val target = map ?: return
+        target.getStyle { style ->
+            val source = style.getSourceAs<GeoJsonSource>(ROUTES_SOURCE)
+                ?: GeoJsonSource(ROUTES_SOURCE).also { style.addSource(it) }
+            source.setGeoJson(geoJson)
+            if (style.getLayer(ROUTES_LAYER) == null) {
+                val layer = LineLayer(ROUTES_LAYER, ROUTES_SOURCE).withProperties(
+                    PropertyFactory.lineColor(Expression.get("#DC2626")),
+                    PropertyFactory.lineWidth(5f),
+                    PropertyFactory.lineOpacity(0.85f),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                )
+                // Above everything so a plan reads clearly over the network.
+                style.addLayer(layer)
+            }
+        }
+    }
+
+    fun clearRoutes() {
+        val target = map ?: return
+        target.getStyle { style ->
+            style.removeLayer(ROUTES_LAYER)
+            style.removeSource(ROUTES_SOURCE)
+        }
+    }
+
     /** Active weather alerts rendered as a bulk point source. */
     fun applyAlerts(geoJson: String) {
         val target = map ?: return
@@ -159,6 +191,9 @@ class MapLibreMapRenderer(
         style.addSource(GeoJsonSource(CLUSTERS_SOURCE))
         style.addSource(GeoJsonSource(STOPS_SOURCE))
         style.addSource(GeoJsonSource(SHAPES_SOURCE))
+        // Created here rather than lazily so route layers always stack above it,
+        // even when the first plan is drawn after the style settles.
+        if (style.getSource(ROUTES_SOURCE) == null) style.addSource(GeoJsonSource(ROUTES_SOURCE))
 
         style.addLayer(
             LineLayer(SHAPES_LAYER, SHAPES_SOURCE).withProperties(
@@ -222,6 +257,8 @@ class MapLibreMapRenderer(
         const val RADAR_LAYER = "intellitrip-radar-layer"
         const val ALERTS_SOURCE = "intellitrip-weather-alerts"
         const val ALERTS_LAYER = "intellitrip-weather-alert-layer"
+        const val ROUTES_SOURCE = "intellitrip-routes"
+        const val ROUTES_LAYER = "intellitrip-route-layer"
     }
 }
 

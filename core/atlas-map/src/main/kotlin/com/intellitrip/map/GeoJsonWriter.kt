@@ -50,16 +50,27 @@ object GeoJsonWriter {
         append("]}")
     }
 
-    fun shapes(snapshot: RenderSnapshot): String = buildString {
+    fun shapes(snapshot: RenderSnapshot): String = lineStrings(snapshot.shapeLines.map { it.id to it.coordinates })
+
+    /**
+     * Planned journeys, drawn above the network. [RouteLine.id] is carried as a
+     * property so a leg can be styled or highlighted independently.
+     */
+    fun routes(lines: List<RouteLine>): String =
+        lineStrings(lines.map { line -> line.id to line.coordinates.map { listOf(it[0], it[1]) } })
+
+    // ShapeLineRender is already `[lon, lat]` pairs, so it maps straight across.
+
+    private fun lineStrings(lines: List<Pair<String, List<List<Double>>>>): String = buildString {
         append("{\"type\":\"FeatureCollection\",\"features\":[")
-        snapshot.shapeLines.forEachIndexed { index, line ->
+        lines.forEachIndexed { index, (id, coordinates) ->
             if (index > 0) append(',')
             append("{\"type\":\"Feature\",\"geometry\":{\"type\":\"LineString\",\"coordinates\":[")
-            line.coordinates.forEachIndexed { pointIndex, point ->
+            coordinates.forEachIndexed { pointIndex, point ->
                 if (pointIndex > 0) append(',')
                 append('[').append(point[0]).append(',').append(point[1]).append(']')
             }
-            append("]},\"properties\":{\"id\":").append(quote(line.id)).append("}}")
+            append("]},\"properties\":{\"id\":").append(quote(id)).append("}}")
         }
         append("]}")
     }

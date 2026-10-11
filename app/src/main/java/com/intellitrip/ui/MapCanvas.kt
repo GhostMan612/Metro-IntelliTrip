@@ -16,7 +16,9 @@ import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.LatLngBounds
 import com.intellitrip.map.CameraView
 import com.intellitrip.map.CartoBasemapProvider
+import com.intellitrip.map.GeoJsonWriter
 import com.intellitrip.map.RenderInput
+import com.intellitrip.map.RouteLine
 import com.intellitrip.map.android.MapLibreMapRenderer
 import com.intellitrip.weather.WeatherLayer
 import com.intellitrip.weather.WeatherLayerComposer
@@ -35,6 +37,7 @@ fun MapCanvas(
     state: AppState,
     throttle: com.intellitrip.map.RenderUpdateThrottle,
     pipeline: com.intellitrip.map.TransitRenderPipeline,
+    routeGeometry: List<RouteLine> = emptyList(),
     onViewportChanged: (lat: Double, lon: Double, zoom: Double) -> Unit = { _, _, _ -> },
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -96,6 +99,17 @@ fun MapCanvas(
             bounds?.let { (it.southWest.lon + it.northEast.lon) / 2 } ?: com.intellitrip.DEFAULT_LON,
             camera.zoom ?: 11.0,
         )
+    }
+
+    LaunchedEffect(renderer, routeGeometry) {
+        val active = renderer ?: return@LaunchedEffect
+        if (routeGeometry.isEmpty()) {
+            active.clearRoutes()
+        } else {
+            active.applyRoutes(
+                withContext(Dispatchers.Default) { GeoJsonWriter.routes(routeGeometry) }
+            )
+        }
     }
 
     LaunchedEffect(renderer, state.radarFrame, state.radarEnabled, state.weatherAlerts) {

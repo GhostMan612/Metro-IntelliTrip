@@ -60,6 +60,8 @@ private fun IntelliTripContent(host: AtlasHost, model: IntelliTripViewModel) {
             state = state,
             throttle = host.throttle,
             pipeline = host.pipeline,
+            routeGeometry = model.routeGeometry(),
+            onViewportChanged = model::onViewportChanged,
         )
 
         Column(
@@ -82,6 +84,7 @@ private fun IntelliTripContent(host: AtlasHost, model: IntelliTripViewModel) {
                 onOrigin = model::setOrigin,
                 onDestination = model::setDestination,
                 onPlan = model::planJourney,
+                onSelectJourney = model::selectJourney,
             )
             StatusPanel(state = state, capabilities = model.offlineCapabilities())
         }

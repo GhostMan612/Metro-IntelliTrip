@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +28,7 @@ fun TripPlannerPanel(
     state: AppState,
     onOrigin: (GeoPoint) -> Unit,
     onDestination: (GeoPoint) -> Unit,
+    onSelectJourney: (String) -> Unit,
     onPlan: () -> Unit,
 ) {
     Column(modifier = Modifier.padding(top = 8.dp)) {
@@ -52,8 +54,15 @@ fun TripPlannerPanel(
             )
         }
 
+        // Tapping a journey draws it on the map and frames it, so the list and the map
+        // stay in sync without the user hunting for the line.
+        val activeId = state.selectedJourneyId ?: state.journeys.minByOrNull { it.arrival }?.id
         state.journeys.take(5).forEach { journey ->
-            JourneyCard(journey)
+            JourneyCard(
+                journey = journey,
+                selected = journey.id == activeId,
+                onSelect = { onSelectJourney(journey.id) },
+            )
         }
 
         if (state.journeyWarnings.isNotEmpty()) {
@@ -71,13 +80,25 @@ fun TripPlannerPanel(
 }
 
 @Composable
-private fun JourneyCard(journey: JourneyOption) {
+private fun JourneyCard(
+    journey: JourneyOption,
+    selected: Boolean,
+    onSelect: () -> Unit,
+) {
     val formatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
-    Card(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+    Card(
+        onClick = onSelect,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        colors = if (selected) {
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        } else {
+            CardDefaults.cardColors()
+        },
+    ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
                 text = "${formatter.format(journey.departure)} → ${formatter.format(journey.arrival)} " +
-                    "(${journey.duration.toMinutes()} min)",
+                    "(${journey.duration.toMinutes()} min)" + if (selected) " · on map" else "",
                 style = MaterialTheme.typography.titleSmall,
             )
             journey.legs.forEach { leg ->
@@ -116,6 +137,7 @@ private fun describeLeg(leg: Leg): String = when (leg) {
         leg.delaySeconds?.let { append(" (+${it}s)") }
         append(" ${formatterTime(leg.departure)}–${formatterTime(leg.arrival)}")
     }
+    is Leg.Other -> "${leg.label} ${formatterTime(leg.departure)}–${formatterTime(leg.end)}"
 }
 
 private fun formatterTime(instant: java.time.Instant): String =

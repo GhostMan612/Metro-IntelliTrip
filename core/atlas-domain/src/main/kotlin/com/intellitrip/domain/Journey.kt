@@ -60,6 +60,18 @@ sealed interface Leg {
     ) : Leg {
         fun delaySecondsOrZero(): Int = delaySeconds ?: 0
     }
+
+    /** A mode this build does not render as transit, such as a bike-share hop. */
+    data class Other(
+        val from: GeoPoint,
+        val to: GeoPoint,
+        val departure: Instant,
+        override val duration: Duration,
+        val label: String,
+    ) : Leg {
+        val start: Instant get() = departure
+        val end: Instant get() = departure.plus(duration)
+    }
 }
 
 /**

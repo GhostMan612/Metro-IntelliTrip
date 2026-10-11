@@ -60,3 +60,14 @@ data class ClusterRender(
 data class StopRender(val id: String, val lon: Double, val lat: Double)
 
 data class ShapeLineRender(val id: String, val coordinates: List<List<Double>>)
+
+/**
+ * A planned journey's transit geometry, drawn as its own layer above the network.
+ *
+ * Coordinates are `[lon, lat]` pairs, matching GeoJSON order rather than the
+ * latitude-first order used by the domain's [com.intellitrip.domain.GeoPoint].
+ */
+data class RouteLine(
+    val id: String,
+    val coordinates: List<DoubleArray>,
+)
