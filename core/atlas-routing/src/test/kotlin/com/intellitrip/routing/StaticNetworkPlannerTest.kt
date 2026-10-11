@@ -138,7 +138,11 @@ class StaticNetworkPlannerTest {
     }
 }
 
-class OpenTripPlannerRoutingProviderTest {
+/**
+ * Transport-level behaviour of the OTP adapter. Response mapping is covered by
+ * OpenTripPlannerRoutingProviderTest in its own file.
+ */
+class OtpTransportTest {
 
     private val request = RoutingFixtures.request()
 

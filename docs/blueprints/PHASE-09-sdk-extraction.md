@@ -66,13 +66,26 @@ Phase 09 freeze.
   so a cold start does not rebuild the whole table in memory.
 - CI runs build, test, lint, the JVM sample host, and the emulator instrumented suite.
 
+### Routing topology: resolved
+
+ADR-007 is closed. Routing is hybrid: the in-process `StaticNetworkPlanner`
+answers first, and `HybridRoutingProvider` consults OTP only when local returns
+nothing. `OpenTripPlannerRoutingProvider` now maps real OTP plan responses into
+domain journeys (walk and transit legs, feed-scoped stop keys, epoch-millisecond
+times), and `JsonValue` provides a dependency-free JSON reader so the published
+SDK module does not impose a serialization library on consumers.
+
+Hosting targets Oracle Cloud Always Free as the only durable free tier; see
+`docs/OTP_DEPLOYMENT.md`. No endpoint is committed and none is required — with no
+URL configured the app runs local-only.
+
 ### Open items carried forward (not phase work)
 
 These remain genuinely open and are not claimed as done:
 
-- **OTP routing topology** (ADR-007) is an unresolved research gate. The static
-  planner is the implemented provider; the OTP adapter is a spike behind an
-  injectable transport with no captured response fixture.
+- **Live OTP verification.** The mapper is tested against a hand-authored OTP 2.x
+  payload, not a live capture from a running instance. Field drift between OTP
+  versions is possible and untested.
 - **Offline vector tile package** (Phase 08) is not bundled. `BasemapPolicy` and the
   hook exist; no package ships yet, so offline is data-only.
 - **RainViewer** (ADR-003) is PROVISIONAL / RESEARCH-GATED on terms, limits and

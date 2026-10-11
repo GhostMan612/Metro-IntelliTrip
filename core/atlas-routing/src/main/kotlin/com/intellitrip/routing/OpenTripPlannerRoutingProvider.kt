@@ -31,12 +31,12 @@ fun interface RoutingTransport {
 }
 
 /**
- * OpenTripPlanner adapter spike.
+ * OpenTripPlanner adapter.
  *
- * Topology is RESEARCH-GATED (ADR-007): this adapter assumes only that some
- * OpenTripPlanner-compatible service is reachable. Whether that service is
- * self-hosted, a trusted regional deployment or a local process remains
- * undecided and does not change the [RoutingProvider] contract.
+ * Topology decision (ADR-007): hybrid. The in-process [StaticNetworkPlanner]
+ * answers first and this adapter covers what it cannot; see [HybridRoutingProvider].
+ * Whether the remote service is self-hosted, regional or a local process does not
+ * change the [RoutingProvider] contract.
  */
 class OpenTripPlannerRoutingProvider(
     private val baseUrl: String,
@@ -55,7 +55,7 @@ class OpenTripPlannerRoutingProvider(
         } catch (e: Exception) {
             return ProviderResult.MalformedResponse(ProviderError("Unreadable routing response", e))
         }
-        return parsePlan(body, request)
+        return parsePlan(body, request, feedId)
     }
 
     internal fun planUrl(request: TripPlanRequest): String {
@@ -86,22 +86,130 @@ class OpenTripPlannerRoutingProvider(
         const val DEFAULT_ITINERARIES = 5
 
         /**
-         * Maps an OTP itinerary payload into provider-neutral journeys.
+         * Maps an OTP plan response into provider-neutral journeys.
          *
-         * OTP responses are large and vary by version, so this spike returns an
-         * empty itinerary list plus freshness metadata; the static-network
-         * planner is the authoritative implementation for now. A full OTP
-         * itinerary mapper is deferred until the routing topology research gate
-         * closes and a response fixture is captured.
+         * OTP returns an envelope of itineraries; each has legs that may be walk or
+         * transit, with geometry. Times arrive as epoch milliseconds. Anything that
+         * cannot be represented faithfully is dropped rather than approximated: a
+         * journey missing a boarding stop is not a journey.
          */
         fun parsePlan(
             body: String,
             request: TripPlanRequest,
             feedId: FeedId = FeedId("metro-transit-regional"),
             now: Instant = Instant.now(),
-        ): ProviderResult<List<JourneyOption>> = ProviderResult.Success(
-            emptyList(),
-            FreshnessMetadata(now, now, Duration.ZERO, "open-trip-planner"),
-        )
+        ): ProviderResult<List<JourneyOption>> {
+            val root = try {
+                JsonValue.parse(body)
+            } catch (e: Exception) {
+                return ProviderResult.MalformedResponse(ProviderError("Routing response was not JSON", e))
+            }
+            val envelope = root.obj("plan")
+                ?: return ProviderResult.MalformedResponse(
+                    ProviderError("Routing response had no plan envelope"),
+                )
+            val journeys: List<JourneyOption> = envelope.array("itineraries")
+                .mapNotNull { mapItinerary(it, feedId, now) }
+            return ProviderResult.Success(journeys, FreshnessMetadata(now, now, Duration.ZERO, "open-trip-planner"))
+        }
+
+        /** Returns null when the itinerary cannot be represented faithfully. */
+        private fun mapItinerary(
+            itinerary: JsonValue,
+            feedId: FeedId,
+            now: Instant,
+        ): JourneyOption? {
+            val legs = itinerary.array("legs").mapNotNull { mapLeg(it, feedId, now) }
+            if (legs.isEmpty()) return null
+            val start = itinerary.long("startTime")?.let { Instant.ofEpochMilli(it) }
+                ?: (legs.firstOrNull() as? Leg.WalkLeg)?.start
+                ?: return null
+            val end = itinerary.long("endTime")?.let { Instant.ofEpochMilli(it) }
+                ?: (legs.lastOrNull() as? Leg.WalkLeg)?.end
+                ?: return null
+            return JourneyOption(
+                id = itinerary.string("id") ?: "otp-${start.toEpochMilli()}",
+                legs = legs,
+                transfers = emptyList(),
+                departure = start,
+                arrival = end,
+            )
+        }
+
+        private fun mapLeg(leg: JsonValue, feedId: FeedId, now: Instant): Leg? {
+            val from = leg.obj("from") ?: return null
+            val to = leg.obj("to") ?: return null
+            val fromPoint = point(from) ?: return null
+            val toPoint = point(to) ?: return null
+            val departure = leg.long("startTime")?.let { Instant.ofEpochMilli(it) } ?: return null
+            val arrival = leg.long("endTime")?.let { Instant.ofEpochMilli(it) } ?: return null
+            val duration = Duration.between(departure, arrival)
+
+            // OTP marks walking legs with mode WALK and no route; anything carrying a
+            // route is a transit leg.
+            val route = leg.obj("route")
+            val isTransit = route != null && route.string("shortName") != null ||
+                route?.string("longName") != null || leg.bool("transitLeg") == true
+
+            if (!isTransit) {
+                val meters = leg.obj("distance")?.number("value")?.toDouble() ?: 0.0
+                return Leg.WalkLeg(
+                    from = fromPoint,
+                    to = toPoint,
+                    start = departure,
+                    duration = duration,
+                    meters = meters,
+                )
+            }
+
+            val routeId = route?.string("shortName") ?: route?.string("longName") ?: return null
+            val tripId = leg.string("tripId")?.takeIf { it.isNotBlank() } ?: return null
+            return Leg.Transit(
+                agencyId = AgencyId(feedId.value),
+                routeKey = RouteKey(feedId, routeId),
+                tripKey = TripKey(feedId, tripId),
+                serviceDate = null,
+                fromStopKey = stopKeyOf(from, feedId),
+                toStopKey = stopKeyOf(to, feedId),
+                departure = departure,
+                arrival = arrival,
+                vehicleKey = null,
+                realtimeStatus = realtimeStatus(leg, now),
+                delaySeconds = null,
+                scheduledDeparture = departure,
+                scheduledArrival = arrival,
+                duration = duration,
+            )
+        }
+
+        /**
+         * OTP may omit stop ids for synthesized walk-to-transit points; falling back to
+         * the stop name keeps the leg usable rather than dropping it.
+         */
+        private fun stopKeyOf(node: JsonValue, feedId: FeedId): StopKey {
+            val id = node.string("stopId")?.takeIf { it.isNotBlank() }
+                ?: node.string("name")?.takeIf { it.isNotBlank() }
+                ?: "unknown"
+            return StopKey(feedId, id)
+        }
+
+        private fun realtimeStatus(leg: JsonValue, now: Instant): com.intellitrip.domain.RealtimeStatus {
+            val departure = leg.long("startTime")?.let { Instant.ofEpochMilli(it) } ?: return com.intellitrip.domain.RealtimeStatus.NO_DATA
+            // OTP reports real-time by the presence of realTime data; absence of a
+            // realtime feed is NO_DATA rather than a confident ON_TIME.
+            return if (leg.obj("departureDelay") != null || leg.obj("realTime") != null) {
+                com.intellitrip.domain.RealtimeStatus.ON_TIME
+            } else if (departure.isBefore(now)) {
+                com.intellitrip.domain.RealtimeStatus.SCHEDULED
+            } else {
+                com.intellitrip.domain.RealtimeStatus.SCHEDULED
+            }
+        }
+
+        private fun point(node: JsonValue): GeoPoint? {
+            val lat = node.number("lat") ?: return null
+            val lon = node.number("lon") ?: return null
+            return GeoPoint(lat, lon)
+        }
     }
 }

@@ -50,13 +50,14 @@ gradlew.bat :sample:host:run
 
 ## Phase status
 Phases 00-09 are closed; `docs/blueprints/PHASE-09-sdk-extraction.md` records the
-post-freeze app completion work and the open items carried forward (OTP routing
-topology research gate, offline basemap package, RainViewer licensing,
+post-freeze app completion work and the open items carried forward (live OTP
+verification, offline basemap package, RainViewer licensing,
 `core/atlas-transit` migration). Nothing in that list is claimed as done.
 
 ## Docs
 - Architecture: docs/ARCHITECTURE.md
 - Brief: docs/PRODUCT_BRIEF.md
+- Routing topology + OTP deploy: docs/OTP_DEPLOYMENT.md
 - Constraints: docs/CONSTRAINTS.md
 - Domain: docs/DOMAIN_MODEL.md
 - ADRs: docs/ADR/
