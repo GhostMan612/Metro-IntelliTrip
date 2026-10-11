@@ -6,6 +6,15 @@ gradlew.bat assembleDebug
 ```
 (First run requires Android SDK + `local.properties` pointing to it; install Android Studio or command-line tools.)
 
+## Publish the SDK for another app
+The portable `core/atlas-*` modules publish to `build/atlas-maven` (group
+`com.intellitrip.atlas`, version `0.1.0`) so a separate repository can consume them:
+```
+gradlew.bat publishAtlasToLocalRepo
+```
+`atlas-map-android` (renderer) and `atlas-transit` (quarantined) are deliberately not
+published. Integration steps: docs/SDK_INTEGRATION.md.
+
 ## Test / lint
 ```
 gradlew.bat test

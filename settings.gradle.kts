@@ -8,6 +8,8 @@ pluginManagement {
     }
 }
 rootProject.name = "IntelliTrip"
+
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
