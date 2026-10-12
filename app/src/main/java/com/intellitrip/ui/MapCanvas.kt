@@ -10,7 +10,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.intellitrip.AppState
 import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.LatLngBounds
@@ -76,7 +79,50 @@ fun MapCanvas(
 
     LaunchedEffect(rendererCreated) { renderer = rendererCreated }
 
-    DisposableEffect(Unit) { onDispose { mapView.onDestroy() } }
+    /**
+     * MapLibre's MapView owns GL resources and must see the same activity lifecycle the
+     * activity does. Forwarding only ON_DESTROY leaves the map rendering while the app
+     * is backgrounded: on return the surface is often already lost, which presents as a
+     * blank or grey tile grid that no amount of state refresh fixes.
+     *
+     * ON_PAUSE and ON_RESUME are forwarded, and ON_STOP pauses only if a pause has not
+     * already been delivered, since MapLibre is not idempotent across paired calls and
+     * a backgrounding activity emits both events. ON_DESTROY is left to `onDispose`,
+     * which runs exactly once when the composable leaves composition.
+     */
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, mapView) {
+        var paused = false
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    if (paused) {
+                        paused = false
+                        mapView.onResume()
+                    }
+                }
+
+                Lifecycle.Event.ON_PAUSE -> {
+                    if (!paused) {
+                        paused = true
+                        mapView.onPause()
+                    }
+                }
+
+                // Backgrounding emits PAUSE then STOP; the second must not pause again.
+                Lifecycle.Event.ON_STOP -> Unit
+
+                // Releasing caches on memory pressure is MapLibre's documented behavior
+                // for the same path as a pause; a later ON_RESUME rebuilds them.
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            mapView.onDestroy()
+        }
+    }
 
     // `ready` is part of every key: without it the first render fires before layers exist
     // and is thrown away, and nothing ever repaints because no other key changed.

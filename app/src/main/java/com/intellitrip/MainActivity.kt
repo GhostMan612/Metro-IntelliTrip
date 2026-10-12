@@ -86,8 +86,9 @@ private fun IntelliTripContent(host: AtlasHost, model: IntelliTripViewModel) {
             onToggleAutoRefresh = model::toggleAutoRefresh,
             onLocateMe = requestLocation,
             locationPermissionGranted = permissionGranted,
-            onSetOrigin = model::setOrigin,
-            onSetDestination = model::setDestination,
+onSetOrigin = model::setOrigin,
+    onSetDestination = model::setDestination,
+    onSwapEndpoints = model::swapEndpoints,
             onPlan = model::planJourney,
             onSelectJourney = model::selectJourney,
         )

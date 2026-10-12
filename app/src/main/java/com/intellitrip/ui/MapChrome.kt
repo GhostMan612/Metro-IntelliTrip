@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.intellitrip.AppState
+import com.intellitrip.activeJourneyId
 import com.intellitrip.DEFAULT_LAT
 import com.intellitrip.DEFAULT_LON
 import com.intellitrip.domain.Focus
@@ -92,6 +93,7 @@ fun MapChrome(
     locationPermissionGranted: Boolean,
     onSetOrigin: (GeoPoint) -> Unit,
     onSetDestination: (GeoPoint) -> Unit,
+    onSwapEndpoints: () -> Unit,
     onPlan: () -> Unit,
     onSelectJourney: (String) -> Unit,
 ) {
@@ -178,6 +180,7 @@ fun MapChrome(
                         state = state,
                         onSetOrigin = onSetOrigin,
                         onSetDestination = onSetDestination,
+                        onSwapEndpoints = onSwapEndpoints,
                         onPlan = onPlan,
                         onSelectJourney = onSelectJourney,
                     )
@@ -335,6 +338,7 @@ private fun PlanSheet(
     state: AppState,
     onSetOrigin: (GeoPoint) -> Unit,
     onSetDestination: (GeoPoint) -> Unit,
+    onSwapEndpoints: () -> Unit,
     onPlan: () -> Unit,
     onSelectJourney: (String) -> Unit,
 ) {
@@ -357,11 +361,9 @@ private fun PlanSheet(
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
-            onClick = {
-                val from = state.origin
-                onSetOrigin(state.destination)
-                onSetDestination(from)
-            },
+            // One atomic swap. Two separate setter calls would publish an
+            // intermediate state where origin already equals the old destination.
+            onClick = onSwapEndpoints,
             modifier = Modifier.weight(1f),
         ) { Text("Swap") }
         Button(
@@ -382,7 +384,9 @@ private fun PlanSheet(
         }
     }
 
-    val activeId = state.selectedJourneyId ?: state.journeys.minByOrNull { it.arrival }?.id
+    // Same rule the map uses to decide what to draw, so the highlighted card and the
+    // drawn route can never disagree.
+    val activeId = state.activeJourneyId()
     state.journeys.take(MAX_RESULTS).forEach { journey ->
         val selected = journey.id == activeId
         Surface(

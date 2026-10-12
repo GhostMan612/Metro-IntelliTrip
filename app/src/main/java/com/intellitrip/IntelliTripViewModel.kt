@@ -121,9 +121,21 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         }
     }
 
-    fun setOrigin(point: GeoPoint) = update { it.copy(origin = point) }
+    /**
+     * Endpoints are the input to a plan, so changing one invalidates any result
+     * still on screen.
+     *
+     * Leaving the previous journeys visible would present a route between the old
+     * endpoints as though it answered the new question. The plan is dropped rather
+     * than left stale; the user re-runs it explicitly.
+     */
+    fun setOrigin(point: GeoPoint) = update { it.withEndpoints(origin = point) }
 
-    fun setDestination(point: GeoPoint) = update { it.copy(destination = point) }
+    fun setDestination(point: GeoPoint) = update { it.withEndpoints(destination = point) }
+
+    fun swapEndpoints() = update {
+        it.withEndpoints(origin = it.destination, destination = it.origin)
+    }
 
     fun loadStaticNetwork() {
         update { it.copy(status = "Downloading static GTFS…") }
@@ -272,12 +284,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
 
     /** The journey currently drawn, falling back to the best one available. */
     private val selectedJourney: JourneyOption?
-        get() {
-            val journeys = _state.value.journeys
-            if (journeys.isEmpty()) return null
-            val id = _state.value.selectedJourneyId
-            return journeys.firstOrNull { it.id == id } ?: journeys.minByOrNull { it.arrival }
-        }
+        get() = _state.value.activeJourney()
 
     /** Re-frames the map on the default view, after a gesture moved it elsewhere. */
     fun recenter(point: GeoPoint) {
@@ -303,10 +310,14 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         locationJob = viewModelScope.launch {
             host.location.positions().collect { fix ->
                 update { it.copy(userLocation = fix, status = locationStatus(fix)) }
-                // A stale fix is shown as "last known" but must never move the camera.
-                // Indoors the platform hands back a fix hours or days old; framing on it
-                // would fling the map somewhere the user is not and cannot undo.
-                if (!fix.isPrecise()) return@collect
+                // A stale fix is shown as "last known" but must never move the camera. Indoors
+                // the platform hands back a fix hours or days old; framing on it would
+                // fling the map somewhere the user is not and cannot undo.
+                //
+                // Precision is deliberately not part of this test. A rider who grants
+                // only approximate location still expects the map to move when they
+                // tap locate; refusing to center for them reads as a dead button.
+                if (!fix.shouldCenterCamera()) return@collect
                 val current = _state.value
                 val isAreaView = current.focus is Focus.Radius && current.focus.meters <= FOLLOW_METERS
                 if (firstFix || isAreaView) {
@@ -318,15 +329,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     }
 
     /** Says what the fix actually is, rather than implying it is live. */
-    private fun locationStatus(fix: UserLocation): String {
-        val ageSeconds = java.time.Duration.between(fix.timestamp, Instant.now()).seconds
-        return if (fix.isPrecise()) {
-            "Location ±${fix.accuracyMeters.toInt()} m"
-        } else {
-            val age = if (ageSeconds > 86_400) "${ageSeconds / 86_400}d old" else "${ageSeconds / 60} min old"
-            "Last known location, $age"
-        }
-    }
+    private fun locationStatus(fix: UserLocation): String = fix.describe()
 
     fun stopFollowing() {
         locationJob?.cancel()
@@ -413,3 +416,51 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
             }
     }
 }
+
+/**
+ * Applies new trip endpoints and discards the plan they produced.
+ *
+ * Endpoints are the input to a plan, so changing either one invalidates any result
+ * still on screen. Leaving the previous journeys visible would present a route
+ * between the old endpoints as though it answered the new question, which is worse
+ * than showing nothing. The user re-runs the plan explicitly.
+ *
+ * This is a no-op when the endpoints are unchanged, so selecting the same place
+ * twice does not throw away a valid plan.
+ *
+ * Deliberately a top-level pure function rather than a private method on the view
+ * model: it holds the staleness rule, and a top-level function can be exercised by
+ * a plain JVM test without instantiating Android lifecycle classes.
+ */
+internal fun AppState.withEndpoints(
+    origin: GeoPoint = this.origin,
+    destination: GeoPoint = this.destination,
+): AppState = if (origin == this.origin && destination == this.destination) {
+    this
+} else {
+    copy(
+        origin = origin,
+        destination = destination,
+        journeys = emptyList(),
+        journeyWarnings = emptyList(),
+        selectedJourneyId = null,
+    )
+}
+
+/**
+ * The single journey drawn on the map, or null when there is no plan.
+ *
+ * An explicit selection wins; otherwise the earliest arrival is shown, so a plan is
+ * never invisible just because the rider has not tapped a card. A selection that no
+ * longer exists in [journeys] falls back rather than rendering nothing.
+ *
+ * The planner sheet previously recomputed this inline, which let the highlighted
+ * card and the drawn route disagree. There is now one rule and one implementation.
+ */
+internal fun AppState.activeJourney(): JourneyOption? {
+    if (journeys.isEmpty()) return null
+    return journeys.firstOrNull { it.id == selectedJourneyId } ?: journeys.minByOrNull { it.arrival }
+}
+
+/** The id of the drawn journey, for callers that need to highlight it. */
+internal fun AppState.activeJourneyId(): String? = activeJourney()?.id

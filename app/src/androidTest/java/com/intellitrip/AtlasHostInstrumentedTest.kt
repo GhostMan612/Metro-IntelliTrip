@@ -12,6 +12,7 @@ import com.intellitrip.domain.TripPlanRequest
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -195,6 +196,124 @@ class AtlasHostInstrumentedTest {
             )
         )
         assertNotNull(result)
+    }
+
+    /**
+     * The complete rider journey on a real device, with no network.
+     *
+     * Loading transit data, choosing endpoints, planning, selecting a result, and
+     * then changing an endpoint. The last step is the one that regressed: changing
+     * an endpoint used to leave the previous route drawn, presenting a journey
+     * between the old endpoints as the answer to the new question.
+     */
+    @Test
+    fun riderJourneyEndToEndOnDevice() = runBlocking {
+        val feedId = com.intellitrip.domain.FeedId(FEED_ID)
+        val store = StaticFeedSnapshotStore(Files.createTempDirectory("device-rider"))
+
+        // 1. Load transit data through the same sequence the refresher uses: parse with a
+        // stop-time sink that writes the disk index, then activate the snapshot.
+        val payload = GtfsFixture(withShapes = true).zip()
+        val files = com.intellitrip.gtfs.GtfsArchive.read(payload).toMutableMap()
+        val sink = store.newStopTimeSink()
+        val feed = com.intellitrip.gtfs.GtfsStaticParser.parse(
+            feedId,
+            files,
+            com.intellitrip.domain.FeedMetadata(
+                feedId, null, null, null, "1", "h", java.time.Instant.now(), null, null, null,
+            ),
+            sink,
+        )
+        sink.close()
+        store.activate(feedId, payload, feed.metadata)
+        assertNotNull("static feed should parse on device", feed)
+
+        // 2. Choose endpoints at the two served stops.
+        val planned = AppState(
+            origin = feed!!.stops.first().location,
+            destination = feed.stops.last().location,
+        )
+        assertEquals(2, feed.stops.size)
+
+        // 3. Plan. Because the load used a stop-time sink, feed.stopTimes is intentionally
+        // empty and the planner must read through the disk-backed source, exactly as
+        // AtlasHost.routingNetwork does. Building a RoutingNetwork from feed.stopTimes
+        // alone silently yields zero journeys.
+        assertTrue(
+            "stop times must stream to the index, not stay in memory",
+            feed!!.stopTimes.isEmpty(),
+        )
+        val reader = store.stopTimeReader(feedId)
+        assertNotNull("a stop-time index should exist on device", reader)
+        val source = object : com.intellitrip.routing.StopTimeSource {
+            override fun stopTimesFor(trip: com.intellitrip.domain.TripKey) =
+                reader!!.stopTimesFor(trip) { stopId ->
+                    com.intellitrip.domain.StopKey(feedId, stopId)
+                }
+
+            override fun tripsServing(stop: com.intellitrip.domain.StopKey) =
+                reader!!.tripsServing(stop)
+        }
+        val network = RoutingNetwork(
+            feedId = feed.feedId,
+            metadata = feed.metadata,
+            routes = feed.routes,
+            stops = feed.stops,
+            trips = feed.trips,
+            stopTimes = feed.stopTimes,
+            stopTimeSource = source,
+        )
+        val result = StaticNetworkPlanner(network).plan(
+            TripPlanRequest(
+                origin = planned.origin,
+                destination = planned.destination,
+                departAt = java.time.LocalDate.of(2026, 10, 5).atTime(7, 0)
+                    .toInstant(java.time.ZoneOffset.ofHours(-5)),
+                arriveBy = null,
+                maxTransfers = 0,
+            )
+        )
+        assertNotNull("a plan should be found between the two fixture stops", result)
+        val success = result as? com.intellitrip.contracts.ProviderResult.Success
+        assertNotNull("plan should succeed", success)
+        val journeys: List<com.intellitrip.domain.JourneyOption> = success!!.data
+        assertTrue("planner returned no journeys", journeys.isNotEmpty())
+
+        // 4. Choose a journey and confirm something is drawn on the map.
+        val withPlan = planned.copy(
+            journeys = journeys,
+            selectedJourneyId = journeys.first().id,
+            status = "${journeys.size} journeys planned",
+        )
+        assertNotNull("a journey should be drawn", withPlan.activeJourney())
+        assertEquals(journeys.first().id, withPlan.activeJourneyId())
+
+        // Geometry for the drawn journey must exist on device, or the route is
+        // invisible even though the plan succeeded.
+        val drawn = withPlan.activeJourney()!!
+        val transitLegs = drawn.legs.filterIsInstance<com.intellitrip.domain.Leg.Transit>()
+        assertTrue("expected at least one transit leg", transitLegs.isNotEmpty())
+        val legs = RouteGeometry.build(
+            journey = drawn,
+            shapes = feed.shapes,
+            stops = feed.stops,
+            trips = feed.trips,
+        )
+        assertTrue("drawn journey produced no map geometry on device", legs.isNotEmpty())
+        assertTrue(
+            "drawn journey geometry has no coordinates",
+            legs.any { it.coordinates.size >= 2 },
+        )
+
+        // 5. Change an endpoint: the previous plan must not survive.
+        val elsewhereDestination = com.intellitrip.domain.GeoPoint(44.90, -93.40)
+        val moved = withPlan.withEndpoints(destination = elsewhereDestination)
+        assertTrue("stale journeys survived an endpoint change on device", moved.journeys.isEmpty())
+        assertNull("a cleared plan must not keep a selection", moved.selectedJourneyId)
+        assertNull("a stale route would still be drawn", moved.activeJourneyId())
+        assertTrue("stale warnings survived an endpoint change", moved.journeyWarnings.isEmpty())
+        assertEquals(elsewhereDestination, moved.destination)
+        assertEquals(planned.origin, moved.origin)
     }
 }
 

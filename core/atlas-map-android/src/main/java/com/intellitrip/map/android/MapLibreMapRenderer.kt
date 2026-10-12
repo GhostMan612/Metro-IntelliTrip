@@ -42,6 +42,14 @@ class MapLibreMapRenderer(
     private var pendingStyle: BasemapStyle? = null
     private var pendingCamera: Triple<Double, Double, Double>? = null
 
+    /**
+     * Where this renderer last asked the camera to go, or null.
+     *
+     * While set, camera-move reports matching this destination are treated as the
+     * echo of our own request rather than as a rider gesture.
+     */
+    private var programmaticTarget: Triple<Double, Double, Double>? = null
+
     private var lastReportedLat = Double.NaN
     private var lastReportedLon = Double.NaN
     private var lastReportedZoom = Double.NaN
@@ -68,6 +76,14 @@ class MapLibreMapRenderer(
      * Reports camera changes so the host can derive scope from user gestures.
      * Panning counts, not just zooming: a user dragging the map expects the scope to
      * follow. Sub-degree jitter is filtered so settling gestures do not thrash state.
+     *
+     * Movement this renderer asked for is suppressed. Assigning `cameraPosition`
+     * fires the camera-move listener exactly like a gesture, so without this the app
+     * treats its own framing as a user pan, publishes a viewport, and the scope
+     * engine hands that viewport straight back as a new camera target. Skipping
+     * only the first automatic update was not enough, because any later programmatic
+     * move re-entered the same loop. Suppression is keyed on the destination
+     * instead, so it holds until the map actually arrives where it was told to go.
      */
     private fun reportCameraIfChanged() {
         val position = map?.cameraPosition ?: return
@@ -75,6 +91,22 @@ class MapLibreMapRenderer(
         val lat = target.latitude
         val lon = target.longitude
         val zoom = position.zoom
+
+        programmaticTarget?.let { (wantedLat, wantedLon, wantedZoom) ->
+            val arrived = kotlin.math.abs(lat - wantedLat) <= CAMERA_EPSILON_DEGREES &&
+                kotlin.math.abs(lon - wantedLon) <= CAMERA_EPSILON_DEGREES &&
+                kotlin.math.abs(zoom - wantedZoom) <= CAMERA_EPSILON_ZOOM
+            if (arrived) {
+                programmaticTarget = null
+                // Consume the update and adopt it as the baseline, so the delta
+                // filter below cannot fire for this same movement.
+                lastReportedLat = lat
+                lastReportedLon = lon
+                lastReportedZoom = zoom
+                return
+            }
+        }
+
         val moved = kotlin.math.abs(lat - lastReportedLat) > CAMERA_EPSILON_DEGREES ||
             kotlin.math.abs(lon - lastReportedLon) > CAMERA_EPSILON_DEGREES ||
             kotlin.math.abs(zoom - lastReportedZoom) > CAMERA_EPSILON_ZOOM
@@ -111,10 +143,24 @@ class MapLibreMapRenderer(
             pendingCamera = Triple(lat, lon, zoom)
             return
         }
+        // Recorded before the assignment: assigning cameraPosition can deliver the
+        // camera-move callback synchronously, and the echo must already be identifiable
+        // as ours.
+        programmaticTarget = Triple(lat, lon, zoom)
         target.cameraPosition = CameraPosition.Builder()
             .target(LatLng(lat, lon))
             .zoom(zoom)
             .build()
+    }
+
+    /**
+     * Drops any outstanding programmatic-move suppression.
+     *
+     * Call after a real gesture so a pending target cannot swallow the rider's own
+     * pan if it lands within the arrival epsilon of the last programmatic move.
+     */
+    fun clearProgrammaticCameraTarget() {
+        programmaticTarget = null
     }
 
     override fun applyBasemap(style: BasemapStyle) {

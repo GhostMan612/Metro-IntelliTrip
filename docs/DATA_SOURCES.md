@@ -33,6 +33,12 @@
 - IEM RADAR mapserver: https://mesonet.agron.iastate.edu/docs/radmapserver/?
 - RainViewer weather maps API: https://www.rainviewer.com/api/weather-maps-api.html
   - Status: PROVISIONAL / RESEARCH-GATED (terms, limits, suitability, licensing unconfirmed — see ADR-003). Viable for prototype/MVP adapter only, not an unquestioned production dependency.
+  - Only `radar.past` frames are published. `radar.nowcast` is a model forecast and is
+    dropped: beside observed frames it invites a rider to read predicted rain as rain
+    that has already fallen. A forecast would need its own provider, layer and wording.
+  - `host` and `path` are joined to form the tile template. RainViewer's `path`
+    already carries the complete `{z}/{x}/{y}/{color}/{options}` template, so no
+    further path segments are appended.
 
 ## Basemap / tiles
 - CARTO: https://www.carto.com/

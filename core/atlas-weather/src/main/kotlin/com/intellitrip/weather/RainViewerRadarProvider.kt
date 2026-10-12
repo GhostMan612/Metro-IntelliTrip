@@ -71,10 +71,15 @@ class RainViewerRadarProvider(
             val host = root["host"].asStringOrNull() ?: return null
             val generated = root["generated"].asLongOrNull()?.let(Instant::ofEpochSecond)
             val radar = root["radar"].asObject()
-            val frames = buildList {
-                addAll(parseFrames(host, radar["past"].asList(), RadarFrameKind.PAST))
-                addAll(parseFrames(host, radar["nowcast"].asList(), RadarFrameKind.NOWCAST))
-            }.sortedBy { it.timestamp }
+            // Only observed frames are published. RainViewer's `nowcast` entry is a
+            // model forecast, not measurement: labelling it alongside past frames
+            // invited riders to read predicted rain as rain that has already fallen.
+            // It is also the least stable part of the response, and an unusable or
+            // wrong-looking forecast is worse than no forecast. A forecast, if it is
+            // ever added, needs its own provider, its own layer, and wording that says
+            // it is a prediction.
+            val frames = parseFrames(host, radar["past"].asList(), RadarFrameKind.PAST)
+                .sortedBy { it.timestamp }
             return RadarIndex(generated, frames)
         }
 
@@ -89,10 +94,23 @@ class RainViewerRadarProvider(
             RadarFrame(
                 providerId = "rainviewer",
                 timestamp = Instant.ofEpochSecond(time),
-                tileUrlTemplate = "$host$path/{z}/{x}/{y}/{color}/{options}.png",
+                tileUrlTemplate = tileUrl(host, path),
                 attribution = ATTRIBUTION,
                 kind = kind,
             )
         }
+
+        /**
+         * Builds the raster tile URL template.
+         *
+         * RainViewer's `path` already carries the complete template, ending in the
+         * `{z}/{x}/{y}/{color}/{options}.png` placeholders. Appending a second copy of
+         * those segments, as an earlier revision did, produced a URL whose only tile
+         * request was the one the server cannot answer, so the radar layer loaded and
+         * stayed empty. The template is therefore the host joined to the path, with
+         * exactly one separator.
+         */
+        private fun tileUrl(host: String, path: String): String =
+            host.trimEnd('/') + "/" + path.trimStart('/')
     }
 }

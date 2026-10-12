@@ -41,13 +41,66 @@ class WeatherProvidersTest {
         WeatherRequestContext(providerId, userAgent, Clock.fixed(now, ZoneOffset.UTC))
 
     @Test
-    fun radarIndexParsesPastAndNowcastFrames() {
+    fun radarIndexPublishesObservedFramesOnly() {
         val index = RainViewerRadarProvider.parseIndex(radarPayload)
         assertNotNull(index)
-        assertEquals(2, index.frames.size)
+        // The nowcast entry in the payload is a forecast and is deliberately dropped:
+        // publishing it beside observed frames invites a rider to read predicted rain
+        // as rain that has already fallen.
+        assertEquals(1, index.frames.size)
         assertEquals(RadarFrameKind.PAST, index.frames.first().kind)
-        assertEquals(RadarFrameKind.NOWCAST, index.frames.last().kind)
-        assertTrue(index.frames.first().tileUrlTemplate.startsWith("https://tilecache.rainviewer.com/v2/radar/"))
+    }
+
+    @Test
+    fun radarTileTemplateIsHostJoinedToPath() {
+        val index = RainViewerRadarProvider.parseIndex(radarPayload)
+        assertNotNull(index)
+        val template = index.frames.first().tileUrlTemplate
+        // RainViewer's `path` is already the complete template. The earlier code
+        // appended a second `{z}/{x}/{y}/{color}/{options}.png`, so the layer loaded
+        // and every tile request 404'd.
+        assertEquals("https://tilecache.rainviewer.com/v2/radar/bfc337acb8b4", template)
+        // The fixture path is a bare id; real paths carry the placeholders. What matters
+        // is that nothing was appended after it.
+        assertEquals("bfc337acb8b4", template.substringAfterLast('/'))
+    }
+
+    @Test
+    fun radarTileTemplateKeepsAPathSuppliedPlaceholderRun() {
+        val payload = """
+            {"version":"2.0","generated":1791557423,"host":"https://tilecache.rainviewer.com",
+             "radar":{"past":[{"time":1791556800,
+               "path":"/v2/radar/bfc337acb8b4/256/{z}/{x}/{y}/2/1_1.png"}]},
+             "satellite":{"infrared":[]}}
+        """.trimIndent()
+        val index = RainViewerRadarProvider.parseIndex(payload)
+        assertNotNull(index)
+        val template = index.frames.first().tileUrlTemplate
+        assertEquals(
+            "https://tilecache.rainviewer.com/v2/radar/bfc337acb8b4/256/{z}/{x}/{y}/2/1_1.png",
+            template,
+        )
+        // Exactly one placeholder run, not the path's run plus an appended one.
+        assertEquals(1, Regex("\\{z\\}").findAll(template).count())
+        assertEquals(1, Regex("\\{x\\}").findAll(template).count())
+        assertEquals(1, Regex("\\{y\\}").findAll(template).count())
+    }
+
+    @Test
+    fun radarTileTemplateNormalizesTheHostSeparator() {
+        // A host with a trailing slash and a path with a leading slash must still
+        // produce exactly one separator.
+        val payload = """
+            {"version":"2.0","generated":1791557423,"host":"https://tilecache.rainviewer.com/",
+             "radar":{"past":[{"time":1791556800,"path":"/v2/radar/abc"}]},
+             "satellite":{"infrared":[]}}
+        """.trimIndent()
+        val index = RainViewerRadarProvider.parseIndex(payload)
+        assertNotNull(index)
+        assertEquals(
+            "https://tilecache.rainviewer.com/v2/radar/abc",
+            index.frames.first().tileUrlTemplate,
+        )
     }
 
     @Test
@@ -65,7 +118,10 @@ class WeatherProvidersTest {
             val result = provider.latestFrame()
             assertIs<com.intellitrip.contracts.ProviderResult.Success<RadarFrameAlias>>(result)
             assertEquals(now, result.freshness.fetchedAt)
-            assertEquals(RadarFrameKind.NOWCAST, result.data.kind)
+            // Observed frames only. The payload's nowcast entry is a forecast and is
+            // deliberately not published, so the latest frame is the past frame.
+            assertEquals(RadarFrameKind.PAST, result.data.kind)
+            assertEquals(Instant.ofEpochSecond(1791556800), result.data.timestamp)
         }
     }
 
@@ -78,7 +134,10 @@ class WeatherProvidersTest {
             )
             val result = provider.frames(Instant.ofEpochSecond(1791557400))
             assertIs<com.intellitrip.contracts.ProviderResult.Success<List<com.intellitrip.domain.RadarFrame>>>(result)
-            assertEquals(1, result.data.size)
+            // The payload holds one past frame at 1791556800 and one nowcast frame at
+            // 1791558000. Both precede the requested "since", and the nowcast frame is
+            // dropped as a forecast regardless, so nothing qualifies.
+            assertEquals(0, result.data.size)
         }
     }
 

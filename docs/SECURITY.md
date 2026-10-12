@@ -10,6 +10,13 @@
 - Location is used on-device for map centering/scope unless user explicitly chooses otherwise.
 - Do not upload raw location traces by default.
 - Advanced features requiring shared location must be opt-in.
+- Permission is requested only from an explicit "locate me" tap, never at startup.
+- Freshness and precision are decided separately. Only a stale fix is refused for camera
+  movement; a fresh but coarse fix still centers the map, because refusing to honor a
+  rider who granted only approximate location reads as a broken locate button. Precision
+  governs the wording ("Location +/-12 m" vs "Approximate location, +/-2 km") and the size
+  of the accuracy halo, never whether the map moves.
+- A stale fix is still shown, labelled as last known with its age, rather than dropped.
 
 ## Transport
 - HTTPS only for provider traffic.

@@ -36,9 +36,28 @@ class StaticFeedRefresher(
     /** Blocking refresh for hosts that already run on a background thread. */
     fun refreshBlocking(): RefreshOutcome {
         val active = store.activeSnapshot(feedId)
-        val acquisition = acquirer.acquire(feedId, sourceUrl)
+        // Without this the acquirer is asked for the whole archive every time, which
+        // for a real feed is tens of megabytes on every launch. The publisher decides
+        // whether that is necessary: a 304 arrives when the validators still match.
+        val validators = store.validators(feedId)
+        val acquisition = if (validators.usable) {
+            acquirer.acquire(
+                feedId = feedId,
+                url = sourceUrl,
+                currentEtag = validators.etag,
+                currentLastModified = validators.lastModified,
+            )
+        } else {
+            acquirer.acquire(feedId, sourceUrl)
+        }
         return when (acquisition) {
-            is GtfsFeedAcquirer.AcquisitionResult.NotModified -> RefreshOutcome.NotModified(feedId)
+            is GtfsFeedAcquirer.AcquisitionResult.NotModified -> {
+                // A 304 may rotate the validators, so refresh them before returning.
+                val refreshed = FeedValidators(acquisition.etag, acquisition.lastModified)
+                if (refreshed.usable) store.recordValidators(feedId, refreshed)
+                RefreshOutcome.NotModified(feedId)
+            }
+
             is GtfsFeedAcquirer.AcquisitionResult.Failure -> RefreshOutcome.Rejected(feedId, acquisition.message)
             is GtfsFeedAcquirer.AcquisitionResult.Updated -> {
                 val metadata = FeedMetadata(
@@ -58,13 +77,20 @@ class StaticFeedRefresher(
                     // Stop times dominate the feed's memory profile, so they are
                     // streamed into a disk-backed index instead of being retained.
                     val stopTimeSink = store.newStopTimeSink()
-                    val parsed = GtfsStaticParser.parse(feedId, files, metadata, stopTimeSink)
-                    stopTimeSink.close()
+                    val parsed = try {
+                        GtfsStaticParser.parse(feedId, files, metadata, stopTimeSink)
+                    } finally {
+                        stopTimeSink.close()
+                    }
                     parsed
                 } catch (e: Exception) {
                     return RefreshOutcome.Rejected(feedId, e.message ?: "Validation failed")
                 }
+                // Only now that parsing succeeded is the snapshot activated. Recording
+                // the new validators before this point would let a rejected payload
+                // suppress the retry that would have replaced it.
                 store.activate(feedId, acquisition.payload, metadata)
+                store.recordValidators(feedId, FeedValidators(acquisition.etag, acquisition.lastModified))
                 RefreshOutcome.Activated(feed)
             }
         }

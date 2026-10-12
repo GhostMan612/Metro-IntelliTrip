@@ -68,7 +68,12 @@ object GeoJsonWriter {
             append(""""geometry":{"type":"Point","coordinates":[""")
             append(location.position.lon).append(',').append(location.position.lat)
             append("""],"properties":{"accuracy":""").append(location.accuracyMeters)
-            append(""","fresh":""").append(location.isPrecise()).append("}}}]}")
+            append(""","fresh":""").append(location.isFresh())
+            // Emitted separately from "fresh": the renderer uses high accuracy to size
+            // the halo and soften the "you are here" claim, not to decide whether the
+            // point is shown at all.
+            append(""","precise":""").append(location.isHighAccuracy())
+            append("}}}]}")
         }
     }
 
