@@ -286,6 +286,65 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     private val selectedJourney: JourneyOption?
         get() = _state.value.activeJourney()
 
+    /**
+     * Builds the Explore departure board from the schedule actually stored on device.
+ *
+     * Reads stop times through the disk index rather than from memory: the feed's
+     * stop_times table is the largest part of the archive and is deliberately not
+     * retained. Returns an empty list when there is no feed or no index yet, which
+     * the UI presents as "download schedules" rather than as a blank list.
+     *
+     * Only trips with a current vehicle report are marked live. Everything else keeps
+     * its scheduled time and is labelled "Schedule", because an estimated arrival with
+     * no data behind it is worse than admitting the time comes from the timetable.
+     */
+    fun nearbyDepartures(now: Instant = Instant.now()): List<com.intellitrip.ui.Departure> {
+        val current = _state.value
+        val feed = current.staticFeed ?: return emptyList()
+        val reader = host.snapshotStore.stopTimeReader(host.feedId) ?: return emptyList()
+
+        val origin = current.userLocation?.position
+        val liveTrips = current.vehicles
+            .filter { it.tripKey != null && isLiveVehicle(it, now) }
+            .mapNotNull { it.tripKey?.tripId }
+            .toSet()
+        val routesByKey = feed.routes.associate { it.key.routeId to it }
+        val tripsByKey = feed.trips.associate { it.key.tripId to it }
+
+        val stopsToScan = origin?.let { point ->
+            feed.stops
+                .filter { com.intellitrip.ui.DepartureBoard.metersBetween(point, it.location) <= NEARBY_RADIUS_METERS }
+                .sortedBy { com.intellitrip.ui.DepartureBoard.metersBetween(point, it.location) }
+                .take(NEARBY_STOP_SCAN_LIMIT)
+        } ?: feed.stops.take(NEARBY_STOP_SCAN_LIMIT)
+
+        return reader.use { index ->
+            com.intellitrip.ui.DepartureBoard.build(
+                now = now,
+                origin = origin,
+                stops = stopsToScan,
+                radiusMeters = NEARBY_RADIUS_METERS,
+                departuresFor = { stop ->
+                    index.tripsServing(stop.key).flatMap { tripKey ->
+                        index.stopTimesFor(tripKey) { stopId -> com.intellitrip.domain.StopKey(feed.feedId, stopId) }
+                    }.map { stopTime ->
+                        val scheduled = stopTime.departureTime ?: stopTime.arrivalTime
+                        com.intellitrip.ui.DepartureBoard.ScheduledDeparture(
+                            tripId = stopTime.tripKey.tripId,
+                            departure = scheduled?.let {
+                                com.intellitrip.ui.DepartureBoard.resolveServiceTime(it, now)
+                            } ?: now,
+                        )
+                    }.sortedBy { it.departure }
+                },
+                liveTrips = liveTrips,
+                routesByKey = routesByKey,
+                tripsByKey = tripsByKey,
+            )
+        }
+    }
+
+
     /** Re-frames the map on the default view, after a gesture moved it elsewhere. */
     fun recenter(point: GeoPoint) {
         setScope("System", Focus.Radius(point, 3_218.0))
@@ -386,6 +445,15 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         _state.value = block(_state.value)
     }
 
+    /** Whether a vehicle report is recent enough to represent a live service. */
+    private fun isLiveVehicle(
+        vehicle: com.intellitrip.domain.Vehicle,
+        now: Instant,
+    ): Boolean {
+        val age = java.time.Duration.between(vehicle.updatedAt, now).seconds
+        return age in 0..LIVE_VEHICLE_MAX_AGE_SECONDS
+    }
+
     private fun describe(result: ProviderResult<*>): String = when (result) {
         is ProviderResult.NetworkFailure -> "${result.error.message} [${result.error.cause?.javaClass?.simpleName}]"
         is ProviderResult.MalformedResponse -> "${result.error.message} [${result.error.cause?.javaClass?.simpleName}]"
@@ -397,6 +465,27 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     }
 
     companion object {
+        /** Roughly a ten-minute walk; enough stops to be useful, few enough to stay cheap. */
+        private const val NEARBY_RADIUS_METERS = 1_000.0
+
+        /**
+         * Caps how many stops are opened for schedule lookups.
+         *
+         * Each scanned stop means a disk read per trip serving it, so this is the
+         * difference between a board that appears instantly and one that blocks the
+         * main thread on a large feed.
+         */
+        private const val NEARBY_STOP_SCAN_LIMIT = 12
+
+        /**
+         * How recent a vehicle report must be before it is called live.
+         *
+         * Older than this the position is shown as a stale marker rather than counted
+         * as a prediction, so a departure is never upgraded to "Live" on the strength
+         * of a report from several minutes ago.
+         */
+        private const val LIVE_VEHICLE_MAX_AGE_SECONDS = 120L
+
         /** Metres of latitude spanned by one degree at the equator. */
         private const val METERS_PER_LAT_DEGREE = 111_320.0
 

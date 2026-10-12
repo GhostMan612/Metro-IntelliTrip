@@ -26,12 +26,24 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     compileOptions {
+        // Core library desugaring, enabled deliberately rather than to fix one
+        // occurrence. `java.time` is available from API 26, but the wider `java.time`
+        // surface is not: `LocalDate.ofInstant`, for instance, needs API 34 and throws
+        // NoSuchMethodError at runtime on an older device. Two such bugs already
+        // shipped this way — `Files.readString` in the GTFS and basemap stores, caught
+        // only by the instrumented suite — and lint surfaces them one at a time, which
+        // is the worst possible time to find out.
+        //
+        // Desugaring makes the JDK API surface available back to minSdk, so the whole
+        // class of defect stops existing rather than being rediscovered per call site.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")

@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.TravelExplore
@@ -96,6 +97,9 @@ fun MapChrome(
     onSwapEndpoints: () -> Unit,
     onPlan: () -> Unit,
     onSelectJourney: (String) -> Unit,
+    onToggleDepartures: () -> Unit,
+    /** Extra top offset for the scope chip, so it clears the search entry on Explore. */
+    scopeChipInset: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
     var sheet by remember { mutableStateOf(Sheet.None) }
 
@@ -123,6 +127,12 @@ fun MapChrome(
                 modifier = Modifier.size(44.dp),
             ) { Icon(Icons.Default.Layers, contentDescription = "Data and layers") }
             FloatingActionButton(
+                onClick = onToggleDepartures,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(44.dp),
+            ) { Icon(Icons.Default.DirectionsBus, contentDescription = "Nearby departures") }
+            FloatingActionButton(
                 onClick = onLocateMe,
                 // Tinted when a fix is active, so the button reports state instead
                 // of just being a control you have already pressed.
@@ -144,7 +154,7 @@ fun MapChrome(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .statusBarsPadding()
-                .padding(12.dp)
+                .padding(top = 12.dp + scopeChipInset)
                 .clickable { sheet = if (sheet == Sheet.Scope) Sheet.None else Sheet.Scope },
             shape = RoundedCornerShape(10.dp),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
@@ -191,9 +201,28 @@ fun MapChrome(
     }
 }
 
+/**
+ * Rider-facing description of what the map is currently showing.
+ *
+ * Section 6.3 asks for the consumer surface to stop exposing engine vocabulary. The
+ * raw scope name and zoom bucket ("System", "Cluster", "VehicleBudget") describe the
+ * pipeline, not the map, so they are translated here. The engine values remain
+ * available under More for anyone diagnosing the pipeline.
+ */
 private fun scopeSummary(state: AppState): String {
-    val bucket = state.scope.renderScope.zoomBucket.name.lowercase().replaceFirstChar { it.uppercase() }
-    return "${state.scopeLabel} · $bucket"
+    val bucket = state.scope.renderScope.zoomBucket.name.lowercase()
+    val area = when {
+        state.scopeLabel.contains("You", ignoreCase = true) -> "Near you"
+        state.scopeLabel.contains("Viewport", ignoreCase = true) -> "Map area"
+        else -> "Citywide"
+    }
+    val detail = when {
+        bucket.contains("neighborhood", true) -> "neighborhood detail"
+        bucket.contains("street", true) -> "street level"
+        bucket.contains("metro", true) -> "metro area"
+        else -> "regional view"
+    }
+    return "$area, $detail"
 }
 
 /** Dims the map behind a sheet so the sheet reads as the foreground surface. */
