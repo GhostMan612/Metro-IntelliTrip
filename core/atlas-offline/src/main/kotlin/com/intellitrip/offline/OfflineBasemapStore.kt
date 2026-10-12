@@ -98,7 +98,7 @@ class OfflineBasemapStore(
             Files.createDirectories(root)
             val destination = root.resolve(storageName)
             Files.copy(stagedTiles, destination, StandardCopyOption.REPLACE_EXISTING)
-            Files.writeString(root.resolve(storageName + STYLE_SUFFIX), styleJson)
+            Files.write(root.resolve(storageName + STYLE_SUFFIX), styleJson.toByteArray(Charsets.UTF_8))
             val pkg = BasemapPackage(
                 id = id,
                 displayName = displayName,
@@ -156,6 +156,16 @@ class OfflineBasemapStore(
     private fun encode(value: String): String =
         Base64.getEncoder().encodeToString(value.toByteArray(Charsets.UTF_8))
 
+    /**
+     * Reads a UTF-8 file using only APIs available on Android.
+     *
+     * `Files.readString` is a Java 11 addition that Android does not provide on
+     * API 34, so it compiles against the JDK and then throws `NoSuchMethodError`
+     * at runtime. `readAllBytes` is original Java 7 API and is safe here.
+     */
+    private fun readText(path: Path): String =
+        String(Files.readAllBytes(path), Charsets.UTF_8)
+
     private fun decode(value: String): String =
         String(Base64.getDecoder().decode(value), Charsets.UTF_8)
 
@@ -191,7 +201,7 @@ class OfflineBasemapStore(
     fun styleFor(pkg: BasemapPackage): String? {
         val stylePath = pkg.tilePath.fileName?.toString()?.let { root.resolve(it + STYLE_SUFFIX) }
             ?: return null
-        return runCatching { Files.readString(stylePath) }.getOrNull()
+        return runCatching { readText(stylePath) }.getOrNull()
     }
 
     /** Exposes the store root to security tests without widening the public API. */

@@ -43,7 +43,7 @@ class StaticFeedSnapshotStore(private val root: Path) {
     fun activeSnapshot(feedId: FeedId): Snapshot? {
         val pointer = feedDir(feedId).resolve(POINTER_FILE)
         if (!Files.exists(pointer)) return null
-        val name = Files.readString(pointer).trim()
+        val name = readText(pointer).trim()
         val dir = feedDir(feedId).resolve(SNAPSHOTS_DIR).resolve(name)
         val metaFile = dir.resolve(METADATA_FILE)
         if (!Files.exists(metaFile)) return null
@@ -54,7 +54,7 @@ class StaticFeedSnapshotStore(private val root: Path) {
         }
         return Snapshot(
             metadata = FeedMetadata(
-                feedId = FeedId(Files.readString(dir.resolve(FEED_ID_FILE)).trim()),
+                feedId = FeedId(readText(dir.resolve(FEED_ID_FILE)).trim()),
                 publisherName = null,
                 publisherUrl = null,
                 lang = null,
@@ -106,6 +106,18 @@ class StaticFeedSnapshotStore(private val root: Path) {
     }
 
     private fun feedDir(feedId: FeedId): Path = root.resolve(feedId.value)
+
+    /**
+     * Reads a UTF-8 file using only APIs available on Android.
+     *
+     * `Files.readString` is a Java 11 addition. Android ships `java.nio.file` from
+     * API 26 but does not provide `readString`/`writeString` on API 34, so calling
+     * it compiles against the JDK and then throws `NoSuchMethodError` on device.
+     * `readAllBytes` is part of the original Java 7 API and is safe everywhere this
+     * module runs.
+     */
+    private fun readText(path: Path): String =
+        String(Files.readAllBytes(path), Charsets.UTF_8)
 
     companion object {
         private const val PAYLOAD_FILE = "gtfs.zip"
