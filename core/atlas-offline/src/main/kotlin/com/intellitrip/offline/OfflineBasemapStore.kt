@@ -5,6 +5,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.util.Base64
 
 /**
  * An installed offline basemap package.
@@ -136,9 +137,13 @@ class OfflineBasemapStore(
         Files.write(
             manifest,
             entries.map {
+                // Free-text fields are Base64 encoded. A delimiter-separated format
+                // cannot carry arbitrary text safely: a display name containing the
+                // separator would split into extra fields and the whole record would
+                // be lost on reload. Encoding removes the delimiter from the alphabet.
                 listOf(
-                    it.id,
-                    it.displayName,
+                    encode(it.id),
+                    encode(it.displayName),
                     it.tilePath.fileName.toString(),
                     it.sizeBytes.toString(),
                     it.minZoom.toString(),
@@ -147,6 +152,12 @@ class OfflineBasemapStore(
             },
         )
     }
+
+    private fun encode(value: String): String =
+        Base64.getEncoder().encodeToString(value.toByteArray(Charsets.UTF_8))
+
+    private fun decode(value: String): String =
+        String(Base64.getDecoder().decode(value), Charsets.UTF_8)
 
     private fun parseManifestLine(line: String): BasemapPackage? {
         if (line.isBlank()) return null
@@ -159,8 +170,8 @@ class OfflineBasemapStore(
             val resolved = root.resolve(parts[2]).normalize()
             require(resolved.startsWith(root.normalize())) { "manifest entry escapes the store root" }
             BasemapPackage(
-                id = parts[0],
-                displayName = parts[1],
+                id = decode(parts[0]),
+                displayName = decode(parts[1]),
                 tilePath = resolved,
                 sizeBytes = parts[3].toLong(),
                 minZoom = parts[4].toInt(),
@@ -208,7 +219,19 @@ class OfflineBasemapStore(
 
 private companion object {
         const val MANIFEST = "basemap-manifest.txt"
-        const val FIELD_SEPARATOR = ""
+
+        /**
+         * ASCII unit separator (U+001F), built from its code point rather than
+         * written as a literal control character.
+         *
+         * A literal `"\u001F"` was silently destroyed by a text-rewrite pass, which
+         * left the separator empty: `joinToString("")` concatenated every field and
+         * `split("")` could not recover them, so no installed package could be read
+         * back. Deriving it from the code point cannot be emptied by an editor, and
+         * states the intent plainly in review.
+         */
+        val FIELD_SEPARATOR: String = 0x1F.toChar().toString()
+
         const val STYLE_SUFFIX = ".style.json"
         const val STYLE_PLACEHOLDER = ""
 

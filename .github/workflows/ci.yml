@@ -26,10 +26,10 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # `bash ./gradlew` rather than `./gradlew`. The wrapper's executable bit is
+# `bash ./gradlew` rather than `./gradlew`. The wrapper's executable bit is
       # recorded as 100755 in git, but a checkout that loses it (or a runner that
       # does not honor it) fails with exit 126 "Permission denied" before Gradle
-      # starts — which silently skips every later step. Invoking bash explicitly
+      # starts, which silently skips every later step. Invoking bash explicitly
       # makes the workflow independent of file mode.
       - name: Unit tests
         run: bash ./gradlew test --console=plain

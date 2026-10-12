@@ -73,7 +73,7 @@ internal object Json {
                         't' -> builder.append('\t')
                         'r' -> builder.append('\r')
                         'b' -> builder.append('\b')
-                        'f' -> builder.append('')
+                        'f' -> builder.append('\u000C')
                         'u' -> {
                             val hex = text.substring(index, index + 4)
                             index += 4
