@@ -48,7 +48,7 @@ val REALTIME_URLS = PollingGtfsRealtimeClient.RealtimeFeedUrls(
  * Every provider is constructed here and injected into the engine, so the app
  * adds no domain logic of its own and could swap any adapter in one place.
  */
-class AtlasHost(context: Context) {
+class AtlasHost(private val context: Context) {
 
     val feedId: FeedId = FeedId(FEED_ID)
 
@@ -64,6 +64,33 @@ class AtlasHost(context: Context) {
     val location: LocationProvider = AndroidLocationProvider(context)
 
     val snapshotStore = StaticFeedSnapshotStore(context.filesDir.toPath())
+
+    /**
+     * Private on-device storage for rider-owned data.
+     *
+     * Distinct from the GTFS snapshot root so a feed refresh, which prunes superseded
+     * snapshots, can never delete something the rider saved.
+     */
+    fun filesRoot(): java.nio.file.Path = context.filesDir.toPath().resolve("rider")
+
+    /**
+     * The live renderer, once one exists.
+     *
+     * Null before the map finishes constructing. Hit testing needs the real renderer
+     * because it queries rendered features; routing the tap through the host rather
+     * than the composable keeps the MapCanvas from having to publish the renderer as
+     * mutable state that can be observed mid-frame.
+     */
+    @Volatile
+    var rendererRef: (() -> com.intellitrip.map.android.MapLibreMapRenderer?)? = null
+        private set
+
+    /** Registers the renderer once created and returns it to later callers. */
+    fun attachRenderer(renderer: com.intellitrip.map.android.MapLibreMapRenderer?) {
+        rendererRef = { renderer }
+    }
+
+    fun currentRenderer(): com.intellitrip.map.android.MapLibreMapRenderer? = rendererRef?.invoke()
     val offlineRegistry = OfflineRegistry(snapshotStore)
     val scopeEngine = ScopeEngine()
     val pipeline = TransitRenderPipeline()

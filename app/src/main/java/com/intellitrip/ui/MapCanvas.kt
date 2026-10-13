@@ -42,6 +42,11 @@ fun MapCanvas(
     pipeline: com.intellitrip.map.TransitRenderPipeline,
     routeGeometry: List<RouteLine> = emptyList(),
     onViewportChanged: (lat: Double, lon: Double, zoom: Double) -> Unit = { _, _, _ -> },
+    /** Reports what was tapped, resolved against the rendered features. */
+    onMapTap: (lat: Double, lon: Double) -> com.intellitrip.map.MapSelection =
+        { _, _ -> com.intellitrip.map.MapSelection.None },
+    /** Publishes the renderer so the host can hit-test against it. */
+    onRendererCreated: (MapLibreMapRenderer?) -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var renderer by remember { mutableStateOf<MapLibreMapRenderer?>(null) }
@@ -65,6 +70,7 @@ fun MapCanvas(
             mapView = mapView,
             onReady = { ready = true },
             onCameraMoved = onViewportChanged,
+            onMapTapped = { lat, lon -> onMapTap(lat, lon) },
         ).also { created ->
             created.applyBasemap(CartoBasemapProvider.style())
             created.moveCamera(
@@ -78,6 +84,11 @@ fun MapCanvas(
     AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
 
     LaunchedEffect(rendererCreated) { renderer = rendererCreated }
+
+    DisposableEffect(rendererCreated) {
+        onRendererCreated(rendererCreated)
+        onDispose { onRendererCreated(null) }
+    }
 
     /**
      * MapLibre's MapView owns GL resources and must see the same activity lifecycle the
@@ -214,8 +225,18 @@ fun MapCanvas(
                 is WeatherLayer.AlertMarkers -> Unit
             }
         }
-        if (composed.layers.isEmpty() && (state.radarEnabled || state.weatherAlerts.isNotEmpty())) {
+        /**
+         * Reconciles weather layers against the composed state.
+         *
+         * Clearing is keyed on the composed layers being empty and nothing else. The
+         * previous guard also required a radar or alert toggle to be on, which meant
+         * switching radar *off* skipped the clear entirely and the last frame stayed on
+         * the map. A toggle turning something off makes the composed set empty, so
+         * emptiness alone is the correct signal to remove layers.
+         */
+        if (composed.layers.isEmpty()) {
             active.clearWeatherLayers()
+            return@LaunchedEffect
         }
     }
 }

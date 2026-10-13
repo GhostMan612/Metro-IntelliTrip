@@ -18,6 +18,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }
+
+    // Shrinking is on only for release. The rules live in proguard-rules.pro and are
+    // deliberately conservative: the Atlas modules use no reflection, so every entry
+    // there exists for MapLibre's native layer, Hilt's generated code or Retrofit's
+    // generic signatures.
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            // No signing config is wired yet. A release build is produced unsigned on
+            // purpose: signing keys are handled separately and a debug-signed artifact
+            // must never be mistaken for a release one.
+        }
+    }
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }

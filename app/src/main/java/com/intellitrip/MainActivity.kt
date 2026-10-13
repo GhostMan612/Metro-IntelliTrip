@@ -6,14 +6,22 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,11 +36,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.intellitrip.ui.Destination
 import com.intellitrip.ui.MapCanvas
 import com.intellitrip.ui.MapChrome
+import com.intellitrip.ui.MapFeatureSheet
 import com.intellitrip.ui.NearbyDeparturesSheet
 import com.intellitrip.ui.RiderNavigationBar
 import com.intellitrip.ui.RiderNavigationRail
 import com.intellitrip.ui.theme.IntelliTripTheme
 import com.intellitrip.ui.theme.Space
+import java.time.Instant
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,6 +86,7 @@ private fun IntelliTripContent(host: AtlasHost, model: IntelliTripViewModel) {
     val state by model.state.collectAsStateWithLifecycle()
     var destination by rememberSaveable { mutableStateOf(Destination.Explore) }
     var departuresOpen by rememberSaveable { mutableStateOf(false) }
+    var advancedSheet by remember { mutableStateOf<com.intellitrip.ui.Sheet?>(null) }
 
     // Location permission is requested only when the user taps the locate button.
     // Nothing here runs at startup, so the app never asks before it has been used.
@@ -110,9 +121,13 @@ private fun IntelliTripContent(host: AtlasHost, model: IntelliTripViewModel) {
                     model = model,
                     state = state,
                     destination = destination,
+                    advancedSheet = advancedSheet,
+                    onAdvancedSheetConsumed = { advancedSheet = null },
                     departuresOpen = departuresOpen,
                     onDeparturesOpenChange = { departuresOpen = it },
                     onPlanRequested = { destination = Destination.Plan },
+                    onOpenAdvancedSheet = { sheet -> advancedSheet = sheet; destination = Destination.Explore },
+                    onCloseToExplore = { destination = Destination.Explore },
                     requestLocation = requestLocation,
                     permissionGranted = permissionGranted,
                 )
@@ -133,9 +148,13 @@ private fun IntelliTripContent(host: AtlasHost, model: IntelliTripViewModel) {
                         model = model,
                         state = state,
                         destination = destination,
+                        advancedSheet = advancedSheet,
+                        onAdvancedSheetConsumed = { advancedSheet = null },
                         departuresOpen = departuresOpen,
                         onDeparturesOpenChange = { departuresOpen = it },
                         onPlanRequested = { destination = Destination.Plan },
+                        onOpenAdvancedSheet = { sheet -> advancedSheet = sheet; destination = Destination.Explore },
+                        onCloseToExplore = { destination = Destination.Explore },
                         requestLocation = requestLocation,
                         permissionGranted = permissionGranted,
                     )
@@ -158,19 +177,44 @@ private fun MapPane(
     model: IntelliTripViewModel,
     state: AppState,
     destination: Destination,
+    advancedSheet: com.intellitrip.ui.Sheet?,
+    onAdvancedSheetConsumed: () -> Unit,
     departuresOpen: Boolean,
     onDeparturesOpenChange: (Boolean) -> Unit,
     onPlanRequested: () -> Unit,
+    onOpenAdvancedSheet: (com.intellitrip.ui.Sheet) -> Unit,
+    onCloseToExplore: () -> Unit,
     requestLocation: () -> Unit,
     permissionGranted: Boolean,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
+        // A sheet requested from More is consumed on arrival, so returning to Explore
+        // shows the requested sheet once instead of reopening it forever.
+        LaunchedEffect(advancedSheet) {
+            if (advancedSheet != null) onAdvancedSheetConsumed()
+        }
+
         MapCanvas(
             state = state,
             throttle = host.throttle,
             pipeline = host.pipeline,
             routeGeometry = model.routeGeometry(),
             onViewportChanged = model::onViewportChanged,
+            // A tap is resolved against what is actually drawn, so tapping the drawn
+            // route selects that route rather than whatever shares its pixels.
+            onMapTap = { lat, lon ->
+                val renderer = host.currentRenderer()
+                    ?: return@MapCanvas com.intellitrip.map.MapSelection.None
+                val queried = renderer.queryFeatures(lat, lon)
+                val features = queried.mapNotNull { hit ->
+                    val kind = layerKindOf(hit.layerId) ?: return@mapNotNull null
+                    com.intellitrip.map.MapSelectionResolver.resolve(hit.values, kind)
+                }
+                val selection = com.intellitrip.map.MapSelectionResolver.collapse(features)
+                model.selectFeature(selection)
+                selection
+            },
+            onRendererCreated = host::attachRenderer,
         )
 
         // One dominant entry action, above the map, per the wireframe in section 5.2.
@@ -202,6 +246,12 @@ private fun MapPane(
             onToggleDepartures = { onDeparturesOpenChange(!departuresOpen) },
             // Clears the Explore search entry so the two top surfaces do not overlap.
             scopeChipInset = if (destination == Destination.Explore && !departuresOpen) 72.dp else 0.dp,
+            // Choosing Plan in the navigator opens the planner; choosing More offers the
+            // advanced sheets. Without this those tabs would look selected and do nothing.
+            requestedSheet = advancedSheet ?: when (destination) {
+                Destination.Plan -> com.intellitrip.ui.Sheet.Plan
+                else -> null
+            },
         )
 
         if (departuresOpen) {
@@ -214,6 +264,123 @@ private fun MapPane(
                 onSelectDeparture = { },
             )
         }
+
+        val selection = state.mapSelection
+        if (selection !is com.intellitrip.map.MapSelection.None) {
+            MapFeatureSheet(
+                selection = selection,
+                stops = state.staticFeed?.stops?.associateBy { it.key.stopId } ?: emptyMap(),
+                vehicles = state.vehicles.associateBy { it.key.vehicleId },
+                journeys = state.journeys,
+                departures = model.nearbyDepartures(),
+                now = Instant.now(),
+                onDismiss = model::clearSelection,
+                onSaveStop = model::toggleSavedStop,
+                onSelectJourney = model::selectJourney,
+                onExpandCluster = { },
+            )
+        }
+
+        // Non-map destinations replace the map rather than covering it, so Saved and
+        // More are full-height surfaces a rider can scroll.
+        if (destination == Destination.Saved) {
+            SavedScreenSurface(
+                saved = state.savedStops,
+                onOpenStop = { model.openSavedStop(it); onCloseToExplore() },
+                onRemoveStop = { id ->
+                    model.savedStopById(id)?.let(model::toggleSavedStop)
+                },
+                onCloseToExplore = onCloseToExplore,
+            )
+        }
+
+        if (destination == Destination.More) {
+            MoreScreenSurface(
+                state = state,
+                onToggleRadar = model::toggleRadar,
+                onToggleAutoRefresh = model::toggleAutoRefresh,
+                onLoadAlerts = model::loadWeatherAlerts,
+                onLoadStatic = model::loadStaticNetwork,
+                onLocateMe = requestLocation,
+                onOpenAdvancedSheet = onOpenAdvancedSheet,
+                onCloseToExplore = onCloseToExplore,
+            )
+        }
+    }
+}
+
+/**
+ * Maps a MapLibre layer id to the feature kind the selection rules understand.
+ *
+ * Kept as a total function with an explicit unknown branch: an unmapped layer id
+ * yields null and the feature is dropped, so adding a new selectable layer cannot
+ * silently produce a feature the UI cannot render.
+ */
+private fun layerKindOf(layerId: String): com.intellitrip.map.MapSelectionResolver.MapFeatureKind? =
+    when (layerId) {
+        "intellitrip-route-layer" -> com.intellitrip.map.MapSelectionResolver.MapFeatureKind.JOURNEY
+        "intellitrip-vehicle-layer" -> com.intellitrip.map.MapSelectionResolver.MapFeatureKind.VEHICLE
+        "intellitrip-stop-layer" -> com.intellitrip.map.MapSelectionResolver.MapFeatureKind.STOP
+        "intellitrip-cluster-layer" -> com.intellitrip.map.MapSelectionResolver.MapFeatureKind.CLUSTER
+        else -> null
+    }
+
+@Composable
+private fun SurfaceScaffold(title: String, onClose: () -> Unit, content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .systemBarsPadding(),
+    ) {
+        content()
+        Spacer(Modifier.weight(1f))
+        Row(modifier = Modifier.fillMaxWidth().padding(Space.md)) {
+            TextButton(onClick = onClose) { Text("Back to map") }
+        }
+    }
+}
+
+@Composable
+private fun SavedScreenSurface(
+    saved: List<com.intellitrip.ui.SavedStop>,
+    onOpenStop: (com.intellitrip.ui.SavedStop) -> Unit,
+    onRemoveStop: (String) -> Unit,
+    onCloseToExplore: () -> Unit,
+) {
+    SurfaceScaffold(title = "Saved", onClose = {}) {
+        com.intellitrip.ui.SavedScreen(
+            saved = saved,
+            onOpenStop = onOpenStop,
+            onRemoveStop = onRemoveStop,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+@Composable
+private fun MoreScreenSurface(
+    state: AppState,
+    onToggleRadar: () -> Unit,
+    onToggleAutoRefresh: () -> Unit,
+    onLoadAlerts: () -> Unit,
+    onLoadStatic: () -> Unit,
+    onLocateMe: () -> Unit,
+    onOpenAdvancedSheet: (com.intellitrip.ui.Sheet) -> Unit,
+    onCloseToExplore: () -> Unit,
+) {
+    SurfaceScaffold(title = "More", onClose = onCloseToExplore) {
+        com.intellitrip.ui.MoreScreen(
+            state = state,
+            onToggleRadar = onToggleRadar,
+            onToggleAutoRefresh = onToggleAutoRefresh,
+            onLoadAlerts = onLoadAlerts,
+            onLoadStatic = onLoadStatic,
+            onOpenScope = { onOpenAdvancedSheet(com.intellitrip.ui.Sheet.Scope) },
+            onOpenData = { onOpenAdvancedSheet(com.intellitrip.ui.Sheet.Data) },
+            onLocateMe = onLocateMe,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 

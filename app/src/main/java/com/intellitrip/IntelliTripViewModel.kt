@@ -60,6 +60,16 @@ data class AppState(
     val origin: GeoPoint = GeoPoint(DEFAULT_LAT, DEFAULT_LON),
     val destination: GeoPoint = GeoPoint(DEFAULT_DEST_LAT, DEFAULT_DEST_LON),
     val autoRefresh: Boolean = false,
+    /**
+     * What the rider last tapped on the map.
+     *
+     * Held in state rather than in a composable so the selection survives
+     * configuration changes and so the map and the sheets cannot disagree about what
+     * is selected.
+     */
+    val mapSelection: com.intellitrip.map.MapSelection = com.intellitrip.map.MapSelection.None,
+    /** Saved stops, loaded from disk on startup and rewritten on every change. */
+    val savedStops: List<com.intellitrip.ui.SavedStop> = emptyList(),
 )
 
 /**
@@ -73,11 +83,19 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
 
     private var viewportJob: Job? = null
 
+    private val savedPlaces = com.intellitrip.ui.SavedPlacesStore(host.filesRoot())
+
     private var locationJob: Job? = null
 
     private var refreshJob: Job? = null
 
     init {
+        // Saved places are rider-owned, so they load before anything touches the
+        // network and are never gated on a feed being present.
+        runCatching { savedPlaces.load() }.getOrNull()?.let { saved ->
+            if (saved.isNotEmpty()) _state.value = _state.value.copy(savedStops = saved)
+        }
+
         // Start from any previously stored snapshot so a cold launch has the
         // static network without touching the network.
         viewModelScope.launch {
@@ -271,6 +289,69 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     }
 
     /** The selected journey as map geometry; empty when there is nothing to draw. */
+    /**
+     * Turns the radar overlay on or off.
+     *
+     * Switching off clears the frame as well as the flag. Leaving the frame in state
+     * would let any later render re-add the layer, so the overlay would reappear
+     * without the rider asking for it.
+     */
+    fun toggleRadar() {
+        val enabled = !_state.value.radarEnabled
+        if (!enabled) {
+            update { it.copy(radarEnabled = false, radarFrame = null, status = "Radar off") }
+            return
+        }
+        loadRadar()
+    }
+
+    /** Records what the rider tapped on the map. */
+    fun selectFeature(selection: com.intellitrip.map.MapSelection) {
+        update { it.copy(mapSelection = selection) }
+    }
+
+    fun clearSelection() {
+        update { it.copy(mapSelection = com.intellitrip.map.MapSelection.None) }
+    }
+
+    /**
+     * Saves or unsaves a stop.
+     *
+     * Saved stops are written immediately rather than on exit, so a crash or a force
+     * stop cannot lose them. This is the difference between a list a rider trusts and
+     * one they have to re-check every launch.
+     */
+    fun toggleSavedStop(stop: com.intellitrip.domain.Stop) {
+        val existing = _state.value.savedStops.firstOrNull { it.stopId == stop.key.stopId }
+        val updated = if (existing != null) {
+            savedPlaces.remove(existing.stopId)
+        } else {
+            savedPlaces.save(com.intellitrip.ui.SavedPlacesStore.from(stop))
+        }
+        update {
+            it.copy(
+                savedStops = updated,
+                status = if (existing != null) "Removed ${stop.name}" else "Saved ${stop.name}",
+            )
+        }
+    }
+
+    /** Moves the map to a saved stop and selects it. */
+    fun openSavedStop(stop: com.intellitrip.ui.SavedStop) {
+        setScope(stop.name, com.intellitrip.domain.Focus.Radius(com.intellitrip.ui.SavedPlacesStore.locationOf(stop), 400.0))
+        update {
+            it.copy(
+                mapSelection = com.intellitrip.map.MapSelection.Single(
+                    com.intellitrip.map.MapFeature.Stop(stop.stopId, stop.name),
+                ),
+            )
+        }
+    }
+
+    /** Looks up a saved stop in the loaded feed so detail can show its departures. */
+    fun savedStopById(stopId: String): com.intellitrip.domain.Stop? =
+        _state.value.staticFeed?.stops?.firstOrNull { it.key.stopId == stopId }
+
     fun routeGeometry(): List<RouteLine> {
         val feed = _state.value.staticFeed ?: return emptyList()
         val journey = selectedJourney ?: return emptyList()

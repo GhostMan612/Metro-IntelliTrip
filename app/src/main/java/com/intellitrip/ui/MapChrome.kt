@@ -37,6 +37,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +56,7 @@ import com.intellitrip.domain.Focus
 import com.intellitrip.domain.GeoPoint
 
 /** Which overlay sheet is showing. Only one at a time, or none. */
+/** Sheets the floating controls can raise. Public so navigation can request one. */
 enum class Sheet { None, Data, Scope, Plan }
 
 /** Results shown in the plan sheet before it stops being scannable. */
@@ -100,8 +102,16 @@ fun MapChrome(
     onToggleDepartures: () -> Unit,
     /** Extra top offset for the scope chip, so it clears the search entry on Explore. */
     scopeChipInset: androidx.compose.ui.unit.Dp = 0.dp,
+    /** Non-null asks for that sheet to open; changes are acted on once per value. */
+    requestedSheet: Sheet? = null,
 ) {
     var sheet by remember { mutableStateOf(Sheet.None) }
+
+    // Navigation can ask for a sheet directly, so choosing Plan in the bottom bar opens
+    // the planner instead of leaving a tab that looks selected but does nothing.
+    LaunchedEffect(requestedSheet) {
+        if (requestedSheet != null) sheet = requestedSheet
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(

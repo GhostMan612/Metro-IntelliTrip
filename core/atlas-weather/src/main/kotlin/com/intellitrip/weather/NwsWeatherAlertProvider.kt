@@ -65,8 +65,22 @@ class NwsWeatherAlertProvider(
     }
 
     internal fun alertUrl(bounds: LatLngBounds?): String = when (bounds) {
+        // No viewport: the national active set, which the client then filters.
         null -> "$apiBase/alerts/active"
-        else -> "$apiBase/alerts/active?point=${bounds.southWest.lat},${bounds.southWest.lon}"
+
+        // A viewport query must use its centre.
+        //
+        // The previous code sent the southwest corner. A user looking at any area
+        // other than the extreme corner of the map got alerts for the wrong place:
+        // NWS resolves `point` to the alerts covering that single coordinate, so a
+        // storm over north Minneapolis was invisible while the screen showed exactly
+        // that storm. Centring the query is what "alerts for what I am looking at"
+        // means.
+        else -> {
+            val centreLat = (bounds.southWest.lat + bounds.northEast.lat) / 2.0
+            val centreLon = (bounds.southWest.lon + bounds.northEast.lon) / 2.0
+            "$apiBase/alerts/active?point=$centreLat,$centreLon"
+        }
     }
 
     internal companion object {

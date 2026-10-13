@@ -30,6 +30,7 @@ class MapLibreMapRenderer(
     private val mapView: MapView,
     private val onReady: (MapLibreMapRenderer) -> Unit = {},
     private val onCameraMoved: (lat: Double, lon: Double, zoom: Double) -> Unit = { _, _, _ -> },
+    private val onMapTapped: (lat: Double, lon: Double) -> Unit = { _, _ -> },
 ) : MapRenderer {
 
     private var map: MapLibreMap? = null
@@ -50,6 +51,9 @@ class MapLibreMapRenderer(
      */
     private var programmaticTarget: Triple<Double, Double, Double>? = null
 
+    /** Guards against attaching a second click listener on a reused map. */
+    private var tapHandlerAttached = false
+
     private var lastReportedLat = Double.NaN
     private var lastReportedLon = Double.NaN
     private var lastReportedZoom = Double.NaN
@@ -58,6 +62,7 @@ class MapLibreMapRenderer(
         MapLibre.getInstance(mapView.context.applicationContext)
         mapView.getMapAsync { mapLibreMap ->
             map = mapLibreMap
+            attachTapHandler(mapLibreMap)
             mapLibreMap.addOnCameraMoveListener { reportCameraIfChanged() }
             // Drain in the order the caller originally made the calls, so a basemap
             // is attached before layers are added on top of it.
@@ -443,12 +448,129 @@ PropertyFactory.lineColor("#DC2626"),
         source?.setGeoJson(geoJson)
     }
 
+    /**
+     * Queries the rendered features under a screen point.
+     *
+     * Hit testing runs against what is actually drawn, which is the only way for a tap
+     * on a marker to select that marker rather than whatever happens to share its
+     * coordinates. Layers are queried in a fixed order that puts the most specific
+     * feature first, so the caller can collapse the result without repeating the
+     * stacking rules.
+     */
+    fun queryFeatures(
+        lat: Double,
+        lon: Double,
+        tolerancePx: Float = TAP_TOLERANCE_PX,
+    ): List<FeatureProperties> {
+        val target = map ?: return emptyList()
+        // This MapLibre build exposes only single-point queries, so the tap tolerance is
+        // built by sampling a small cross of points rather than one exact coordinate.
+        // A finger is far larger than a marker: without the tolerance a rider aiming at
+        // a bus on a moving map taps beside it and is told nothing is there.
+        val center = target.projection.toScreenLocation(LatLng(lat, lon))
+        val radius = tolerancePx.coerceIn(1f, MAX_TAP_RADIUS_PX)
+        val samples = listOf(
+            center,
+            android.graphics.PointF(center.x - radius, center.y),
+            android.graphics.PointF(center.x + radius, center.y),
+            android.graphics.PointF(center.x, center.y - radius),
+            android.graphics.PointF(center.x, center.y + radius),
+        )
+
+        val result = mutableListOf<FeatureProperties>()
+        val seen = mutableSetOf<String>()
+        for (layerId in SELECTABLE_LAYERS) {
+            for (point in samples) {
+                val features = runCatching {
+                    target.queryRenderedFeatures(point, layerId)
+                }.getOrNull() ?: continue
+                for (feature in features) {
+                    val values = toPropertyMap(feature.properties())
+                    if (values.isEmpty()) continue
+                    // The same feature is returned by several samples; keep one.
+                    if (seen.add(values.toString())) {
+                        result.add(FeatureProperties(layerId, values))
+                    }
+                }
+            }
+        }
+        return result
+    }
+
+    /**
+     * Flattens a feature's properties into a plain map.
+     *
+     * This MapLibre build hands back a gson `JsonObject`, not a `Map`, so nested values
+     * are unwrapped here. The selection rules consume plain scalars, so anything that
+     * is not one is dropped rather than stringified: a nested object turned into
+     * "com.google.gson.JsonObject@1a2b" would be worse than absent.
+     */
+    private fun toPropertyMap(source: com.google.gson.JsonObject?): Map<String, Any?> {
+        if (source == null) return emptyMap()
+        val out = LinkedHashMap<String, Any?>(source.size())
+        for ((key, value) in source.entrySet()) {
+            when {
+                value == null || value.isJsonNull -> out[key] = null
+                value.isJsonPrimitive -> {
+                    val primitive = value.asJsonPrimitive
+                    out[key] = when {
+                        primitive.isBoolean -> primitive.asBoolean
+                        primitive.isNumber -> primitive.asNumber
+                        else -> primitive.asString
+                    }
+                }
+
+                else -> Unit
+            }
+        }
+        return out
+    }
+
+    /**
+     * Subscribes to map taps.
+     *
+     * A tap is only a click if it is not a drag: panning the map ends with the finger
+     * lifting over the map, and treating that as a selection would fire a sheet every
+     * time the rider adjusted the view.
+     */
+    private fun attachTapHandler(target: MapLibreMap) {
+        if (tapHandlerAttached) return
+        tapHandlerAttached = true
+        target.addOnMapClickListener { point ->
+            onMapTapped(point.latitude, point.longitude)
+            true
+        }
+    }
+
+    /** One queried feature: which layer produced it, and its properties. */
+    data class FeatureProperties(val layerId: String, val values: Map<String, Any?>)
+
     companion object {
         /** Roughly a meter; below this a pan is treated as camera jitter. */
         private const val CAMERA_EPSILON_DEGREES = 0.00001
 
         /** Sub-pixel zoom noise; prevents scope churn while the map settles. */
         private const val CAMERA_EPSILON_ZOOM = 0.01
+
+        /**
+         * How far from a tap, in screen pixels, a feature still counts as touched.
+         *
+         * Roughly the radius of a fingertip. Sized here rather than at the call site so
+         * every selectable feature gets the same forgiving target.
+         */
+        const val TAP_TOLERANCE_PX = 24f
+
+        /** Ceiling on the sampled hit radius, so a zoomed-out tap cannot select everything. */
+        private const val MAX_TAP_RADIUS_PX = 48f
+
+        /**
+         * Layers consulted by hit testing, most specific first.
+         *
+         * Order matters: a planned journey sits above the network, and a vehicle above
+         * the stops. Querying in reverse would make every tap near a busy stop select
+         * the stop instead of the bus the rider aimed at.
+         */
+        val SELECTABLE_LAYERS = listOf(ROUTES_LAYER, VEHICLES_LAYER, STOPS_LAYER, CLUSTERS_LAYER)
         const val VEHICLES_SOURCE = "intellitrip-vehicles"
         const val CLUSTERS_SOURCE = "intellitrip-clusters"
         const val STOPS_SOURCE = "intellitrip-stops"
