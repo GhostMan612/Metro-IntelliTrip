@@ -217,26 +217,34 @@ fun MapCanvas(
             radarFrame = state.radarFrame,
             alerts = state.weatherAlerts,
         )
+        /**
+         * Reconciles weather layers against the composed state.
+         *
+         * Clearing is unconditional and happens first, then the composed layers are
+         * re-applied. Two earlier versions were wrong:
+         *
+         * The first cleared only when a radar or alert toggle was *on*, so switching
+         * radar off skipped the clear and the last frame stayed on the map.
+         *
+         * The second cleared only when the composed set was entirely empty. That fixed
+         * the single-layer case but still leaked: switch radar off while an alert is
+         * active and the collection is not empty, so nothing is cleared and the radar
+         * layer survives the toggle.
+         *
+         * Clearing everything and rebuilding from the composed set is the only rule
+         * that cannot leak a layer that the current state no longer contains. It costs
+         * one extra style mutation per change, which is not a concern for a switch a
+         * rider taps deliberately.
+         */
+        active.clearWeatherLayers()
         composed.layers.forEach { (_, layer) ->
             when (layer) {
-                is WeatherLayer.RadarTiles -> active.applyRadar(layer.frame.tileUrlTemplate, layer.opacity.toFloat())
+                is WeatherLayer.RadarTiles ->
+                    active.applyRadar(layer.frame.tileUrlTemplate, layer.opacity.toFloat())
                 // NWS alerts are areas, not points; they surface in the status panel
                 // rather than as fabricated markers.
                 is WeatherLayer.AlertMarkers -> Unit
             }
-        }
-        /**
-         * Reconciles weather layers against the composed state.
-         *
-         * Clearing is keyed on the composed layers being empty and nothing else. The
-         * previous guard also required a radar or alert toggle to be on, which meant
-         * switching radar *off* skipped the clear entirely and the last frame stayed on
-         * the map. A toggle turning something off makes the composed set empty, so
-         * emptiness alone is the correct signal to remove layers.
-         */
-        if (composed.layers.isEmpty()) {
-            active.clearWeatherLayers()
-            return@LaunchedEffect
         }
     }
 }

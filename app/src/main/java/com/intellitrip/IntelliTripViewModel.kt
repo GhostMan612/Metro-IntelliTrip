@@ -322,9 +322,11 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
      * one they have to re-check every launch.
      */
     fun toggleSavedStop(stop: com.intellitrip.domain.Stop) {
-        val existing = _state.value.savedStops.firstOrNull { it.stopId == stop.key.stopId }
+        val existing = _state.value.savedStops.firstOrNull {
+            it.feedId == stop.key.feedId.value && it.stopId == stop.key.stopId
+        }
         val updated = if (existing != null) {
-            savedPlaces.remove(existing.stopId)
+            savedPlaces.remove(existing.feedId, existing.stopId)
         } else {
             savedPlaces.save(com.intellitrip.ui.SavedPlacesStore.from(stop))
         }
@@ -342,15 +344,17 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         update {
             it.copy(
                 mapSelection = com.intellitrip.map.MapSelection.Single(
-                    com.intellitrip.map.MapFeature.Stop(stop.stopId, stop.name),
+                    com.intellitrip.map.MapFeature.Stop(stop.feedId, stop.stopId, stop.name),
                 ),
             )
         }
     }
 
     /** Looks up a saved stop in the loaded feed so detail can show its departures. */
-    fun savedStopById(stopId: String): com.intellitrip.domain.Stop? =
-        _state.value.staticFeed?.stops?.firstOrNull { it.key.stopId == stopId }
+    fun savedStopDomain(saved: com.intellitrip.ui.SavedStop): com.intellitrip.domain.Stop? =
+        _state.value.staticFeed?.stops?.firstOrNull {
+            it.key.feedId.value == saved.feedId && it.key.stopId == saved.stopId
+        }
 
     fun routeGeometry(): List<RouteLine> {
         val feed = _state.value.staticFeed ?: return emptyList()

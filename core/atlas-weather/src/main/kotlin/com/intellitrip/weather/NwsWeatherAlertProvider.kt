@@ -57,7 +57,12 @@ class NwsWeatherAlertProvider(
     private fun fetchAlerts(bounds: LatLngBounds?): ProviderResult<List<WeatherAlert>> = try {
         val payload = http.get(alertUrl(bounds), context.headers()).toString(Charsets.UTF_8)
         val updated = parseUpdated(payload)
-        ProviderResult.Success(parseAlerts(payload), context.freshness(updated))
+        // The request can only ask about one point, so the response is filtered against
+        // the viewport before it reaches the UI. Alerts whose area box does not overlap
+        // are dropped; alerts with an unknown box are kept, because hiding a warning
+        // that turned out to be real is the worse failure.
+        val relevant = parseAlerts(payload).filter { it.mayAffect(bounds) }
+        ProviderResult.Success(relevant, context.freshness(updated))
     } catch (e: IOException) {
         ProviderResult.NetworkFailure(ProviderError("NWS alerts unavailable", e))
     } catch (e: Exception) {
@@ -112,8 +117,57 @@ class NwsWeatherAlertProvider(
                     effective = parseInstant(properties["effective"].asStringOrNull()),
                     expires = parseInstant(properties["expires"].asStringOrNull()),
                     description = properties["description"].asStringOrNull(),
+                    areaBounds = boundsOf(feature.asObject()["geometry"]),
                 )
             }
+        }
+
+        /**
+         * Bounding box of a GeoJSON geometry.
+         *
+         * NWS answers a `point` query with alerts covering that coordinate, so a wide
+         * viewport misses warnings happening at its edges. Carrying each alert's own box
+         * lets the caller include them without a second request.
+         *
+         * Walks the raw coordinate arrays rather than a geometry library, because the
+         * provider's `Json` type is the only JSON reader this module depends on.
+         * Returns null when the geometry is absent or malformed, which callers must
+         * read as "unknown", never as "does not apply".
+         */
+        private fun boundsOf(geometry: Any?): com.intellitrip.domain.LatLngBounds? {
+            val coordinates = geometry.asObject()["coordinates"].asList()
+            if (coordinates.isEmpty()) return null
+            var minLat = Double.MAX_VALUE
+            var minLon = Double.MAX_VALUE
+            var maxLat = -Double.MAX_VALUE
+            var maxLon = -Double.MAX_VALUE
+            var found = false
+
+            fun visit(value: Any?) {
+                val list = value.asList()
+                if (list.size >= 2) {
+                    val lon = (list[0] as? Number)?.toDouble()
+                    val lat = (list[1] as? Number)?.toDouble()
+                    if (lon != null && lat != null) {
+                        found = true
+                        if (lat < minLat) minLat = lat
+                        if (lat > maxLat) maxLat = lat
+                        if (lon < minLon) minLon = lon
+                        if (lon > maxLon) maxLon = lon
+                        return
+                    }
+                }
+                list.forEach(::visit)
+            }
+
+            visit(coordinates)
+            if (!found) return null
+            return runCatching {
+                com.intellitrip.domain.LatLngBounds(
+                    southWest = com.intellitrip.domain.GeoPoint(minLat, minLon),
+                    northEast = com.intellitrip.domain.GeoPoint(maxLat, maxLon),
+                )
+            }.getOrNull()
         }
 
         private fun parseInstant(value: String?): Instant? = value?.let {

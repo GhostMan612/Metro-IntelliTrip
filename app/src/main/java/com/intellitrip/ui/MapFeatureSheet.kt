@@ -55,7 +55,8 @@ fun MapFeatureSheet(
     onDismiss: () -> Unit,
     onSaveStop: (Stop) -> Unit,
     onSelectJourney: (String) -> Unit,
-    onExpandCluster: (MapFeature.StopCluster) -> Unit,
+    onZoomToCluster: (MapFeature.VehicleCluster) -> Unit,
+    onChooseCandidate: (MapFeature) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     ModalBottomSheet(
@@ -67,10 +68,14 @@ fun MapFeatureSheet(
             when (selection) {
                 is MapSelection.Single -> SingleFeatureBody(
                     selection.feature, stops, vehicles, journeys, departures, now,
-                    onSaveStop, onSelectJourney, onExpandCluster,
+                    onSaveStop, onSelectJourney, onZoomToCluster,
                 )
 
-                is MapSelection.Ambiguous -> AmbiguousBody(selection.features, onDismiss)
+                is MapSelection.Ambiguous -> AmbiguousBody(
+                    features = selection.features,
+                    onChoose = onChooseCandidate,
+                    onDismiss = onDismiss,
+                )
 
                 MapSelection.None -> EmptyPanel(
                     title = "Nothing selected",
@@ -93,11 +98,11 @@ private fun SingleFeatureBody(
     now: Instant,
     onSaveStop: (Stop) -> Unit,
     onSelectJourney: (String) -> Unit,
-    onExpandCluster: (MapFeature.StopCluster) -> Unit,
+    onZoomToCluster: (MapFeature.VehicleCluster) -> Unit,
 ) {
     when (feature) {
         is MapFeature.Stop -> {
-            val stop = stops[feature.stopId]
+            val stop = stops[feature.key]
             StopDetailBody(
                 stop = stop,
                 fallbackName = feature.name,
@@ -120,11 +125,12 @@ private fun SingleFeatureBody(
             )
         }
 
-        is MapFeature.StopCluster -> EmptyPanel(
-            title = "${feature.pointCount} stops here",
-            body = "Zoom in or expand this group to choose a specific stop.",
-            actionLabel = "Show these stops",
-            onAction = { onExpandCluster(feature) },
+        is MapFeature.VehicleCluster -> EmptyPanel(
+            title = "${feature.vehicleCount} vehicles here",
+            body = "These vehicles are grouped so the map stays readable at this zoom. " +
+                "Zoom in to pick out an individual vehicle.",
+            actionLabel = "Zoom in",
+            onAction = { onZoomToCluster(feature) },
         )
     }
 }
@@ -298,9 +304,17 @@ private fun JourneyDetailBody(journey: JourneyOption?, onShowOnMap: () -> Unit) 
  * Offered as a list rather than resolved to a guess. A dense downtown routinely puts a
  * bus and a stop on the same pixel, and silently picking one of them is how a rider
  * ends up reading the wrong departure.
+ *
+ * Every candidate is selectable and opens its own detail. A list the rider can read but
+ * not act on would be worse than guessing: it shows the right information and then
+ * refuses to act on it.
  */
 @Composable
-private fun AmbiguousBody(features: List<MapFeature>, onDismiss: () -> Unit) {
+private fun AmbiguousBody(
+    features: List<MapFeature>,
+    onChoose: (MapFeature) -> Unit,
+    onDismiss: () -> Unit,
+) {
     Text(text = "Several things here", style = MaterialTheme.typography.titleLarge)
     LazyColumn(
         modifier = Modifier.heightIn(max = 320.dp),
@@ -311,14 +325,15 @@ private fun AmbiguousBody(features: List<MapFeature>, onDismiss: () -> Unit) {
                 is MapFeature.Stop -> feature.name
                 is MapFeature.Vehicle -> feature.routeShortName?.let { "Route $it vehicle" } ?: "Vehicle"
                 is MapFeature.Journey -> "Planned trip"
-                is MapFeature.StopCluster -> "${feature.pointCount} stops"
+                is MapFeature.VehicleCluster -> "${feature.vehicleCount} vehicles here"
             }
             Surface(
+                onClick = { onChoose(feature) },
                 shape = RoundedCornerShape(Radii.chip),
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .semantics { contentDescription = label },
+                    .semantics { contentDescription = "$label. Double tap to open details." },
             ) {
                 Text(
                     text = label,

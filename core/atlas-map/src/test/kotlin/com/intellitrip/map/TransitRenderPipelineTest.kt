@@ -127,7 +127,15 @@ class TransitRenderPipelineTest {
         val vehicleJson = GeoJsonWriter.vehicles(snapshot)
         assertTrue(vehicleJson.startsWith("{\"type\":\"FeatureCollection\""))
         assertTrue(vehicleJson.contains("bus-5"))
-        assertEquals(1, Regex("\"id\":\"34\"").findAll(GeoJsonWriter.stops(snapshot)).count())
+        val stopJson = GeoJsonWriter.stops(snapshot)
+        // Stops are emitted with a feed-qualified id, because a bare stop id is only
+        // unique within a feed and two agencies both number their first stop "1".
+        // kotlin.test.assertTrue takes (actual, message), so the order is reversed
+        // relative to the JUnit overload.
+        assertEquals(1, Regex("\"id\":").findAll(stopJson).count())
+        assertTrue(stopJson.contains("/34"), "stop id must carry its feed")
+        assertTrue(stopJson.contains("\"feed\":"), "the feed must be readable from the properties")
+        assertTrue(stopJson.contains("Chicago Ave"), "a readable name is needed by the selection sheet")
         assertTrue(GeoJsonWriter.shapes(snapshot).contains("LineString"))
     }
 

@@ -23,10 +23,14 @@ sealed interface MapFeature {
      * can be offered; it is not part of identity.
      */
     data class Stop(
+        val feedId: String,
         val stopId: String,
         val name: String,
     ) : MapFeature {
-        override val id: String get() = "stop:$stopId"
+        /** Feed-qualified key, so stop "1" on two agencies never collide. */
+        val key: String get() = "$feedId/$stopId"
+
+        override val id: String get() = "stop:$key"
     }
 
     /** A live vehicle position. */
@@ -52,16 +56,24 @@ sealed interface MapFeature {
         override val id: String get() = "journey:$journeyId"
     }
 
-    /**
-     * A cluster of stops at this zoom.
-     *
-     * Offered as an explicit action rather than expanded automatically: expanding on
-     * tap would fight the user's own pinch gesture and can cascade on accidental
-     * double taps.
-     */
-    data class StopCluster(
+/**
+ * A group of vehicles merged into one marker at this zoom.
+ *
+ * These are *vehicle* clusters: the render pipeline buckets vehicles into grid cells
+ * before drawing them. An earlier revision modelled this as a stop cluster, which
+ * offered a rider "N stops here" over what was actually N buses, and then looked for a
+ * property name the writer never emitted, so the count was always zero.
+ *
+ * There is no automatic expansion: expanding on tap fights the rider's own pinch
+ * gesture and cascades on an accidental double tap. The action offered is to zoom in,
+ * which is what actually separates the vehicles.
+ */
+data class VehicleCluster(
         val clusterId: String,
-        val pointCount: Int,
+        val vehicleCount: Int,
+        /** Cluster centre, so "zoom in" can actually go somewhere. */
+        val centroidLat: Double,
+        val centroidLon: Double,
     ) : MapFeature {
         override val id: String get() = "cluster:$clusterId"
     }
@@ -116,12 +128,19 @@ object MapSelectionResolver {
         return when (layerKind) {
             MapFeatureKind.JOURNEY -> MapFeature.Journey(id)
 
-            MapFeatureKind.CLUSTER -> MapFeature.StopCluster(
+            MapFeatureKind.CLUSTER -> MapFeature.VehicleCluster(
                 clusterId = id,
-                pointCount = (properties["point_count"] as? Number)?.toInt() ?: 0,
+                // The writer emits `count`. Reading `point_count` here always yielded
+                // null, so every cluster was reported as containing zero vehicles.
+                vehicleCount = (properties["count"] as? Number)?.toInt() ?: 0,
+                // GeoJSON coordinates are [lon, lat]; these properties carry the
+                // cluster centre in the same order.
+                centroidLon = (properties["lon"] as? Number)?.toDouble() ?: 0.0,
+                centroidLat = (properties["lat"] as? Number)?.toDouble() ?: 0.0,
             )
 
             MapFeatureKind.STOP -> MapFeature.Stop(
+                feedId = properties["feed"]?.toString().orEmpty(),
                 stopId = id,
                 name = properties["name"]?.toString() ?: "Stop",
             )
@@ -160,7 +179,7 @@ object MapSelectionResolver {
         is MapFeature.Journey -> MapFeatureKind.JOURNEY
         is MapFeature.Vehicle -> MapFeatureKind.VEHICLE
         is MapFeature.Stop -> MapFeatureKind.STOP
-        is MapFeature.StopCluster -> MapFeatureKind.CLUSTER
+        is MapFeature.VehicleCluster -> MapFeatureKind.CLUSTER
     }
 
     private fun parseTimestamp(value: Any?): java.time.Instant =

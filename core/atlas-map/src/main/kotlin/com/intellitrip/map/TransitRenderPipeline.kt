@@ -39,7 +39,7 @@ class TransitRenderPipeline(
 
         val stops = input.stops
             .filter { input.camera.bounds.contains(it.location) }
-            .map { StopRender(it.key.stopId, it.location.lon, it.location.lat) }
+            .map { StopRender(it.key.stopId, it.key.feedId.value, it.name, it.location.lon, it.location.lat) }
 
         // Route geometry is large (hundreds of thousands of points system-wide), so
         // shapes are culled to the viewport and dropped entirely when clustered.

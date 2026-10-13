@@ -40,7 +40,7 @@ import com.intellitrip.ui.theme.status
 fun SavedScreen(
     saved: List<SavedStop>,
     onOpenStop: (SavedStop) -> Unit,
-    onRemoveStop: (String) -> Unit,
+    onRemoveStop: (SavedStop) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth().padding(horizontal = Space.lg)) {
@@ -62,7 +62,7 @@ fun SavedScreen(
             modifier = Modifier.heightIn(max = 520.dp),
             verticalArrangement = Arrangement.spacedBy(Space.sm),
         ) {
-            items(saved, key = { it.stopId }) { stop ->
+            items(saved, key = { it.key }) { stop ->
                 Surface(
                     shape = RoundedCornerShape(Radii.card),
                     color = MaterialTheme.colorScheme.surfaceVariant,
@@ -90,7 +90,7 @@ fun SavedScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        TextButton(onClick = { onRemoveStop(stop.stopId) }) { Text("Remove") }
+                        TextButton(onClick = { onRemoveStop(stop) }) { Text("Remove") }
                     }
                 }
             }

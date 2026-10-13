@@ -65,6 +65,9 @@ class MainActivity : ComponentActivity() {
  */
 private val RailWidthDp = 600.dp
 
+/** Zoom applied when a rider asks to separate a cluster of vehicles. */
+private const val CLUSTER_ZOOM_RADIUS_METERS = 250.0
+
 @Composable
 private fun IntelliTripApp() {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -269,7 +272,11 @@ private fun MapPane(
         if (selection !is com.intellitrip.map.MapSelection.None) {
             MapFeatureSheet(
                 selection = selection,
-                stops = state.staticFeed?.stops?.associateBy { it.key.stopId } ?: emptyMap(),
+                stops = state.staticFeed?.stops
+                    // Scoped by feed as well as stop id, so two agencies that both use
+                    // "1" for their first stop cannot collapse into one lookup.
+                    ?.associateBy { "${it.key.feedId.value}/${it.key.stopId}" }
+                    ?: emptyMap(),
                 vehicles = state.vehicles.associateBy { it.key.vehicleId },
                 journeys = state.journeys,
                 departures = model.nearbyDepartures(),
@@ -277,7 +284,22 @@ private fun MapPane(
                 onDismiss = model::clearSelection,
                 onSaveStop = model::toggleSavedStop,
                 onSelectJourney = model::selectJourney,
-                onExpandCluster = { },
+                onZoomToCluster = { cluster ->
+                    // Separating vehicles is a zoom operation; there is no cluster
+                    // expansion to fake.
+                    model.setScope(
+                        "Map area",
+                        com.intellitrip.domain.Focus.Radius(
+                            com.intellitrip.domain.GeoPoint(cluster.centroidLat, cluster.centroidLon),
+                            CLUSTER_ZOOM_RADIUS_METERS,
+                        ),
+                    )
+                },
+                onChooseCandidate = { chosen ->
+                    // Picking a candidate narrows the selection to it, so the sheet
+                    // shows that feature's detail rather than the list again.
+                    model.selectFeature(com.intellitrip.map.MapSelection.Single(chosen))
+                },
             )
         }
 
@@ -287,8 +309,8 @@ private fun MapPane(
             SavedScreenSurface(
                 saved = state.savedStops,
                 onOpenStop = { model.openSavedStop(it); onCloseToExplore() },
-                onRemoveStop = { id ->
-                    model.savedStopById(id)?.let(model::toggleSavedStop)
+                onRemoveStop = { saved ->
+                    model.savedStopDomain(saved)?.let(model::toggleSavedStop)
                 },
                 onCloseToExplore = onCloseToExplore,
             )
@@ -345,7 +367,7 @@ private fun SurfaceScaffold(title: String, onClose: () -> Unit, content: @Compos
 private fun SavedScreenSurface(
     saved: List<com.intellitrip.ui.SavedStop>,
     onOpenStop: (com.intellitrip.ui.SavedStop) -> Unit,
-    onRemoveStop: (String) -> Unit,
+    onRemoveStop: (com.intellitrip.ui.SavedStop) -> Unit,
     onCloseToExplore: () -> Unit,
 ) {
     SurfaceScaffold(title = "Saved", onClose = {}) {

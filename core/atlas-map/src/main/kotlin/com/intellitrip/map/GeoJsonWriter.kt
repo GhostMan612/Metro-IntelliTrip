@@ -34,7 +34,14 @@ object GeoJsonWriter {
             append("{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[")
             append(cluster.lon).append(',').append(cluster.lat)
             append("]},\"properties\":{\"id\":").append(quote(cluster.id))
-            append(",\"count\":").append(cluster.count).append("}}")
+            // lat/lon are duplicated into properties as well as the geometry. Hit
+            // testing reads properties, and "zoom in to separate these vehicles" needs
+            // a centre to go to; reading it back out of the geometry blob would mean
+            // re-parsing coordinates in the selection layer.
+            append(",\"count\":").append(cluster.count)
+            append(",\"lat\":").append(cluster.lat)
+            append(",\"lon\":").append(cluster.lon)
+            append("}}")
         }
         append("]}")
     }
@@ -45,7 +52,11 @@ object GeoJsonWriter {
             if (index > 0) append(',')
             append("{\"type\":\"Feature\",\"geometry\":{\"type\":\"Point\",\"coordinates\":[")
             append(stop.lon).append(',').append(stop.lat)
-            append("]},\"properties\":{\"id\":").append(quote(stop.id)).append("}}")
+            append("]},\"properties\":{\"id\":").append(quote(stop.key))
+            // The feed id travels with the stop because stop ids are only unique
+            // within a feed, and selection looks the tapped stop back up by this key.
+            append(",\"feed\":").append(quote(stop.feedId))
+            append(",\"name\":").append(quote(stop.name)).append("}}")
         }
         append("]}")
     }

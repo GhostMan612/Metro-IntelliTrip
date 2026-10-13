@@ -66,7 +66,23 @@ data class ClusterRender(
     val count: Int,
 )
 
-data class StopRender(val id: String, val lon: Double, val lat: Double)
+/**
+ * A scheduled stop as drawn.
+ *
+ * [feedId] and [name] travel with the stop because stop ids are only unique within a
+ * feed. Rendering a bare id and then resolving the selection by that id is what lets
+ * two agencies' first stops collide into one entry.
+ */
+data class StopRender(
+    val id: String,
+    val feedId: String,
+    val name: String,
+    val lon: Double,
+    val lat: Double,
+) {
+    /** Feed-qualified key used by hit testing and selection lookup. */
+    val key: String get() = "$feedId/$id"
+}
 
 data class ShapeLineRender(val id: String, val coordinates: List<List<Double>>)
 
