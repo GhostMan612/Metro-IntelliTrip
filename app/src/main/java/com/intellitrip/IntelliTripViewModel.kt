@@ -105,6 +105,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                     status = "Loaded offline snapshot (${feed.stops.size} stops)",
                     scope = host.scopeEngine.currentScope(_state.value.focus),
                 )
+                adoptLegacySavedStops(host.feedId.value, feed.stops)
             }
         }
     }
@@ -159,13 +160,16 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         update { it.copy(status = "Downloading static GTFS…") }
         viewModelScope.launch {
             when (val outcome = host.staticRefresher.refresh()) {
-                is RefreshOutcome.Activated -> update {
-                    it.copy(
-                        staticFeed = outcome.feed,
-                        scope = host.scopeEngine.currentScope(it.focus),
-                        status = "Static network: ${outcome.feed.routes.size} routes, " +
-                            "${outcome.feed.stops.size} stops, ${outcome.feed.trips.size} trips",
-                    )
+                is RefreshOutcome.Activated -> {
+                    update {
+                        it.copy(
+                            staticFeed = outcome.feed,
+                            scope = host.scopeEngine.currentScope(it.focus),
+                            status = "Static network: ${outcome.feed.routes.size} routes, " +
+                                "${outcome.feed.stops.size} stops, ${outcome.feed.trips.size} trips",
+                        )
+                    }
+                    adoptLegacySavedStops(host.feedId.value, outcome.feed.stops)
                 }
 
                 is RefreshOutcome.NotModified -> update { it.copy(status = "Static GTFS already current") }
@@ -211,7 +215,13 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     fun loadWeatherAlerts() {
         update { it.copy(status = "Loading weather alerts…") }
         viewModelScope.launch {
-            when (val result = host.weatherAlerts.alerts().first()) {
+            // The viewport is passed through deliberately. An earlier version called
+            // alerts() with no bounds, which asked for the national active set and then
+            // applied no filter at all, so a rider in Minnesota saw warnings for counties
+            // they were not near. The provider needs the bounds to sweep and spatially
+            // filter.
+            val bounds = _state.value.scope.renderScope.viewport
+            when (val result = host.weatherAlerts.alerts(bounds).first()) {
                 is ProviderResult.Success -> update {
                     it.copy(weatherAlerts = result.data, status = "Weather alerts: ${result.data.size}")
                 }
@@ -321,21 +331,73 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
      * stop cannot lose them. This is the difference between a list a rider trusts and
      * one they have to re-check every launch.
      */
+/**
+     * Saves a stop the rider chose from the map.
+     *
+     * Saving genuinely needs the live feed object, because that is where the stop's
+     * current name and coordinates come from.
+     */
+    fun saveStop(stop: com.intellitrip.domain.Stop) {
+        applySave { savedPlaces.save(com.intellitrip.ui.SavedPlacesStore.from(stop)) }
+            ?.let { saved ->
+                update { it.copy(savedStops = saved, status = "Saved ${stop.name}") }
+            }
+    }
+
+    /**
+     * Removes a saved stop using only its stored key.
+     *
+     * Removal must never depend on the transit feed. The previous implementation looked
+     * the stop up in the loaded network and did nothing when it was absent, so a saved
+     * stop became impossible to delete while offline, after a feed change, or whenever
+     * the snapshot had been cleared. The stored record already carries everything
+     * needed to delete it.
+     */
+    fun removeSavedStop(saved: com.intellitrip.ui.SavedStop) {
+        applySave { savedPlaces.remove(saved.feedId, saved.stopId) }
+            ?.let { remaining ->
+                update { it.copy(savedStops = remaining, status = "Removed ${saved.name}") }
+            }
+    }
+
+    /** Adds or removes a stop that the map has in hand. */
     fun toggleSavedStop(stop: com.intellitrip.domain.Stop) {
         val existing = _state.value.savedStops.firstOrNull {
-            it.feedId == stop.key.feedId.value && it.stopId == stop.key.stopId
+            it.stopId == stop.key.stopId &&
+                (it.feedId == stop.key.feedId.value || it.feedId == com.intellitrip.ui.SavedPlacesStore.LEGACY_FEED)
         }
-        val updated = if (existing != null) {
-            savedPlaces.remove(existing.feedId, existing.stopId)
-        } else {
-            savedPlaces.save(com.intellitrip.ui.SavedPlacesStore.from(stop))
+        if (existing != null) removeSavedStop(existing) else saveStop(stop)
+    }
+
+    /**
+     * Runs a storage mutation, converting failure into rider-visible state.
+     *
+     * On failure the previously loaded list is left in place, so the screen keeps
+     * showing what is actually stored rather than optimistically dropping an entry that
+     * was never deleted.
+     */
+    private fun applySave(block: () -> List<com.intellitrip.ui.SavedStop>): List<com.intellitrip.ui.SavedStop>? =
+        try {
+            block()
+        } catch (e: com.intellitrip.ui.SavedPlacesWriteException) {
+            update { it.copy(status = "Could not update saved places. ${e.message}") }
+            null
+        } catch (e: java.io.IOException) {
+            update { it.copy(status = "Could not update saved places: ${e.message ?: "storage unavailable"}") }
+            null
         }
-        update {
-            it.copy(
-                savedStops = updated,
-                status = if (existing != null) "Removed ${stop.name}" else "Saved ${stop.name}",
-            )
-        }
+
+    /**
+     * Re-scopes records written before feed ids were stored.
+     *
+     * Called once the feed is available so a rider's existing saved stops keep working
+     * across the update instead of appearing to vanish.
+     */
+    private fun adoptLegacySavedStops(feedId: String, stops: List<com.intellitrip.domain.Stop>) {
+        val known = stops.mapTo(mutableSetOf()) { it.key.stopId }
+        if (_state.value.savedStops.none { it.feedId == com.intellitrip.ui.SavedPlacesStore.LEGACY_FEED }) return
+        val (rescoped, changed) = savedPlaces.adoptFeedScope(feedId, known)
+        if (changed) update { it.copy(savedStops = rescoped) }
     }
 
     /** Moves the map to a saved stop and selects it. */

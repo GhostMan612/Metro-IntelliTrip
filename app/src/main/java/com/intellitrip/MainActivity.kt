@@ -309,9 +309,10 @@ private fun MapPane(
             SavedScreenSurface(
                 saved = state.savedStops,
                 onOpenStop = { model.openSavedStop(it); onCloseToExplore() },
-                onRemoveStop = { saved ->
-                    model.savedStopDomain(saved)?.let(model::toggleSavedStop)
-                },
+                // Removal uses only the stored key, so it works offline and after a
+                // feed change rather than requiring the stop to still exist in the
+                // loaded network.
+                onRemoveStop = model::removeSavedStop,
                 onCloseToExplore = onCloseToExplore,
             )
         }

@@ -57,12 +57,19 @@ class SavedPlacesStore(private val root: Path) {
 
     private val file: Path get() = root.resolve(FILE_NAME)
 
-    /** Reads saved stops. A corrupt or missing file yields an empty list, never a crash. */
+    /**
+     * Reads saved stops. A corrupt or missing file yields an empty list, never a crash.
+     *
+     * Records written by an earlier build carry no feed id. They are still read, tagged
+     * with [LEGACY_FEED] so a later feed load can re-scope them, rather than dropped.
+     * Silently discarding them would make a rider's saved list appear to vanish on
+     * update, which is the kind of quiet data loss they correctly never forgive.
+     */
     fun load(): List<SavedStop> {
         if (!Files.exists(file)) return emptyList()
         return runCatching {
             Files.readAllLines(file)
-                .filter { it.isNotBlank() }
+                .filter { it.isNotBlank() && !it.startsWith(HEADER_PREFIX) }
                 .mapNotNull(::parseLine)
                 .sortedByDescending { it.savedAt }
         }.getOrElse { emptyList() }
@@ -85,7 +92,7 @@ class SavedPlacesStore(private val root: Path) {
         load().any { it.feedId == feedId && it.stopId == stopId }
 
     /**
-     * Replaces the store's file atomically.
+     * Replaces the store's file atomically, keeping a backup of the previous version.
      *
      * `ATOMIC_MOVE` is requested so the rename is a single filesystem operation and a
      * crash can never leave a half-written list. Not every filesystem supports it:
@@ -96,11 +103,21 @@ class SavedPlacesStore(private val root: Path) {
      * Instead the failure is surfaced. If the atomic rename cannot be performed the
      * previous file is left untouched and the caller is told, so a rider either has
      * their old saved list or gets an explicit failure, never a silently truncated one.
+     *
+     * The backup is taken before the new file is in place, so it always holds the last
+     * list this build managed to write. It is what a migration can fall back to if
+     * rewriting the records goes wrong.
      */
     private fun write(stops: List<SavedStop>) {
         Files.createDirectories(root)
+        // Preserve the previous generation before overwriting it.
+        if (Files.exists(file)) {
+            runCatching {
+                Files.copy(file, root.resolve(BACKUP_FILE), StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
         val temp = root.resolve("$FILE_NAME.tmp")
-        Files.write(temp, stops.map(::formatLine))
+        Files.write(temp, listOf(HEADER) + stops.map(::formatLine))
         try {
             Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         } catch (e: java.nio.file.AtomicMoveNotSupportedException) {
@@ -110,6 +127,36 @@ class SavedPlacesStore(private val root: Path) {
                 "Saved places could not be written atomically on this filesystem", e,
             )
         }
+    }
+
+    /**
+     * Re-scope records that predate feed scoping, then persist if anything changed.
+     *
+     * A legacy record has no feed id, so it is matched against the loaded feed by stop
+     * id. A match gets the feed's real id; no match keeps the legacy marker, which keeps
+     * the entry visible and removable rather than dropping it.
+     *
+     * Returns the new list and whether anything was rewritten.
+     */
+    fun adoptFeedScope(
+        feedId: String,
+        knownStopIds: Set<String>,
+    ): Pair<List<SavedStop>, Boolean> {
+        val current = load()
+        val rescoped = current.map { saved ->
+            if (saved.feedId == LEGACY_FEED && knownStopIds.contains(saved.stopId)) {
+                saved.copy(feedId = feedId)
+            } else {
+                saved
+            }
+        }
+        val changed = rescoped != current
+        if (changed) {
+            // A failed rewrite is not fatal: the in-memory list is still correct, and the
+            // caller keeps showing the adopted entries.
+            runCatching { write(rescoped) }
+        }
+        return rescoped to changed
     }
 
     /**
@@ -132,20 +179,40 @@ class SavedPlacesStore(private val root: Path) {
 
     private fun parseLine(line: String): SavedStop? {
         val parts = line.split(SEPARATOR)
-        // Six fields before the optional route id. A five-field line predates feed
-        // scoping and is rejected rather than guessed at, because guessing the feed
-        // would attach a saved stop to the wrong agency.
-        if (parts.size < 6) return null
         return runCatching {
-            SavedStop(
-                feedId = unescape(parts[0]),
-                stopId = unescape(parts[1]),
-                name = unescape(parts[2]),
-                lat = parts[3].toDouble(),
-                lon = parts[4].toDouble(),
-                savedAt = Instant.parse(parts[5]),
-                lastRouteId = parts.getOrNull(6)?.takeIf { it.isNotEmpty() }?.let { unescape(it) },
-            )
+            when {
+                // Current: feed, stop, name, lat, lon, savedAt, route. Always seven
+                // fields, because the route slot is written even when empty.
+                parts.size >= 7 -> SavedStop(
+                    feedId = unescape(parts[0]),
+                    stopId = unescape(parts[1]),
+                    name = unescape(parts[2]),
+                    lat = parts[3].toDouble(),
+                    lon = parts[4].toDouble(),
+                    savedAt = Instant.parse(parts[5]),
+                    lastRouteId = parts.getOrNull(6)?.takeIf { it.isNotEmpty() }?.let { unescape(it) },
+                )
+
+                // Legacy, written before stop ids were feed-scoped: stop, name, lat,
+                // lon, savedAt and an optional trailing route. Always six fields, so
+                // seven or more is unambiguously the current format and there is no
+                // overlap to guess at.
+                //
+                // Read rather than dropped, and tagged with the legacy marker so it can
+                // be adopted once the real feed is known. Discarding it would make a
+                // rider's saved list appear to vanish after an update.
+                parts.size == 5 || parts.size == 6 -> SavedStop(
+                    feedId = LEGACY_FEED,
+                    stopId = unescape(parts[0]),
+                    name = unescape(parts[1]),
+                    lat = parts[2].toDouble(),
+                    lon = parts[3].toDouble(),
+                    savedAt = Instant.parse(parts[4]),
+                    lastRouteId = parts.getOrNull(5)?.takeIf { it.isNotEmpty() }?.let { unescape(it) },
+                )
+
+                else -> return null
+            }
         }.getOrNull()
     }
 
@@ -174,8 +241,24 @@ class SavedPlacesStore(private val root: Path) {
     companion object {
         private const val FILE_NAME = "saved-places.txt"
 
+        /** Previous generation, kept so a bad migration is recoverable. */
+        private const val BACKUP_FILE = "saved-places.bak"
+
         /** U+001F. Derived from its code point so it cannot be emptied by an editor. */
         private val SEPARATOR: String = 0x1F.toChar().toString()
+
+        /** Format version, written as a header line and skipped when reading. */
+        private const val HEADER_PREFIX = "#"
+        private const val HEADER = "$HEADER_PREFIX v2 saved-places"
+
+        /**
+         * Placeholder feed for records written before stop ids were feed-scoped.
+         *
+         * Deliberately not a real feed id: a record must never be attributed to an
+         * agency by accident. It is replaced by [adoptFeedScope] once the true feed is
+         * known and actually contains that stop.
+         */
+        const val LEGACY_FEED = ""
 
         fun from(stop: Stop, now: Instant = Instant.now(), lastRouteId: String? = null) = SavedStop(
             feedId = stop.key.feedId.value,
