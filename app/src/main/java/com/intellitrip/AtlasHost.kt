@@ -22,6 +22,7 @@ import com.intellitrip.weather.NwsWeatherAlertProvider
 import com.intellitrip.weather.RainViewerRadarProvider
 import com.intellitrip.weather.WeatherHttpClient
 import com.intellitrip.weather.WeatherRequestContext
+import kotlinx.coroutines.runBlocking
 
 const val FEED_ID = "metro-transit-regional"
 const val DEFAULT_LAT = 44.9765
@@ -91,7 +92,34 @@ class AtlasHost(private val context: Context) {
     }
 
     fun currentRenderer(): com.intellitrip.map.android.MapLibreMapRenderer? = rendererRef?.invoke()
+
+    /**
+     * Seeds the snapshot store from the bundled debug GTFS (assets/offline/debug-gtfs.zip)
+     * when no snapshot exists. Lets the BLU verify V1 flows instantly without a
+     * 4-minute full-feed parse. Debug builds only intent: production should
+     * download the full bundle. Returns true if seeded.
+     */
+    fun seedDebugFeedIfNeeded(): Boolean {
+        if (snapshotStore.activeSnapshot(feedId) != null) return false
+        val payload = runCatching {
+            context.assets.open("offline/debug-gtfs.zip").use { it.readBytes() }
+        }.getOrNull() ?: return false
+        val transport = com.intellitrip.gtfs.GtfsFeedAcquirer.HttpTransport {
+            com.intellitrip.gtfs.GtfsFeedAcquirer.HttpResponse(200, payload, mapOf("ETag" to "debug"))
+        }
+        val refresher = com.intellitrip.gtfs.StaticFeedRefresher(
+            feedId = feedId,
+            sourceUrl = "asset://offline/debug-gtfs.zip",
+            acquirer = com.intellitrip.gtfs.GtfsFeedAcquirer(transport = transport),
+            store = snapshotStore,
+        )
+        return runBlocking(kotlinx.coroutines.Dispatchers.IO) { refresher.refresh() } is com.intellitrip.gtfs.RefreshOutcome.Activated
+    }
+
     val offlineRegistry = OfflineRegistry(snapshotStore)
+    val basemapStore = com.intellitrip.offline.OfflineBasemapStore(
+        context.filesDir.toPath().resolve("basemaps"),
+    )
     val scopeEngine = ScopeEngine()
     val pipeline = TransitRenderPipeline()
     val throttle = RenderUpdateThrottle()
@@ -145,6 +173,10 @@ class AtlasHost(private val context: Context) {
             stopTimes = feed.stopTimes,
             stopTimeSource = source,
             transfers = feed.transfers,
+            calendars = feed.calendars,
+            calendarDates = feed.calendarDates,
+            agencies = feed.agencies,
+            frequencies = feed.frequencies,
         )
     }
 
@@ -155,4 +187,8 @@ class AtlasHost(private val context: Context) {
         scopeEngine = scopeEngine,
         renderPipeline = pipeline,
     )
+
+    /** Engine whose routing provider is the local static planner over [network]. */
+    fun engineForRouting(network: RoutingNetwork): AtlasEngine =
+        engine(AtlasProviders(routing = StaticNetworkPlanner(network)))
 }

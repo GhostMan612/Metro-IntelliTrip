@@ -1,6 +1,7 @@
 package com.intellitrip.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -25,10 +26,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsBus
+import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +60,8 @@ import com.intellitrip.activeJourneyId
 import com.intellitrip.DEFAULT_LAT
 import com.intellitrip.DEFAULT_LON
 import com.intellitrip.domain.Focus
+import com.intellitrip.ui.theme.Radii
+import com.intellitrip.ui.theme.Space
 import com.intellitrip.domain.GeoPoint
 
 /** Which overlay sheet is showing. Only one at a time, or none. */
@@ -114,34 +123,30 @@ fun MapChrome(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(
+        // Filter chips under the search pill (Google Maps pattern): time source,
+        // layer toggles. Transit/Radar open the data sheet / toggle layers.
+        Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .statusBarsPadding()
-                .padding(12.dp),
+                .padding(top = 56.dp, end = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilterChipRow(
+                onTransitClick = { sheet = Sheet.Data },
+                onRadarClick = onLoadRadar,
+            )
+        }
+        // Bottom-end stack: Locate above extended Plan (2 controls, not 4).
+        // Data/Departures live in the peek sheet, not floating FABs.
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .navigationBarsPadding()
+                .padding(end = 12.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.End,
         ) {
-            FloatingActionButton(
-                onClick = { sheet = Sheet.Plan },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(56.dp),
-            ) {
-                Icon(Icons.Default.TravelExplore, contentDescription = "Plan a trip")
-            }
-            FloatingActionButton(
-                onClick = { sheet = if (sheet == Sheet.Data) Sheet.None else Sheet.Data },
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(44.dp),
-            ) { Icon(Icons.Default.Layers, contentDescription = "Data and layers") }
-            FloatingActionButton(
-                onClick = onToggleDepartures,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(44.dp),
-            ) { Icon(Icons.Default.DirectionsBus, contentDescription = "Nearby departures") }
             FloatingActionButton(
                 onClick = onLocateMe,
                 // Tinted when a fix is active, so the button reports state instead
@@ -156,8 +161,16 @@ fun MapChrome(
                 } else {
                     MaterialTheme.colorScheme.onSurface
                 },
-                modifier = Modifier.size(44.dp),
+                modifier = Modifier.size(56.dp),
             ) { Icon(Icons.Default.MyLocation, contentDescription = "Show my location") }
+            ExtendedFloatingActionButton(
+                onClick = { sheet = Sheet.Plan },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+                Icon(Icons.Default.TravelExplore, contentDescription = null)
+                Text("Plan", modifier = Modifier.padding(start = 8.dp))
+            }
         }
 
         Surface(
@@ -179,8 +192,10 @@ fun MapChrome(
 
         AnimatedVisibility(
             visible = sheet != Sheet.None,
-            enter = fadeIn() + slideInVertically { it },
-            exit = fadeOut() + slideOutVertically { it },
+            enter = fadeIn(tween(com.intellitrip.ui.theme.Motion.SelectionMillis)) +
+                slideInVertically(tween(com.intellitrip.ui.theme.Motion.SheetMillis)) { it },
+            exit = fadeOut(tween(com.intellitrip.ui.theme.Motion.SelectionMillis)) +
+                slideOutVertically(tween(com.intellitrip.ui.theme.Motion.SheetMillis)) { it },
             modifier = Modifier.fillMaxSize(),
         ) {
             Scrim(onDismiss = { sheet = Sheet.None }) {
@@ -372,6 +387,7 @@ private fun current(state: AppState, label: String): String =
  * planning UI. Until geocoding exists these presets are the honest minimum: they
  * are real transit destinations with scheduled service.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlanSheet(
     state: AppState,
@@ -391,10 +407,34 @@ private fun PlanSheet(
         return
     }
 
+    var modeWalkOnly by remember { mutableStateOf(false) }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(selected = !modeWalkOnly, onClick = { modeWalkOnly = false }, label = { Text("Transit") })
+        FilterChip(selected = modeWalkOnly, onClick = { modeWalkOnly = true }, label = { Text("Walk only") })
+    }
+    if (modeWalkOnly) {
+        val dist = com.intellitrip.ui.DepartureBoard.metersBetween(state.origin, state.destination)
+        Text(
+            text = if (dist <= 2000) {
+                "Walk ${dist.toInt()} m · ${(dist / 1.35 / 60).toInt()} min (straight line, no routing)"
+            } else {
+                "Outside walk coverage (${dist.toInt()} m). Try transit."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+    }
+
     PlaceRow("From", labelFor(state.origin), state.origin) {
+        if (state.userLocation != null) {
+            PlaceChoice("My location") { onSetOrigin(state.userLocation.position) }
+        }
         PLACE_OPTIONS.forEach { (label, point) -> PlaceChoice(label) { onSetOrigin(point) } }
     }
     PlaceRow("To", labelFor(state.destination), state.destination) {
+        if (state.userLocation != null) {
+            PlaceChoice("My location") { onSetDestination(state.userLocation.position) }
+        }
         PLACE_OPTIONS.forEach { (label, point) -> PlaceChoice(label) { onSetDestination(point) } }
     }
 
@@ -409,7 +449,18 @@ private fun PlanSheet(
             onClick = onPlan,
             enabled = !state.planning,
             modifier = Modifier.weight(2f),
-        ) { Text(if (state.planning) "Planning…" else "Plan trip") }
+        ) {
+            if (state.planning) {
+                Text("Planning…")
+            } else {
+                Text("Plan trip")
+            }
+        }
+    }
+    if (state.planning) {
+        androidx.compose.material3.LinearProgressIndicator(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        )
     }
 
     if (state.journeyWarnings.isNotEmpty()) {
@@ -426,44 +477,136 @@ private fun PlanSheet(
     // Same rule the map uses to decide what to draw, so the highlighted card and the
     // drawn route can never disagree.
     val activeId = state.activeJourneyId()
+    if (!state.planning && state.journeys.isEmpty() && state.staticFeed != null) {
+        Text(
+            text = riderEmptyPlanMessage(state),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+    }
     state.journeys.take(MAX_RESULTS).forEach { journey ->
         val selected = journey.id == activeId
+        val transfersText = if (journey.transferCount == 0) "Direct" else "${journey.transferCount} transfer${if (journey.transferCount > 1) "s" else ""}"
         Surface(
             onClick = { onSelectJourney(journey.id) },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 4.dp),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(Radii.card),
             color = if (selected) {
                 MaterialTheme.colorScheme.secondaryContainer
             } else {
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             },
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = journeyHeadline(journey.departure, journey.arrival, journey.duration.toMinutes()),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                journey.legs.forEach { leg ->
+            Column(modifier = Modifier.padding(Space.md)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = legSummary(leg),
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 4.dp),
+                        text = journeyHeadline(journey.departure, journey.arrival, journey.duration.toMinutes()),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    // Mode icons: walk / transit / walk.
+                    journey.legs.forEach { leg ->
+                        Icon(
+                            imageVector = when (leg) {
+                                is com.intellitrip.domain.Leg.WalkLeg -> Icons.Default.DirectionsWalk
+                                is com.intellitrip.domain.Leg.Transit -> Icons.Default.DirectionsBus
+                                is com.intellitrip.domain.Leg.Other -> Icons.Default.Info
+                            },
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp).padding(horizontal = 2.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text(
+                        text = transfersText,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 6.dp),
                     )
                 }
+                // Inline timeline for the selected journey.
                 if (selected) {
+                    JourneyTimeline(journey)
                     Text(
                         text = "Shown on map",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.padding(top = 6.dp),
                     )
+                } else {
+                    journey.legs.forEach { leg ->
+                        Text(
+                            text = legSummary(leg),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
                 }
             }
         }
     }
 }
+
+private fun riderEmptyPlanMessage(state: AppState): String {
+    val s = state.status.lowercase()
+    return when {
+        "walk" in s || "stops-within" in s -> "No route within walk limit — try a closer destination."
+        "arrive" in s -> "No trip arrives by that time."
+        "unavailable" in s -> "Planning unavailable. ${state.status}"
+        else -> "No route found. Check the endpoints or download schedules."
+    }
+}
+
+@Composable
+private fun JourneyTimeline(journey: com.intellitrip.domain.JourneyOption) {
+    Column(modifier = Modifier.padding(top = 8.dp)) {
+        journey.legs.forEach { leg ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = when (leg) {
+                        is com.intellitrip.domain.Leg.WalkLeg -> Icons.Default.DirectionsWalk
+                        is com.intellitrip.domain.Leg.Transit -> Icons.Default.DirectionsBus
+                        is com.intellitrip.domain.Leg.Other -> Icons.Default.Info
+                    },
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = legSummary(leg),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+            // Transfer confidence dot after each transit leg that has a following transfer.
+            val transfer = journey.transfers.firstOrNull { it.arrivingLeg == leg }
+            if (transfer != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 28.dp, top = 2.dp)) {
+                    Box(
+                        modifier = Modifier.size(10.dp)
+                            .background(confidenceColor(transfer.confidence), CircleShape),
+                    )
+                    Text(
+                        text = "Transfer ${transfer.scheduledBuffer.toMinutes()} min · ${transfer.confidence.name.lowercase()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun confidenceColor(c: com.intellitrip.domain.TransferConfidence): androidx.compose.ui.graphics.Color =
+    when (c) {
+        com.intellitrip.domain.TransferConfidence.HIGH -> androidx.compose.ui.graphics.Color(0xFF087F65)
+        com.intellitrip.domain.TransferConfidence.MEDIUM -> androidx.compose.ui.graphics.Color(0xFFA96B00)
+        com.intellitrip.domain.TransferConfidence.LOW -> androidx.compose.ui.graphics.Color(0xFFB3261E)
+        else -> androidx.compose.ui.graphics.Color(0xFF526478)
+    }
 
 /** One origin/destination row; tapping opens the place picker for that end. */
 @Composable
@@ -500,6 +643,23 @@ private fun PlaceChoice(label: String, onPick: () -> Unit) {
 private fun labelFor(point: GeoPoint): String =
     PLACE_OPTIONS.firstOrNull { it.second == point }?.first
         ?: "%.4f, %.4f".format(point.lat, point.lon)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FilterChipRow(
+    onTransitClick: () -> Unit = {},
+    onRadarClick: () -> Unit = {},
+) {
+    var nowSelected by remember { mutableStateOf(true) }
+    FilterChip(
+        selected = nowSelected,
+        onClick = { nowSelected = true },
+        label = { Text("Now") },
+        trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) },
+    )
+    FilterChip(selected = false, onClick = onTransitClick, label = { Text("Transit") })
+    FilterChip(selected = false, onClick = onRadarClick, label = { Text("Radar") })
+}
 
 @Composable
 private fun SheetRow(label: String, value: String, onClick: () -> Unit) {

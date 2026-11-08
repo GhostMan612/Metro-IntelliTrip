@@ -3,4 +3,8 @@ build/
 local.properties
 *.iml
 .idea/
+.kotlin/
 gradle/gradle-daemon-jvm.properties
+bin/
+*.zip
+!gradle-wrapper.jar

@@ -73,4 +73,6 @@ verification, offline basemap package, RainViewer licensing,
 - Routing topology + OTP deploy: docs/OTP_DEPLOYMENT.md
 - Constraints: docs/CONSTRAINTS.md
 - Domain: docs/DOMAIN_MODEL.md
+- Visual polish (3 phases, tests at gate only): docs/blueprints/VISUAL-00-overview.md,
+  VISUAL-01-foundation.md, VISUAL-02-rider-tasks.md, VISUAL-03-motion-ship.md
 - ADRs: docs/ADR/

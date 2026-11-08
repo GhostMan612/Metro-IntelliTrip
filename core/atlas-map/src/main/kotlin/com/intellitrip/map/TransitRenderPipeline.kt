@@ -41,6 +41,8 @@ class TransitRenderPipeline(
             .filter { input.camera.bounds.contains(it.location) }
             .map { StopRender(it.key.stopId, it.key.feedId.value, it.name, it.location.lon, it.location.lat) }
 
+        // Route colors by route id, for per-route shape/vehicle tinting.
+        val colorByRouteId = input.routes.associate { it.key.routeId to it.color }
         // Route geometry is large (hundreds of thousands of points system-wide), so
         // shapes are culled to the viewport and dropped entirely when clustered.
         val shapeLines = when (bucket) {
@@ -50,9 +52,13 @@ class TransitRenderPipeline(
                 if (clipped.size < 2) {
                     null
                 } else {
+                    // Shape->route mapping is feed-dependent; color is best-effort.
+                    // When unknown, GeoJSON omits the property and the renderer
+                    // falls back to its default blue.
                     ShapeLineRender(
                         id = shape.key.shapeId,
                         coordinates = simplify(clipped).map { listOf(it.lon, it.lat) },
+                        routeColor = null,
                     )
                 }
             }
@@ -72,6 +78,7 @@ class TransitRenderPipeline(
                     lat = vehicle.position.lat,
                     bearing = vehicle.bearing,
                     vehicleType = vehicle.vehicleType,
+                    routeColor = vehicle.routeKey?.let { colorByRouteId[it.routeId] },
                     // Prefer fetch time when known: some operators omit per-vehicle
                     // timestamps and reuse a stale header value, which would otherwise
                     // mark every vehicle stale the instant it is fetched. Without a

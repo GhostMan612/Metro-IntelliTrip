@@ -20,7 +20,7 @@ Providers
 ```
 
 ## Current modules
-- `app/` — Android Compose shell (non-networked placeholder).
+- `app/` — Android Compose shell: map, planner, departure board, saved places. `AtlasHost.kt` composes all providers; `IntelliTripViewModel.kt` holds screen state and explicit network actions (no provider is contacted at startup).
 - `core/atlas-domain/` — pure Kotlin domain models (identity, geo, scope, static transit, `GtfsServiceTime`).
 - `core/atlas-contracts/` — pure Kotlin provider contracts (`ProviderResult`, `TransitStaticProvider`, scope resolver).
 - `core/atlas-gtfs-static/` — pure Kotlin static GTFS adapter (ZIP, CSV, validation, acquisition, snapshots).

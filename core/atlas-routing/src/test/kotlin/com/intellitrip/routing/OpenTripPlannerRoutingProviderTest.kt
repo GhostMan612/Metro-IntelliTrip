@@ -117,6 +117,42 @@ class OpenTripPlannerRoutingProviderTest {
     }
 
     @Test
+    fun departureUrlFormatsCalendarDateAndTime() {
+        val provider = OpenTripPlannerRoutingProvider(
+            baseUrl = "https://otp.example.org/",
+            feedId = otpFeedId,
+            transport = { "" },
+        )
+        val url = provider.planUrl(
+            otpRequest.copy(departAt = java.time.Instant.parse("2026-11-12T14:30:00Z")),
+        )
+        // 14:30 UTC is 08:30 in America/Chicago (CST, UTC-6).
+        assertTrue(url.contains("date=20261112"), url)
+        assertTrue(url.contains("time=0830"), url)
+    }
+
+    @Test
+    fun twoTransitLegsProduceTransferConnection() {
+        val body = """
+            {"plan":{"itineraries":[{
+              "id":"it-2","startTime":1797090000000,"endTime":1797093600000,
+              "legs":[
+                {"startTime":1797090000000,"endTime":1797090600000,"transitLeg":true,"mode":"BUS","tripId":"T-1",
+                 "from":{"stopId":"A","lat":44.97,"lon":-93.26},"to":{"stopId":"B","lat":44.98,"lon":-93.26},
+                 "route":{"shortName":"1"}},
+                {"startTime":1797090900000,"endTime":1797091800000,"transitLeg":true,"mode":"BUS","tripId":"T-2",
+                 "from":{"stopId":"B","lat":44.98,"lon":-93.26},"to":{"stopId":"C","lat":44.99,"lon":-93.26},
+                 "route":{"shortName":"2"}},
+                {"startTime":1797091800000,"endTime":1797093600000,"transitLeg":false,"mode":"WALK",
+                 "from":{"stopId":"C","lat":44.99,"lon":-93.26},"to":{"stopId":"D","lat":44.995,"lon":-93.26}}
+              ]}]}}
+        """.trimIndent()
+        val journey = successJourneys(body).single()
+        assertEquals(1, journey.transferCount)
+        assertEquals(300L, journey.transfers.single().scheduledBuffer.seconds)
+    }
+
+    @Test
     fun departureUrlCarriesDateAndTime() {
         val provider = OpenTripPlannerRoutingProvider(
             baseUrl = "https://otp.example.org/",

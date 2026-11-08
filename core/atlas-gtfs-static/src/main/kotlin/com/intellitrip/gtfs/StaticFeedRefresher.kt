@@ -60,6 +60,15 @@ class StaticFeedRefresher(
 
             is GtfsFeedAcquirer.AcquisitionResult.Failure -> RefreshOutcome.Rejected(feedId, acquisition.message)
             is GtfsFeedAcquirer.AcquisitionResult.Updated -> {
+                val etag = acquisition.etag
+                val lastModified = acquisition.lastModified
+                // Stage to disk first so the compressed payload can be released
+                // before uncompressed tables peak (low-end OOM fix).
+                val stagedPayload = try {
+                    store.writeStagedPayload(acquisition.payload)
+                } catch (e: Exception) {
+                    return RefreshOutcome.Rejected(feedId, e.message ?: "Storage failed")
+                }
                 val metadata = FeedMetadata(
                     feedId = feedId,
                     publisherName = null,
@@ -73,24 +82,28 @@ class StaticFeedRefresher(
                     sourceUrl = sourceUrl,
                 )
                 val feed = try {
-                    val files = GtfsArchive.read(acquisition.payload).toMutableMap()
-                    // Stop times dominate the feed's memory profile, so they are
-                    // streamed into a disk-backed index instead of being retained.
+                    // Parse by streaming each ZIP entry as an InputStream from the
+                    // staged file. No payload ByteArray, no per-table buffers.
                     val stopTimeSink = store.newStopTimeSink()
                     val parsed = try {
-                        GtfsStaticParser.parse(feedId, files, metadata, stopTimeSink)
+                        GtfsStaticParser.parseFromZip(feedId, stagedPayload, metadata, stopTimeSink)
                     } finally {
                         stopTimeSink.close()
                     }
                     parsed
                 } catch (e: Exception) {
+                    runCatching { java.nio.file.Files.deleteIfExists(stagedPayload) }
                     return RefreshOutcome.Rejected(feedId, e.message ?: "Validation failed")
                 }
                 // Only now that parsing succeeded is the snapshot activated. Recording
                 // the new validators before this point would let a rejected payload
                 // suppress the retry that would have replaced it.
-                store.activate(feedId, acquisition.payload, metadata)
-                store.recordValidators(feedId, FeedValidators(acquisition.etag, acquisition.lastModified))
+                // Payload array is still referenced here; release the archive
+                // reference via letting the acquisition go out of scope next.
+                store.activateStaged(feedId, stagedPayload, metadata)
+                // Binary cache for cold start (best-effort).
+                runCatching { store.writeCache(feedId, feed) }
+                store.recordValidators(feedId, FeedValidators(etag, lastModified))
                 RefreshOutcome.Activated(feed)
             }
         }

@@ -16,13 +16,6 @@
 # MapLibre loads its native libraries by name at runtime.
 -keepclasseswithmembernames class * { native <methods>; }
 
-# Hilt / Dagger generate code that references members reflectively at startup.
--keep class dagger.hilt.** { *; }
--keep class * extends dagger.hilt.android.internal.managers.ViewComponentManager$FragmentContextWrapper
--keepclasseswithmembernames class * { @javax.inject.Inject <init>(...); }
--keepclasseswithmembernames class * { @javax.inject.Inject <fields>; }
--dontwarn dagger.hilt.**
-
 # Retrofit builds its API implementation from the interface's generic signatures, which
 # are only present in the bytecode signature attribute.
 -keepattributes Signature, InnerClasses, EnclosingMethod, RuntimeVisibleAnnotations

@@ -187,6 +187,15 @@ class DefaultScopeResolver(private val policy: ScopePolicy = ScopePolicy()) : Sc
         return zoom.coerceIn(8.0, 17.0)
     }
 
+    /**
+     * Inverse of [zoomForRadius]: the radius that maps to [zoom].
+     * Viewport gestures must use this so zoom -> meters -> zoom round-trips.
+     */
+    fun radiusForZoom(zoom: Double): Double {
+        val clamped = zoom.coerceIn(8.0, 17.0)
+        return 50.0 * Math.pow(10.0, (17.0 - clamped) / 1.2)
+    }
+
     fun boundsAround(center: GeoPoint, meters: Double): LatLngBounds {
         val latDelta = meters / 111_320.0
         val lonDelta = meters / (111_320.0 * Math.cos(Math.toRadians(center.lat)).coerceAtLeast(0.01))

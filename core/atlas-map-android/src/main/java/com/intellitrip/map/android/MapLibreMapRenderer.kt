@@ -16,6 +16,7 @@ import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.RasterLayer
+import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.android.style.sources.RasterSource
 
@@ -306,14 +307,17 @@ PropertyFactory.lineColor("#DC2626"),
                             PropertyFactory.circleRadius(7f),
                             // White core with a blue ring reads clearly over both the
                             // pale basemap and the darker vehicle clusters. A stale fix
-                            // goes hollow, so "last known" cannot be mistaken for live.
-                            PropertyFactory.circleColor(
+                            // goes hollow (transparent fill), so "last known" cannot be
+                            // mistaken for live. MapLibre colors are #RRGGBB only —
+                            // alpha goes via circle-opacity, never #RRGGBBAA.
+                            PropertyFactory.circleColor(Expression.literal("#FFFFFF")),
+                            PropertyFactory.circleOpacity(
                                 Expression.match(
                                     Expression.get("fresh"),
-                                    Expression.literal("#FFFFFF"),
+                                    Expression.literal(1f),
                                     Expression.stop(
-                                        Expression.literal(false),
-                                        Expression.literal("#FFFFFF00"),
+                                        Expression.literal(0),
+                                        Expression.literal(0f),
                                     ),
                                 )
                             ),
@@ -324,7 +328,7 @@ PropertyFactory.lineColor("#DC2626"),
                                     Expression.get("fresh"),
                                     Expression.literal("#1D4ED8"),
                                     Expression.stop(
-                                        Expression.literal(false),
+                                        Expression.literal(0),
                                         Expression.literal("#9CA3AF"),
                                     ),
                                 )
@@ -374,22 +378,46 @@ PropertyFactory.lineColor("#DC2626"),
             if (style.getSource(name) == null) style.addSource(GeoJsonSource(name))
         }
         // Remove-then-add so a restyled map does not retain layers bound to the old style.
-        listOf(SHAPES_LAYER, STOPS_LAYER, CLUSTERS_LAYER, VEHICLES_LAYER, ROUTES_LAYER).forEach {
+        listOf(SHAPES_CASING_LAYER, SHAPES_LAYER, STOPS_LAYER, CLUSTERS_LAYER, VEHICLES_LAYER, VEHICLES_GLYPH_LAYER, ROUTES_CASING_LAYER, ROUTES_LAYER, ROUTES_WALK_LAYER).forEach {
             if (style.getLayer(it) != null) style.removeLayer(it)
         }
+        // Oriented vehicle glyph icon (drawn programmatically, no raster asset).
+        if (style.getImage(VEHICLE_ICON) == null) {
+            style.addImage(VEHICLE_ICON, makeVehicleIcon())
+        }
 
+        // White casing under colored route lines so colors read over any basemap.
+        style.addLayer(
+            LineLayer(SHAPES_CASING_LAYER, SHAPES_SOURCE).withProperties(
+                PropertyFactory.lineColor("#FFFFFF"),
+                PropertyFactory.lineWidth(4f),
+                PropertyFactory.lineOpacity(0.9f),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            )
+        )
         style.addLayer(
             LineLayer(SHAPES_LAYER, SHAPES_SOURCE).withProperties(
-                PropertyFactory.lineColor("#0B5FA5"),
-                PropertyFactory.lineWidth(2f),
-                PropertyFactory.lineOpacity(0.7f),
+                // Per-route color when the feed supplied one; fallback blue.
+                PropertyFactory.lineColor(
+                    Expression.coalesce(
+                        Expression.get("routeColor"),
+                        Expression.literal("#0B5FA5"),
+                    )
+                ),
+                PropertyFactory.lineWidth(4f),
+                PropertyFactory.lineOpacity(0.85f),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
             )
         )
         style.addLayer(
             CircleLayer(STOPS_LAYER, STOPS_SOURCE).withProperties(
-                PropertyFactory.circleRadius(3f),
-                PropertyFactory.circleColor(Expression.literal("#444444")),
-                PropertyFactory.circleOpacity(0.6f),
+                PropertyFactory.circleRadius(4f),
+                PropertyFactory.circleColor(Expression.literal("#FFFFFF")),
+                PropertyFactory.circleOpacity(1f),
+                PropertyFactory.circleStrokeWidth(1.5f),
+                PropertyFactory.circleStrokeColor(Expression.literal("#122033")),
             )
         )
         style.addLayer(
@@ -414,38 +442,112 @@ PropertyFactory.lineColor("#DC2626"),
                 PropertyFactory.circleStrokeColor("#FFFFFF"),
             )
         )
+        // Halo under oriented glyphs.
         style.addLayer(
             CircleLayer(VEHICLES_LAYER, VEHICLES_SOURCE).withProperties(
-                PropertyFactory.circleRadius(5f),
-                PropertyFactory.circleColor(
-                    // `match`, not `step`: `stale` is a boolean and step compares
-                    // numbers. Colors must be `literal` — `get` looks up a feature
-                    // property, so `get("#0078D4")` finds nothing and paints black.
-                    Expression.match(
-                        Expression.get("stale"),
-                        Expression.literal("#0078D4"),
-                        Expression.stop(Expression.literal(true), Expression.literal("#9CA3AF")),
-                    )
-                ),
-                PropertyFactory.circleStrokeWidth(1.5f),
-                PropertyFactory.circleStrokeColor(Expression.literal("#FFFFFF")),
+                PropertyFactory.circleRadius(7f),
+                PropertyFactory.circleColor(Expression.literal("#FFFFFF")),
+                PropertyFactory.circleOpacity(0.9f),
             )
         )
-        // Planned journeys sit above everything so a route reads clearly over the network.
+        style.addLayer(
+            SymbolLayer(VEHICLES_GLYPH_LAYER, VEHICLES_SOURCE).withProperties(
+                PropertyFactory.iconImage(VEHICLE_ICON),
+                PropertyFactory.iconRotate(
+                    Expression.coalesce(Expression.get("bearing"), Expression.literal(0.0))
+                ),
+                PropertyFactory.iconSize(
+                    Expression.match(
+                        Expression.get("type"),
+                        Expression.literal(0.8f),
+                        Expression.stop(Expression.literal("RAIL"), Expression.literal(1f)),
+                    )
+                ),
+                PropertyFactory.iconColor(
+                    Expression.match(
+                        Expression.get("stale"),
+                        Expression.coalesce(
+                            Expression.get("routeColor"),
+                            Expression.literal("#0078D4"),
+                        ),
+                        Expression.stop(Expression.literal(1), Expression.literal("#9CA3AF")),
+                    )
+                ),
+                PropertyFactory.iconOpacity(
+                    Expression.match(
+                        Expression.get("interpolated"),
+                        Expression.literal(1f),
+                        Expression.stop(Expression.literal(1), Expression.literal(0.6f)),
+                    )
+                ),
+                PropertyFactory.iconAllowOverlap(true),
+                PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+                PropertyFactory.iconHaloWidth(1.5f),
+                PropertyFactory.iconHaloColor(Expression.literal("#FFFFFF")),
+            )
+        )
+        // Planned journeys sit above everything. Casing + red transit band +
+        // dashed walk legs (kind == "walk").
+        style.addLayer(
+            LineLayer(ROUTES_CASING_LAYER, ROUTES_SOURCE).withProperties(
+                PropertyFactory.lineColor("#FFFFFF"),
+                PropertyFactory.lineWidth(10f),
+                PropertyFactory.lineOpacity(0.9f),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            ).withFilter(Expression.eq(Expression.get("kind"), Expression.literal("transit")))
+        )
         style.addLayer(
             LineLayer(ROUTES_LAYER, ROUTES_SOURCE).withProperties(
                 PropertyFactory.lineColor(Expression.literal("#DC2626")),
-                PropertyFactory.lineWidth(5f),
-                PropertyFactory.lineOpacity(0.85f),
+                PropertyFactory.lineWidth(8f),
+                PropertyFactory.lineOpacity(0.95f),
                 PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
                 PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-            )
+            ).withFilter(Expression.eq(Expression.get("kind"), Expression.literal("transit")))
+        )
+        style.addLayer(
+            LineLayer(ROUTES_WALK_LAYER, ROUTES_SOURCE).withProperties(
+                PropertyFactory.lineColor(Expression.literal("#526478")),
+                PropertyFactory.lineWidth(3f),
+                PropertyFactory.lineOpacity(0.9f),
+                PropertyFactory.lineDasharray(Expression.literal(arrayOf(2f, 2f))),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+            ).withFilter(Expression.eq(Expression.get("kind"), Expression.literal("walk")))
         )
         return true
     }
 
     private fun updateSource(source: GeoJsonSource?, geoJson: String) {
         source?.setGeoJson(geoJson)
+    }
+
+    /** White north-pointing arrow; tinted per-feature via `icon-color`. */
+    private fun makeVehicleIcon(): android.graphics.Bitmap {
+        val size = 48
+        val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        val fill = android.graphics.Paint().apply {
+            color = android.graphics.Color.WHITE
+            style = android.graphics.Paint.Style.FILL
+            isAntiAlias = true
+        }
+        val path = android.graphics.Path().apply {
+            moveTo(24f, 6f)
+            lineTo(38f, 36f)
+            lineTo(24f, 29f)
+            lineTo(10f, 36f)
+            close()
+        }
+        canvas.drawPath(path, fill)
+        val outline = android.graphics.Paint().apply {
+            color = android.graphics.Color.BLACK
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = 3f
+            isAntiAlias = true
+        }
+        canvas.drawPath(path, outline)
+        return bitmap
     }
 
     /**
@@ -570,7 +672,7 @@ PropertyFactory.lineColor("#DC2626"),
          * the stops. Querying in reverse would make every tap near a busy stop select
          * the stop instead of the bus the rider aimed at.
          */
-        val SELECTABLE_LAYERS = listOf(ROUTES_LAYER, VEHICLES_LAYER, STOPS_LAYER, CLUSTERS_LAYER)
+        val SELECTABLE_LAYERS = listOf(ROUTES_LAYER, ROUTES_WALK_LAYER, VEHICLES_GLYPH_LAYER, VEHICLES_LAYER, STOPS_LAYER, CLUSTERS_LAYER)
         const val VEHICLES_SOURCE = "intellitrip-vehicles"
         const val CLUSTERS_SOURCE = "intellitrip-clusters"
         const val STOPS_SOURCE = "intellitrip-stops"
@@ -579,12 +681,17 @@ PropertyFactory.lineColor("#DC2626"),
         const val CLUSTERS_LAYER = "intellitrip-cluster-layer"
         const val STOPS_LAYER = "intellitrip-stop-layer"
         const val SHAPES_LAYER = "intellitrip-shape-layer"
+        const val SHAPES_CASING_LAYER = "intellitrip-shape-casing-layer"
         const val RADAR_SOURCE = "intellitrip-radar"
         const val RADAR_LAYER = "intellitrip-radar-layer"
         const val ALERTS_SOURCE = "intellitrip-weather-alerts"
         const val ALERTS_LAYER = "intellitrip-weather-alert-layer"
         const val ROUTES_SOURCE = "intellitrip-routes"
         const val ROUTES_LAYER = "intellitrip-route-layer"
+        const val ROUTES_CASING_LAYER = "intellitrip-route-casing-layer"
+        const val ROUTES_WALK_LAYER = "intellitrip-route-walk-layer"
+        const val VEHICLES_GLYPH_LAYER = "intellitrip-vehicle-glyph-layer"
+        const val VEHICLE_ICON = "intellitrip-vehicle-arrow"
         const val USER_LOCATION_SOURCE = "intellitrip-user-location"
         const val USER_LOCATION_HALO_LAYER = "intellitrip-user-location-halo"
         const val USER_LOCATION_DOT_LAYER = "intellitrip-user-location-dot"

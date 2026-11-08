@@ -83,6 +83,25 @@ class OfflineRegistry(
      */
     fun loadStaticFeed(feedId: FeedId): StaticFeed? {
         val snapshot = store.activeSnapshot(feedId) ?: return null
+        // Fast path: binary cache (no CSV parse). Validated against snapshot hash.
+        store.cachePath(feedId)?.let { cache ->
+            com.intellitrip.gtfs.StaticFeedBinaryCache.read(cache)?.let { cached ->
+                if (cached.metadata.hash == snapshot.metadata.hash) return cached
+            }
+        }
+        val payloadPath = store.payloadPath(feedId)
+        if (payloadPath != null) {
+            val parsed = runCatching {
+                GtfsStaticParser.parseFromZip(
+                    feedId,
+                    payloadPath,
+                    snapshot.metadata,
+                    com.intellitrip.gtfs.StopTimeSink { },
+                )
+            }.getOrNull() ?: return null
+            runCatching { store.writeCache(feedId, parsed) }
+            return parsed
+        }
         val payload = runCatching { store.readPayload(feedId) }.getOrNull() ?: return null
         val files = runCatching { GtfsArchive.read(payload).toMutableMap() }.getOrNull() ?: return null
         return runCatching {

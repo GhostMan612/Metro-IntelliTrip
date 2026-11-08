@@ -84,6 +84,15 @@ val MinTouchTarget: Dp = 48.dp
 object Motion {
     const val SelectionMillis = 180
     const val SheetMillis = 260
+    const val CameraMillis = 600
+    const val VehicleMillis = 1000
+}
+
+/** Scrim + surface tokens shared by sheets and chrome. */
+object ChromeTokens {
+    val Scrim: Color = Color.Black.copy(alpha = 0.4f)
+    val SurfaceContainerLight: Color = Color(0xFFE8EEF4)
+    val SurfaceContainerDark: Color = Color(0xFF24344A)
 }
 
 /**
@@ -166,6 +175,12 @@ private fun typeScale(dark: Boolean) = Typography(
         fontWeight = FontWeight.Medium,
         fontSize = 44.sp,
         lineHeight = 50.sp,
+    ),
+    displayMedium = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Medium,
+        fontSize = 34.sp,
+        lineHeight = 40.sp,
     ),
     headlineMedium = TextStyle(
         fontFamily = FontFamily.Default,

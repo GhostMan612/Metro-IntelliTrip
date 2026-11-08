@@ -219,6 +219,39 @@ class DepartureBoardTest {
     }
 
     @Test
+    fun weekdayServiceIsInactiveOnSaturday() {
+        val svc = ServiceKey(feedId, "WEEKDAY")
+        val calendars = listOf(
+            com.intellitrip.domain.Calendar(
+                serviceKey = svc,
+                daysOfWeek = setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY, java.time.DayOfWeek.FRIDAY),
+                startDate = java.time.LocalDate.of(2026, 1, 1),
+                endDate = java.time.LocalDate.of(2026, 12, 31),
+            ),
+        )
+        // 2026-10-03 is a Saturday, 2026-10-05 is a Monday.
+        assertFalse(DepartureBoard.isServiceActive(calendars, emptyList(), svc, java.time.LocalDate.of(2026, 10, 3)))
+        assertTrue(DepartureBoard.isServiceActive(calendars, emptyList(), svc, java.time.LocalDate.of(2026, 10, 5)))
+        val removed = listOf(
+            com.intellitrip.domain.CalendarDate(svc, java.time.LocalDate.of(2026, 10, 5), com.intellitrip.domain.ServiceExceptionType.REMOVED),
+        )
+        assertFalse(DepartureBoard.isServiceActive(calendars, removed, svc, java.time.LocalDate.of(2026, 10, 5)))
+        assertTrue(DepartureBoard.isServiceActive(emptyList(), emptyList(), svc, java.time.LocalDate.of(2026, 10, 3)))
+    }
+
+    @Test
+    fun liveDepartureDoesNotFabricateVehicleTimestamp() {
+        val stop = stop("S1", "First", 44.97, -93.26)
+        val reported = now.plusSeconds(60)
+        val result = board(
+            listOf(stop),
+            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now.plusSeconds(600), reportedTime = reported))),
+            liveTrips = setOf("T1"),
+        ).single()
+        assertEquals(reported, result.vehicleUpdatedAt)
+    }
+
+    @Test
     fun dueIsUsedForASubMinuteWait() {
         val stop = stop("S1", "First", 44.97, -93.26)
         val result = board(

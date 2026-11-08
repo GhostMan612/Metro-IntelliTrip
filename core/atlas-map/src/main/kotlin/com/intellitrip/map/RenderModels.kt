@@ -18,6 +18,8 @@ data class RenderInput(
     val shapes: List<Shape>,
     val snapshotAt: Instant,
     val previousVehicles: List<Vehicle> = emptyList(),
+    /** Route colors for vehicle/shape tinting. Empty = fallback colors. */
+    val routes: List<com.intellitrip.domain.Route> = emptyList(),
     /**
      * When this data was fetched from the provider.
      *
@@ -57,6 +59,8 @@ data class VehicleRender(
     val vehicleType: VehicleType,
     val stale: Boolean,
     val interpolated: Boolean,
+    /** GTFS route_color as #RRGGBB, null when the feed has none. */
+    val routeColor: String? = null,
 )
 
 data class ClusterRender(
@@ -84,7 +88,12 @@ data class StopRender(
     val key: String get() = "$feedId/$id"
 }
 
-data class ShapeLineRender(val id: String, val coordinates: List<List<Double>>)
+data class ShapeLineRender(
+    val id: String,
+    val coordinates: List<List<Double>>,
+    /** GTFS route_color as #RRGGBB for the route owning this shape. */
+    val routeColor: String? = null,
+)
 
 /**
  * A planned journey's transit geometry, drawn as its own layer above the network.
@@ -95,4 +104,6 @@ data class ShapeLineRender(val id: String, val coordinates: List<List<Double>>)
 data class RouteLine(
     val id: String,
     val coordinates: List<DoubleArray>,
+    /** "walk", "transit", or "other" — walk legs render dashed. */
+    val kind: String = "transit",
 )

@@ -34,6 +34,13 @@ jobs:
       - name: Unit tests
         run: bash ./gradlew test --console=plain
 
+      - name: Real-feed verification (Metro Transit GTFS)
+        run: |
+          curl -sSf -o gtfs-metro-transit.zip https://svc.metrotransit.org/mtgtfs/gtfs.zip
+          ls -lh gtfs-metro-transit.zip
+          bash ./gradlew :core:atlas-gtfs-static:test --tests "*RealFeedSmokeTest" --rerun-tasks -Dintellitrip.gtfs.fixture=gtfs-metro-transit.zip --console=plain
+          bash ./gradlew :core:atlas-routing:test --tests "*RealFeedPlanTimeTest" --rerun-tasks -Dintellitrip.gtfs.fixture=gtfs-metro-transit.zip --console=plain
+
       - name: Android lint
         run: bash ./gradlew lint --console=plain
 

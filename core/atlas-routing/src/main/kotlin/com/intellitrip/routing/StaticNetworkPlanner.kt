@@ -3,9 +3,13 @@ package com.intellitrip.routing
 import com.intellitrip.contracts.FreshnessMetadata
 import com.intellitrip.contracts.ProviderResult
 import com.intellitrip.contracts.RoutingProvider
+import com.intellitrip.domain.Agency
 import com.intellitrip.domain.AgencyId
+import com.intellitrip.domain.Calendar
+import com.intellitrip.domain.CalendarDate
 import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.FeedMetadata
+import com.intellitrip.domain.Frequency
 import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.GtfsServiceTime
 import com.intellitrip.domain.JourneyOption
@@ -14,6 +18,7 @@ import com.intellitrip.domain.RealtimeStatus
 import com.intellitrip.domain.Route
 import com.intellitrip.domain.RouteKey
 import com.intellitrip.domain.ScheduleRelationship
+import com.intellitrip.domain.ServiceCalendar
 import com.intellitrip.domain.ServiceKey
 import com.intellitrip.domain.Stop
 import com.intellitrip.domain.StopKey
@@ -81,10 +86,16 @@ class RoutingNetwork(
     private val stopTimeSource: StopTimeSource? = null,
     val transfers: List<Transfer> = emptyList(),
     val activeServiceDates: Set<LocalDate> = emptySet(),
+    val calendars: List<Calendar> = emptyList(),
+    val calendarDates: List<CalendarDate> = emptyList(),
+    val agencies: List<Agency> = emptyList(),
+    val frequencies: List<Frequency> = emptyList(),
 ) {
     val stopsByKey: Map<StopKey, Stop> = stops.associateBy { it.key }
     val tripsByKey: Map<TripKey, Trip> = trips.associateBy { it.key }
     val routesByKey: Map<RouteKey, Route> = routes.associateBy { it.key }
+    val frequenciesByTrip: Map<TripKey, List<Frequency>> =
+        frequencies.groupBy { it.tripKey }
 
     /** Stop times stay ordered so boarding/alighting sequences are stable. */
     val stopTimesByTrip: Map<TripKey, List<StopTime>> by lazy {
@@ -119,13 +130,17 @@ class RoutingNetwork(
         return keys.mapNotNull { tripsByKey[it] }
     }
 
+    /** Zone of the first agency that declares one, for service-date conversion. */
+    fun agencyZone(fallback: ZoneId = ZoneId.of("America/Chicago")): ZoneId =
+        agencies.firstOrNull { it.timezone != null }?.timezone ?: fallback
+
+    /** Delegates to [ServiceCalendar] — the planner and board share one implementation. */
     fun isActive(serviceKey: ServiceKey, date: LocalDate): Boolean =
-        activeServiceDates.isEmpty() || date in activeServiceDates && activeServiceDates.contains(date)
+        ServiceCalendar(calendars, calendarDates, activeServiceDates).isActive(serviceKey, date)
 
     fun servicesOn(date: LocalDate): Set<ServiceKey> =
-        if (activeServiceDates.isEmpty()) emptySet() else activeServiceDates.filter { it == date }
-            .map { ServiceKey(feedId, "any") }
-            .toSet()
+        ServiceCalendar(calendars, calendarDates, activeServiceDates)
+            .servicesOn(date, trips.mapTo(mutableSetOf()) { it.serviceKey })
 }
 
 /**
@@ -167,6 +182,9 @@ class StaticNetworkPlanner(
     override val providerId: String = "static-network",
 ) : RoutingProvider {
 
+    /** Feed truth wins: the network's agency timezone overrides the default. */
+    private val effectiveZone: ZoneId get() = network.agencyZone(agencyZone)
+
     override suspend fun plan(request: TripPlanRequest): ProviderResult<List<JourneyOption>> =
         planWithRealtime(request, emptyList())
 
@@ -175,7 +193,7 @@ class StaticNetworkPlanner(
         updates: List<TripUpdate>,
     ): ProviderResult<List<JourneyOption>> {
         val earliest = request.departAt ?: Instant.now().plusSeconds(60)
-        val serviceDate = LocalDate.ofInstant(earliest, agencyZone)
+        val serviceDate = LocalDate.ofInstant(earliest, effectiveZone)
 
 val originStops = nearestStops(request.origin, request.maxWalkMeters, maxStopsPerEnd)
         val destinationStops = nearestStops(request.destination, request.maxWalkMeters, maxStopsPerEnd)
@@ -196,7 +214,20 @@ val options = buildOptions(
             earliest.plusSeconds(departureWindowMinutes * 60),
             updates,
         )
-        return ProviderResult.Success(options.sortedBy { it.arrival }.take(maxJourneys), freshness())
+        val sorted = options.sortedBy { it.arrival }
+        val arriveBy = request.arriveBy
+        if (arriveBy != null) {
+            val feasible = sorted.filter { !it.arrival.isAfter(arriveBy) }
+            if (feasible.isEmpty() && sorted.isNotEmpty()) {
+                return ProviderResult.PartialResult(
+                    data = emptyList(),
+                    missing = listOf("arrive-by-unachievable"),
+                    freshness = freshness(),
+                )
+            }
+            return ProviderResult.Success(feasible.take(maxJourneys), freshness())
+        }
+        return ProviderResult.Success(sorted.take(maxJourneys), freshness())
     }
 
     private fun freshness(): FreshnessMetadata = FreshnessMetadata(
@@ -224,6 +255,7 @@ serviceDate: LocalDate,
         val candidates = ArrayList<Candidate>()
         for (origin in originStops) {
             for (trip in network.tripsServing(origin.stop.key)) {
+                if (!network.isActive(trip.serviceKey, serviceDate)) continue
                 val times = network.stopTimesFor(trip.key)
                 if (times.isEmpty()) continue
                 val boardIndex = times.indexOfFirst { it.stopKey == origin.stop.key }
@@ -237,19 +269,16 @@ serviceDate: LocalDate,
 
                 for (boardIndexOnTrip in boardIndex..times.size) {
                     if (boardIndexOnTrip >= times.size) break
-                    val board = times[boardIndexOnTrip]
-                    val boardInstant =
-                        board.departureTime?.instantOn(serviceDate, agencyZone) ?: continue
-                    // Departures outside the window are not "next departures"; without
-                    // this every later run of the same trip is expanded as a candidate.
-                    if (boardInstant.isBefore(earliest)) continue
-                    if (boardInstant.isAfter(horizonEnd)) break
-
                     val alightIndex = alightIndexes.firstOrNull { it > boardIndexOnTrip } ?: break
-                    if (maxTransfers >= 1) {
-                        candidates += Candidate(origin, board, alightIndex, times)
+                    // Frequency trips repeat at headway intervals; expand each
+                    // repetition as its own candidate (bounded, window-filtered).
+                    for ((board, shiftedTimes) in expandedRuns(trip.key, times, boardIndexOnTrip)) {
+                        val boardInstant =
+                            board.departureTime?.instantOn(serviceDate, effectiveZone) ?: continue
+                        if (boardInstant.isBefore(earliest)) continue
+                        if (boardInstant.isAfter(horizonEnd)) break
+                        candidates += Candidate(origin, board, alightIndex, shiftedTimes)
                     }
-                    candidates += Candidate(origin, board, alightIndex, times)
                 }
             }
         }
@@ -257,12 +286,18 @@ serviceDate: LocalDate,
         // Earliest departures first, then take only as many as we are prepared to
         // expand. This is what keeps a system-wide feed responsive.
         val chosen = candidates
-            .sortedBy { it.board.departureTime?.instantOn(serviceDate, agencyZone) }
+            .sortedBy { it.board.departureTime?.instantOn(serviceDate, effectiveZone) }
             .take(maxCandidates)
         for (candidate in chosen) {
             val origin = candidate.origin
             val board = candidate.board
             val alight = candidate.times[candidate.alightIndex]
+            if (maxTransfers >= 2) {
+                val onward2 = doubleOnwardJourney(
+                    request, origin, board, alight, destinationStops, serviceDate, updates,
+                )
+                if (onward2 != null) options += onward2
+            }
             if (maxTransfers >= 1) {
                 val onward = onwardJourney(
                     request, origin, board, alight, destinationStops, serviceDate, updates,
@@ -285,6 +320,49 @@ serviceDate: LocalDate,
         val times: List<StopTime>,
     )
 
+    /**
+     * Expands a template trip into its actual runs.
+     *
+     * Frequency-based trips repeat their template stop times every
+     * `headwaySeconds` between `startTime` and `endTime`, anchored at the
+     * template's first departure. Without frequencies this is the single
+     * template run. Bounded to 50 repetitions per window for safety.
+     */
+    private fun expandedRuns(
+        tripKey: TripKey,
+        times: List<StopTime>,
+        boardIndex: Int,
+    ): List<Pair<StopTime, List<StopTime>>> {
+        val freqs = network.frequenciesByTrip[tripKey]
+        if (freqs.isNullOrEmpty()) return listOf(times[boardIndex] to times)
+        val firstDepSec = times.firstOrNull()?.departureTime?.secondsSinceServiceDayStart ?: return listOf(times[boardIndex] to times)
+        val out = mutableListOf<Pair<StopTime, List<StopTime>>>()
+        for (freq in freqs) {
+            val headway = freq.headwaySeconds
+            if (headway <= 0) continue
+            var runStart = freq.startTime.secondsSinceServiceDayStart
+            var count = 0
+            // All-day 5-min headway is 288 runs; 50 truncates legitimate service.
+            while (runStart <= freq.endTime.secondsSinceServiceDayStart && count < 300) {
+                val delta = runStart - firstDepSec
+                val shifted = times.map { st ->
+                    st.copy(
+                        arrivalTime = st.arrivalTime?.let { GtfsServiceTime.ofSeconds(it.secondsSinceServiceDayStart + delta) },
+                        departureTime = st.departureTime?.let { GtfsServiceTime.ofSeconds(it.secondsSinceServiceDayStart + delta) },
+                    )
+                }
+                // Skip runs whose shifted times go negative (bad template alignment).
+                if (shifted.any { (it.departureTime?.secondsSinceServiceDayStart ?: 0) < 0 }) {
+                    runStart += headway; count++; continue
+                }
+                out += shifted[boardIndex] to shifted
+                runStart += headway
+                count++
+            }
+        }
+        return out.ifEmpty { listOf(times[boardIndex] to times) }
+    }
+
     /** One transit leg between a nearby origin stop and a nearby destination stop. */
     private fun directJourney(
         request: TripPlanRequest,
@@ -297,8 +375,8 @@ serviceDate: LocalDate,
     ): JourneyOption? {
         val destination = destinationStops.firstOrNull { it.stop.key == alight.stopKey } ?: return null
         val transit = transitLeg(network.tripsByKey[board.tripKey] ?: return null, board, alight, serviceDate, updates)
-        val walkOut = walkLeg(request.origin, origin.stop.location, transit.departure, request) ?: return null
-        val walkIn = walkLeg(destination.stop.location, request.destination, transit.arrival, request) ?: return null
+        val walkOut = walkLeg(request.origin, origin.stop.location, transit.departure, request, anchorIsEnd = true) ?: return null
+        val walkIn = walkLeg(destination.stop.location, request.destination, transit.arrival, request, anchorIsEnd = false) ?: return null
         return JourneyOption(
             id = "${board.tripKey.tripId}|direct",
             legs = listOf(walkOut, transit, walkIn),
@@ -323,10 +401,10 @@ serviceDate: LocalDate,
         updates: List<TripUpdate>,
     ): JourneyOption? {
         val destinationKeys = destinationStops.map { it.stop.key }.toSet()
-        val connection = earliestConnection(firstAlight, serviceDate, destinationKeys) ?: return null
-        val (secondTrip, secondBoard) = connection
-        val secondTimes = network.stopTimesFor(secondBoard.tripKey).ifEmpty { return null }
-        val boardIndex = secondTimes.indexOf(secondBoard)
+        val connection = earliestConnection(firstAlight, serviceDate, destinationKeys, request.walkSpeedMetersPerSecond) ?: return null
+        val (secondTrip, secondBoard, walkingDuration, secondTimes) = connection
+        val boardIndex = secondTimes.indexOfFirst { it.stopKey == secondBoard.stopKey && it.stopSequence == secondBoard.stopSequence }
+        if (boardIndex < 0) return null
         val finalAlight = secondTimes.drop(boardIndex + 1).firstOrNull { it.stopKey in destinationKeys } ?: return null
         val destination = destinationStops.firstOrNull { it.stop.key == finalAlight.stopKey } ?: return null
 
@@ -343,20 +421,19 @@ serviceDate: LocalDate,
         } else {
             null
         }
-        val walking = Duration.ZERO // same-stop transfers involve no walking
         val transfer = TransferConnection(
             arrivingLeg = firstLeg,
             departingLeg = secondLeg,
             transferStop = firstAlight.stopKey,
             scheduledBuffer = scheduledBuffer,
             predictedBuffer = predictedBuffer,
-            walkingDuration = walking,
+            walkingDuration = walkingDuration,
             confidence = TransferConfidence.SCHEDULED_UNKNOWN,
             rationale = "scheduled buffer from static timetable",
         )
 
-        val walkOut = walkLeg(request.origin, origin.stop.location, firstLeg.departure, request) ?: return null
-        val walkIn = walkLeg(destination.stop.location, request.destination, secondLeg.arrival, request) ?: return null
+        val walkOut = walkLeg(request.origin, origin.stop.location, firstLeg.departure, request, anchorIsEnd = true) ?: return null
+        val walkIn = walkLeg(destination.stop.location, request.destination, secondLeg.arrival, request, anchorIsEnd = false) ?: return null
         return JourneyOption(
             id = "${board.tripKey.tripId}|${secondBoard.tripKey.tripId}|transfer",
             legs = listOf(walkOut, firstLeg, secondLeg, walkIn),
@@ -366,30 +443,133 @@ serviceDate: LocalDate,
         )
     }
 
-    /** Finds the earliest onward trip that boards no earlier than the arrival. */
+    /**
+     * Three transit legs joined by two transfer connections.
+     * Used when `maxTransfers >= 2`; picks the earliest arrival among all
+     * intermediate alight stops on the second leg.
+     */
+    private fun doubleOnwardJourney(
+        request: TripPlanRequest,
+        origin: Stoped,
+        board: StopTime,
+        firstAlight: StopTime,
+        destinationStops: List<Stoped>,
+        serviceDate: LocalDate,
+        updates: List<TripUpdate>,
+    ): JourneyOption? {
+        val destinationKeys = destinationStops.map { it.stop.key }.toSet()
+        val conn1 = earliestConnection(firstAlight, serviceDate, destinationKeys, request.walkSpeedMetersPerSecond) ?: return null
+        val (secondTrip, secondBoard, walking1, secondTimes) = conn1
+        val boardIdx2 = secondTimes.indexOfFirst { it.stopKey == secondBoard.stopKey && it.stopSequence == secondBoard.stopSequence }
+        if (boardIdx2 < 0) return null
+        var best: JourneyOption? = null
+        val firstLegTrip = network.tripsByKey[board.tripKey] ?: return null
+        val firstLeg = transitLeg(firstLegTrip, board, firstAlight, serviceDate, updates)
+        for (midIdx in boardIdx2 + 1 until secondTimes.size) {
+            val midAlight = secondTimes[midIdx]
+            val conn2 = earliestConnection(midAlight, serviceDate, destinationKeys, request.walkSpeedMetersPerSecond) ?: continue
+            val (thirdTrip, thirdBoard, walking2, thirdTimes) = conn2
+            if (thirdTrip.key == secondTrip.key) continue
+            val boardIdx3 = thirdTimes.indexOfFirst { it.stopKey == thirdBoard.stopKey && it.stopSequence == thirdBoard.stopSequence }
+            if (boardIdx3 < 0) continue
+            val finalAlight = thirdTimes.drop(boardIdx3 + 1).firstOrNull { it.stopKey in destinationKeys } ?: continue
+            val destination = destinationStops.firstOrNull { it.stop.key == finalAlight.stopKey } ?: continue
+            val secondLeg = transitLeg(secondTrip, secondBoard, midAlight, serviceDate, updates)
+            val thirdLeg = transitLeg(thirdTrip, thirdBoard, finalAlight, serviceDate, updates)
+            val t1 = TransferConnection(
+                arrivingLeg = firstLeg, departingLeg = secondLeg,
+                transferStop = firstAlight.stopKey,
+                scheduledBuffer = Duration.between(firstLeg.arrival, secondLeg.departure),
+                predictedBuffer = null, walkingDuration = walking1,
+                confidence = TransferConfidence.SCHEDULED_UNKNOWN,
+                rationale = "scheduled buffer from static timetable",
+            )
+            val t2 = TransferConnection(
+                arrivingLeg = secondLeg, departingLeg = thirdLeg,
+                transferStop = midAlight.stopKey,
+                scheduledBuffer = Duration.between(secondLeg.arrival, thirdLeg.departure),
+                predictedBuffer = null, walkingDuration = walking2,
+                confidence = TransferConfidence.SCHEDULED_UNKNOWN,
+                rationale = "scheduled buffer from static timetable",
+            )
+            val walkOut = walkLeg(request.origin, origin.stop.location, firstLeg.departure, request, anchorIsEnd = true) ?: continue
+            val walkIn = walkLeg(destination.stop.location, request.destination, thirdLeg.arrival, request, anchorIsEnd = false) ?: continue
+            val journey = JourneyOption(
+                id = "${board.tripKey.tripId}|${secondBoard.tripKey.tripId}|${thirdBoard.tripKey.tripId}|transfer2",
+                legs = listOf(walkOut, firstLeg, secondLeg, thirdLeg, walkIn),
+                transfers = listOf(t1, t2),
+                departure = walkOut.start,
+                arrival = walkIn.end,
+            )
+            if (best == null || journey.arrival.isBefore(best.arrival)) best = journey
+        }
+        return best
+    }
+
+    /**
+     * Finds the earliest onward trip that boards no earlier than the arrival,
+     * including walking transfers.
+     *
+     * Boarding stops are the arrival stop plus:
+     * - stops with the same parent station (GTFS station complexes),
+     * - `transfers.txt` pairs from the arrival stop (excluding NO_TRANSFER).
+     *
+     * A connection is only catchable if its buffer covers walking time plus
+     * the feed's `min_transfer_time`. Walking speed comes from the request.
+     */
     private fun earliestConnection(
         firstAlight: StopTime,
         serviceDate: LocalDate,
         destinationKeys: Set<StopKey>,
-    ): Pair<Trip, StopTime>? {
-val arrivalInstant = firstAlight.arrivalTime?.instantOn(serviceDate, agencyZone) ?: return null
-        var best: Pair<Trip, StopTime>? = null
+        walkSpeedMps: Double,
+    ): Quad<Trip, StopTime, Duration, List<StopTime>>? {
+        val arrivalInstant = firstAlight.arrivalTime?.instantOn(serviceDate, effectiveZone) ?: return null
+        val fromStop = network.stopsByKey[firstAlight.stopKey]
+        // Candidate boarding stops with their required pre-departure buffer.
+        data class BoardingStop(val key: StopKey, val requiredSeconds: Long)
+        val boardingStops = LinkedHashMap<StopKey, Long>()
+        boardingStops[firstAlight.stopKey] = 0L
+        // Same-station siblings: platforms within one station complex.
+        val parent = fromStop?.parentStation
+        if (parent != null) {
+            for (stop in network.stops) {
+                if (stop.key == firstAlight.stopKey) continue
+                if (stop.parentStation != parent && stop.key != parent) continue
+                val walking = if (fromStop != null) haversineMeters(fromStop.location, stop.location) else 0.0
+                val secs = (walking / walkSpeedMps).toLong()
+                boardingStops[stop.key] = minOf(boardingStops[stop.key] ?: Long.MAX_VALUE, secs)
+            }
+        }
+        // Explicit transfers.txt pairs.
+        for (transfer in network.transfers) {
+            if (transfer.fromStopKey != firstAlight.stopKey) continue
+            if (transfer.type == com.intellitrip.domain.TransferType.NO_TRANSFER) continue
+            val toStop = network.stopsByKey[transfer.toStopKey] ?: continue
+            val walking = if (fromStop != null) haversineMeters(fromStop.location, toStop.location) else 0.0
+            val secs = (walking / walkSpeedMps).toLong() + (transfer.minTransferSeconds ?: 0)
+            boardingStops[transfer.toStopKey] = minOf(boardingStops[transfer.toStopKey] ?: Long.MAX_VALUE, secs.toLong())
+        }
+        var best: Quad<Trip, StopTime, Duration, List<StopTime>>? = null
         var bestDeparture: Instant? = null
-        // Only trips that actually call at the transfer stop can connect here.
-        for (trip in network.tripsServing(firstAlight.stopKey)) {
-            if (trip.key == firstAlight.tripKey) continue
-            val times = network.stopTimesFor(trip.key)
+        for ((boardingKey, requiredSeconds) in boardingStops) {
+            val earliestBoard = arrivalInstant.plusSeconds(requiredSeconds)
+            for (trip in network.tripsServing(boardingKey)) {
+                if (trip.key == firstAlight.tripKey) continue
+                if (!network.isActive(trip.serviceKey, serviceDate)) continue
+                val times = network.stopTimesFor(trip.key)
                 if (times.isEmpty()) continue
-            val candidate = times.firstOrNull { time ->
-                time.stopKey == firstAlight.stopKey &&
-                    (time.departureTime?.instantOn(serviceDate, agencyZone) ?: Instant.MIN)
-                        .isBefore(arrivalInstant).not()
-            } ?: continue
-            val departure = candidate.departureTime?.instantOn(serviceDate, agencyZone) ?: continue
-            if (departure.isBefore(arrivalInstant)) continue
-            if (bestDeparture == null || departure.isBefore(bestDeparture)) {
-                bestDeparture = departure
-                best = trip to candidate
+                // Consider every stop at this boarding stop, expanded for frequencies.
+                val boardIndexes = times.indices.filter { times[it].stopKey == boardingKey }
+                for (bi in boardIndexes) {
+                    for ((candidate, shifted) in expandedRuns(trip.key, times, bi)) {
+                        val departure = candidate.departureTime?.instantOn(serviceDate, effectiveZone) ?: continue
+                        if (departure.isBefore(earliestBoard)) continue
+                        if (bestDeparture == null || departure.isBefore(bestDeparture)) {
+                            bestDeparture = departure
+                            best = Quad(trip, candidate, Duration.ofSeconds(requiredSeconds), shifted)
+                        }
+                    }
+                }
             }
         }
         return best
@@ -402,8 +582,8 @@ val arrivalInstant = firstAlight.arrivalTime?.instantOn(serviceDate, agencyZone)
         serviceDate: LocalDate,
         updates: List<TripUpdate>,
     ): Leg.Transit {
-        val scheduledDeparture = board.departureTime?.instantOn(serviceDate, agencyZone)
-        val scheduledArrival = alight.arrivalTime?.instantOn(serviceDate, agencyZone)
+        val scheduledDeparture = board.departureTime?.instantOn(serviceDate, effectiveZone)
+        val scheduledArrival = alight.arrivalTime?.instantOn(serviceDate, effectiveZone)
         val update = updates.firstOrNull { it.tripKey == trip.key }
         val boardUpdate = update?.stopTimeUpdates?.firstOrNull { it.stopKey == board.stopKey }
         val delay = boardUpdate?.departureDelaySeconds ?: boardUpdate?.arrivalDelaySeconds
@@ -437,15 +617,24 @@ val arrivalInstant = firstAlight.arrivalTime?.instantOn(serviceDate, agencyZone)
         )
     }
 
+    /**
+     * Builds a walk leg anchored at a transit instant.
+     *
+     * [anchorIsEnd] = true means the walk must *finish* at [anchor] (origin
+     * walk): the leg's start is `anchor - duration`, so the journey is only
+     * catchable. false means the walk *starts* at [anchor] (destination walk).
+     */
     private fun walkLeg(
         from: GeoPoint,
         to: GeoPoint,
-        start: Instant,
+        anchor: Instant,
         request: TripPlanRequest,
+        anchorIsEnd: Boolean = false,
     ): Leg.WalkLeg? {
         val meters = haversineMeters(from, to)
         if (meters > request.maxWalkMeters) return null
         val seconds = (meters / request.walkSpeedMetersPerSecond).toLong().coerceAtLeast(0)
+        val start = if (anchorIsEnd) anchor.minusSeconds(seconds) else anchor
         return Leg.WalkLeg(from, to, start, Duration.ofSeconds(seconds), meters)
     }
 
@@ -490,3 +679,5 @@ fun haversineMeters(a: GeoPoint, b: GeoPoint): Double {
 }
 
 internal fun near(a: Double, b: Double, tolerance: Double = 1e-6): Boolean = abs(a - b) < tolerance
+
+private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)

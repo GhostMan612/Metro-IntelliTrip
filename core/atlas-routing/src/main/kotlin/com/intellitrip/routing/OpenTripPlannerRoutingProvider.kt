@@ -43,6 +43,7 @@ class OpenTripPlannerRoutingProvider(
     private val feedId: FeedId,
     private val transport: RoutingTransport,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val agencyZone: java.time.ZoneId = java.time.ZoneId.of("America/Chicago"),
     override val providerId: String = "open-trip-planner",
 ) : RoutingProvider {
 
@@ -72,12 +73,15 @@ class OpenTripPlannerRoutingProvider(
             .append(DEFAULT_ITINERARIES)
             .append("&mode=")
             .append(URLEncoder.encode("TRANSIT,WALK", StandardCharsets.UTF_8))
-        val departAt = request.departAt
-        if (departAt != null) {
+        // OTP expects calendar date + time-of-day, not epoch math. Format the
+        // anchor instant (arriveBy wins when set) in the agency zone.
+        val anchor = request.arriveBy ?: request.departAt
+        if (anchor != null) {
+            val zoned = anchor.atZone(agencyZone)
             builder.append("&date=")
-                .append(departAt.epochSecond / 86_400)
+                .append(zoned.format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE))
                 .append("&time=")
-                .append(departAt.epochSecond % 86_400)
+                .append(zoned.format(java.time.format.DateTimeFormatter.ofPattern("HHmm", java.util.Locale.ROOT)))
         }
         return builder.toString()
     }
@@ -130,7 +134,7 @@ class OpenTripPlannerRoutingProvider(
             return JourneyOption(
                 id = itinerary.string("id") ?: "otp-${start.toEpochMilli()}",
                 legs = legs,
-                transfers = emptyList(),
+                transfers = buildTransfers(legs),
                 departure = start,
                 arrival = end,
             )
@@ -193,16 +197,40 @@ class OpenTripPlannerRoutingProvider(
             return StopKey(feedId, id)
         }
 
+        /**
+         * Builds one [com.intellitrip.domain.TransferConnection] per transit-to-transit
+         * handoff, so transfer intelligence can score OTP journeys. A walk leg
+         * between transits supplies the walking duration.
+         */
+        private fun buildTransfers(legs: List<Leg>): List<com.intellitrip.domain.TransferConnection> {
+            val transitIdx = legs.indices.filter { legs[it] is Leg.Transit }
+            if (transitIdx.size < 2) return emptyList()
+            return transitIdx.zipWithNext().mapNotNull { (aIdx, bIdx) ->
+                val arriving = legs[aIdx] as Leg.Transit
+                val departing = legs[bIdx] as Leg.Transit
+                val between = legs.subList(aIdx + 1, bIdx)
+                val walking = between.filterIsInstance<Leg.WalkLeg>().sumOf { it.duration.toSeconds() }.let { Duration.ofSeconds(it) }
+                com.intellitrip.domain.TransferConnection(
+                    arrivingLeg = arriving,
+                    departingLeg = departing,
+                    transferStop = arriving.toStopKey,
+                    scheduledBuffer = Duration.between(arriving.arrival, departing.departure),
+                    predictedBuffer = null,
+                    walkingDuration = walking,
+                    confidence = com.intellitrip.domain.TransferConfidence.SCHEDULED_UNKNOWN,
+                    rationale = "OTP itinerary transfer",
+                )
+            }
+        }
+
         private fun realtimeStatus(leg: JsonValue, now: Instant): com.intellitrip.domain.RealtimeStatus {
-            val departure = leg.long("startTime")?.let { Instant.ofEpochMilli(it) } ?: return com.intellitrip.domain.RealtimeStatus.NO_DATA
-            // OTP reports real-time by the presence of realTime data; absence of a
-            // realtime feed is NO_DATA rather than a confident ON_TIME.
-            return if (leg.obj("departureDelay") != null || leg.obj("realTime") != null) {
-                com.intellitrip.domain.RealtimeStatus.ON_TIME
-            } else if (departure.isBefore(now)) {
-                com.intellitrip.domain.RealtimeStatus.SCHEDULED
-            } else {
-                com.intellitrip.domain.RealtimeStatus.SCHEDULED
+            val delay = leg.number("departureDelay") ?: leg.number("delay")
+            val hasRealtime = leg.get("realTime") != null || leg.get("realTimeData") != null || delay != null
+            return when {
+                delay != null && delay > 180 -> com.intellitrip.domain.RealtimeStatus.DELAYED
+                delay != null && delay < -180 -> com.intellitrip.domain.RealtimeStatus.EARLY
+                hasRealtime -> com.intellitrip.domain.RealtimeStatus.ON_TIME
+                else -> com.intellitrip.domain.RealtimeStatus.SCHEDULED
             }
         }
 

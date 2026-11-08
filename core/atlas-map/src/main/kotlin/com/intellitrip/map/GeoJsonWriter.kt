@@ -19,9 +19,15 @@ object GeoJsonWriter {
             append(vehicle.lon).append(',').append(vehicle.lat)
             append("]},\"properties\":{\"id\":").append(quote(vehicle.id))
             append(",\"type\":").append(quote(vehicle.vehicleType.name))
-            append(",\"stale\":").append(vehicle.stale)
-            append(",\"interpolated\":").append(vehicle.interpolated)
+            // Emitted as 0/1 numbers: MapLibre `match` only branches on
+            // numbers/strings, so booleans are rejected at runtime.
+            append(",\"stale\":").append(if (vehicle.stale) 1 else 0)
+            append(",\"interpolated\":").append(if (vehicle.interpolated) 1 else 0)
             append(",\"bearing\":").append(vehicle.bearing ?: "null")
+            // GTFS route_color is RRGGBB without '#'; emit #RRGGBB or omit so the
+            // renderer falls back to its default blue.
+            val c = vehicle.routeColor?.trim()?.removePrefix("#")
+            if (c != null && c.length == 6) append(",\"routeColor\":").append(quote("#$c"))
             append("}}")
         }
         append("]}")
@@ -61,7 +67,22 @@ object GeoJsonWriter {
         append("]}")
     }
 
-    fun shapes(snapshot: RenderSnapshot): String = lineStrings(snapshot.shapeLines.map { it.id to it.coordinates })
+    fun shapes(snapshot: RenderSnapshot): String = buildString {
+        append("{\"type\":\"FeatureCollection\",\"features\":[")
+        snapshot.shapeLines.forEachIndexed { index, line ->
+            if (index > 0) append(',')
+            append("{\"type\":\"Feature\",\"geometry\":{\"type\":\"LineString\",\"coordinates\":[")
+            line.coordinates.forEachIndexed { pointIndex, point ->
+                if (pointIndex > 0) append(',')
+                append('[').append(point[0]).append(',').append(point[1]).append(']')
+            }
+            append("]},\"properties\":{\"id\":").append(quote(line.id))
+            val c = line.routeColor?.trim()?.removePrefix("#")
+            if (c != null && c.length == 6) append(",\"routeColor\":").append(quote("#$c"))
+            append("}}")
+        }
+        append("]}")
+    }
 
     /**
      * Planned journeys, drawn above the network. [RouteLine.id] is carried as a
@@ -79,7 +100,8 @@ object GeoJsonWriter {
             append(""""geometry":{"type":"Point","coordinates":[""")
             append(location.position.lon).append(',').append(location.position.lat)
             append("""],"properties":{"accuracy":""").append(location.accuracyMeters)
-            append(""","fresh":""").append(location.isFresh())
+            // 0/1 numbers: MapLibre match branches only on numbers/strings.
+            append(""","fresh":""").append(if (location.isFresh()) 1 else 0)
             // Emitted separately from "fresh": the renderer uses high accuracy to size
             // the halo and soften the "you are here" claim, not to decide whether the
             // point is shown at all.
@@ -88,21 +110,17 @@ object GeoJsonWriter {
         }
     }
 
-    fun routes(lines: List<RouteLine>): String =
-        lineStrings(lines.map { line -> line.id to line.coordinates.map { listOf(it[0], it[1]) } })
-
-    // ShapeLineRender is already `[lon, lat]` pairs, so it maps straight across.
-
-    private fun lineStrings(lines: List<Pair<String, List<List<Double>>>>): String = buildString {
+    fun routes(lines: List<RouteLine>): String = buildString {
         append("{\"type\":\"FeatureCollection\",\"features\":[")
-        lines.forEachIndexed { index, (id, coordinates) ->
+        lines.forEachIndexed { index, line ->
             if (index > 0) append(',')
             append("{\"type\":\"Feature\",\"geometry\":{\"type\":\"LineString\",\"coordinates\":[")
-            coordinates.forEachIndexed { pointIndex, point ->
+            line.coordinates.forEachIndexed { pointIndex, point ->
                 if (pointIndex > 0) append(',')
                 append('[').append(point[0]).append(',').append(point[1]).append(']')
             }
-            append("]},\"properties\":{\"id\":").append(quote(id)).append("}}")
+            append("]},\"properties\":{\"id\":").append(quote(line.id))
+            append(",\"kind\":").append(quote(line.kind)).append("}}")
         }
         append("]}")
     }

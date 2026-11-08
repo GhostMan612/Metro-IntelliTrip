@@ -40,7 +40,16 @@ internal object GtfsCsv {
         onHeader: (Columns) -> Unit,
         onRow: (Columns, List<String>) -> Unit,
     ) {
-        val records = ByteRecordReader(bytes)
+        forEachRow(java.io.ByteArrayInputStream(bytes), onHeader, onRow)
+    }
+
+    /** Streams rows from an [java.io.InputStream] (ZIP entry). 8 KiB buffer. */
+    fun forEachRow(
+        input: java.io.InputStream,
+        onHeader: (Columns) -> Unit,
+        onRow: (Columns, List<String>) -> Unit,
+    ) {
+        val records = StreamRecordReader(input)
         var columns: Columns? = null
         while (true) {
             val record = records.nextRecord() ?: break
@@ -127,4 +136,72 @@ internal class ByteRecordReader(private val bytes: ByteArray) {
 
     private fun finish(fields: List<String>, sawAny: Boolean): List<String> =
         if (!sawAny && fields.all { it.isBlank() }) emptyList() else fields
+}
+
+/**
+ * Buffered-stream counterpart of [ByteRecordReader]; same quoting rules.
+ * Reads via an 8 KiB buffer (not one virtual call per byte) — the previous
+ * per-byte `BufferedInputStream.read()` cost minutes on low-end CPUs for
+ * 850k-row feeds.
+ */
+internal class StreamRecordReader(input: java.io.InputStream) {
+    private val stream = input
+    private val buf = ByteArray(8192)
+    private var pos = 0
+    private var limit = 0
+    private fun fill(): Boolean {
+        if (pos < limit) return true
+        limit = stream.read(buf)
+        pos = 0
+        return limit > 0
+    }
+
+    private fun read(): Int {
+        if (!fill()) return -1
+        return buf[pos++].toInt() and 0xFF
+    }
+
+    private fun unread(code: Int) {
+        if (code >= 0) pos--
+    }
+
+    private val field = StringBuilder()
+
+    fun nextRecord(): List<String>? {
+        // Peek EOF without consuming: need at least one byte pending.
+        if (!fill()) return null
+        val fields = mutableListOf<String>()
+        field.setLength(0)
+        var inQuotes = false
+        var sawAny = false
+        while (true) {
+            val code = read()
+            if (code < 0) break
+            val c = code.toChar()
+            when {
+                inQuotes && c == '"' -> {
+                    val next = read()
+                    if (next == '"'.code) field.append('"') else { inQuotes = false; if (next >= 0) unread(next) }
+                }
+                c == '"' -> inQuotes = !inQuotes
+                !inQuotes && c == ',' -> {
+                    fields.add(field.toString())
+                    field.setLength(0)
+                    sawAny = true
+                    continue
+                }
+                !inQuotes && c == '\n' -> {
+                    fields.add(field.toString())
+                    return if (!sawAny && fields.all { it.isBlank() }) emptyList() else fields
+                }
+                c != '\r' -> field.append(c)
+            }
+            sawAny = true
+        }
+        if (field.isNotEmpty() || fields.isNotEmpty()) {
+            fields.add(field.toString())
+            return if (!sawAny && fields.all { it.isBlank() }) emptyList() else fields
+        }
+        return null
+    }
 }

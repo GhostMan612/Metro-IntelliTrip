@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -110,6 +111,15 @@ private fun IntelliTripContent(host: AtlasHost, model: IntelliTripViewModel) {
 
     val useRail = LocalConfiguration.current.screenWidthDp >= RailWidthDp.value
     val hasFeed = state.staticFeed != null
+    val snackbarHost = remember { androidx.compose.material3.SnackbarHostState() }
+    // One transient slot for download errors (status text remains the source).
+    LaunchedEffect(state.status) {
+        if (state.status.contains("unavailable", ignoreCase = true) ||
+            state.status.contains("failed", ignoreCase = true)
+        ) {
+            snackbarHost.showSnackbar(state.status)
+        }
+    }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         if (useRail) {
@@ -137,6 +147,7 @@ private fun IntelliTripContent(host: AtlasHost, model: IntelliTripViewModel) {
             }
         } else {
             Scaffold(
+                snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHost) },
                 bottomBar = {
                     RiderNavigationBar(
                         current = destination,
@@ -220,13 +231,14 @@ private fun MapPane(
             onRendererCreated = host::attachRenderer,
         )
 
-        // One dominant entry action, above the map, per the wireframe in section 5.2.
-        // A rider arrives with a single intent and should not have to pick a mode first.
-        if (destination == Destination.Explore && !departuresOpen) {
+        // Persistent search pill (Google Maps pattern): always visible except
+        // when a sheet covers the map. Tapping opens Plan.
+        if (!departuresOpen) {
             com.intellitrip.ui.DestinationSearchEntry(
                 onClick = onPlanRequested,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
+                    .statusBarsPadding()
                     .padding(top = Space.lg, start = Space.lg, end = 76.dp),
             )
         }
@@ -264,7 +276,10 @@ private fun MapPane(
                 feedAgeLabel = state.staticFeed?.metadata?.fetchedAt?.let { "Schedule data loaded $it" },
                 onDownloadSchedules = model::loadStaticNetwork,
                 onDismiss = { onDeparturesOpenChange(false) },
-                onSelectDeparture = { },
+                onSelectDeparture = {
+                    model.focusStop(it.stopName)
+                    onDeparturesOpenChange(false)
+                },
             )
         }
 
@@ -300,6 +315,8 @@ private fun MapPane(
                     // shows that feature's detail rather than the list again.
                     model.selectFeature(com.intellitrip.map.MapSelection.Single(chosen))
                 },
+                userLocation = state.userLocation?.position,
+                onTrackVehicle = { model.trackVehicle(it) },
             )
         }
 
@@ -341,8 +358,8 @@ private fun MapPane(
  */
 private fun layerKindOf(layerId: String): com.intellitrip.map.MapSelectionResolver.MapFeatureKind? =
     when (layerId) {
-        "intellitrip-route-layer" -> com.intellitrip.map.MapSelectionResolver.MapFeatureKind.JOURNEY
-        "intellitrip-vehicle-layer" -> com.intellitrip.map.MapSelectionResolver.MapFeatureKind.VEHICLE
+        "intellitrip-route-layer", "intellitrip-route-walk-layer" -> com.intellitrip.map.MapSelectionResolver.MapFeatureKind.JOURNEY
+        "intellitrip-vehicle-layer", "intellitrip-vehicle-glyph-layer" -> com.intellitrip.map.MapSelectionResolver.MapFeatureKind.VEHICLE
         "intellitrip-stop-layer" -> com.intellitrip.map.MapSelectionResolver.MapFeatureKind.STOP
         "intellitrip-cluster-layer" -> com.intellitrip.map.MapSelectionResolver.MapFeatureKind.CLUSTER
         else -> null

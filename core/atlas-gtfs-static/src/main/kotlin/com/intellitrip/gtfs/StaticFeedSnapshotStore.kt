@@ -79,6 +79,54 @@ class StaticFeedSnapshotStore(private val root: Path) {
         )
     }
 
+    /**
+     * Writes a downloaded payload to the staging dir and returns its path.
+     * Callers that hold the payload as a [ByteArray] should call this *before*
+     * parsing so the array can be released before the uncompressed tables
+     * peak. Activation then moves this file (no ByteArray copy).
+     */
+    @Throws(IOException::class)
+    fun writeStagedPayload(payload: ByteArray): Path {
+        val staging = Files.createDirectories(root.resolve(STAGING_DIR))
+        val file = staging.resolve(STAGED_PAYLOAD_FILE)
+        Files.write(file, payload)
+        return file
+    }
+
+    /**
+     * Activates from a previously staged payload file. Same atomicity as
+     * [activate] but without holding the payload in memory.
+     */
+    @Throws(IOException::class)
+    fun activateStaged(feedId: FeedId, stagedPayload: Path, metadata: FeedMetadata): Path {
+        val snapshots = Files.createDirectories(feedDir(feedId).resolve(SNAPSHOTS_DIR))
+        val snapshotName = "snapshot-" + System.currentTimeMillis() + "-" +
+            (metadata.hash ?: "nohash").take(12)
+        val staging = Files.createDirectories(snapshots.resolve(snapshotName))
+        Files.move(stagedPayload, staging.resolve(PAYLOAD_FILE), StandardCopyOption.REPLACE_EXISTING)
+        Files.write(staging.resolve(FEED_ID_FILE), listOf(feedId.value))
+        Files.write(staging.resolve(METADATA_FILE), listOfNotNull(
+            metadata.version?.let { "version=$it" },
+            metadata.hash?.let { "hash=$it" },
+            "fetchedAt=${metadata.fetchedAt}",
+            metadata.validFrom?.let { "validFrom=${it.format(DATE_FORMAT)}" },
+            metadata.validTo?.let { "validTo=${it.format(DATE_FORMAT)}" },
+            metadata.sourceUrl?.let { "sourceUrl=$it" },
+        ))
+        listOf(STOP_TIME_DATA, STOP_TIME_INDEX).forEach { name ->
+            val staged = root.resolve(STAGING_DIR).resolve(name)
+            if (Files.exists(staged)) {
+                Files.move(staged, staging.resolve(name), StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
+        val pointer = feedDir(feedId).resolve(POINTER_FILE)
+        val pointerTemp = feedDir(feedId).resolve("$POINTER_FILE.tmp")
+        Files.write(pointerTemp, listOf(snapshotName))
+        Files.move(pointerTemp, pointer, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        prune(feedId, keepName = snapshotName)
+        return staging
+    }
+
     @Throws(IOException::class)
     fun activate(feedId: FeedId, payload: ByteArray, metadata: FeedMetadata): Path {
         val snapshots = Files.createDirectories(feedDir(feedId).resolve(SNAPSHOTS_DIR))
@@ -163,6 +211,25 @@ class StaticFeedSnapshotStore(private val root: Path) {
         return Files.readAllBytes(snapshot.snapshotDir.resolve(PAYLOAD_FILE))
     }
 
+    /** Path to the stored ZIP, for file-streamed parsing without a ByteArray. */
+    fun payloadPath(feedId: FeedId): Path? {
+        val snapshot = activeSnapshot(feedId) ?: return null
+        val path = snapshot.snapshotDir.resolve(PAYLOAD_FILE)
+        return if (Files.exists(path)) path else null
+    }
+
+    fun cachePath(feedId: FeedId): Path? {
+        val snapshot = activeSnapshot(feedId) ?: return null
+        val path = snapshot.snapshotDir.resolve(StaticFeedBinaryCache.CACHE_FILE)
+        return if (Files.exists(path)) path else null
+    }
+
+    /** Writes the binary cache for the active snapshot (cold-start fast path). */
+    fun writeCache(feedId: FeedId, feed: StaticFeed) {
+        val snapshot = activeSnapshot(feedId) ?: return
+        runCatching { StaticFeedBinaryCache.write(feed, snapshot.snapshotDir.resolve(StaticFeedBinaryCache.CACHE_FILE)) }
+    }
+
     private fun feedDir(feedId: FeedId): Path = root.resolve(feedId.value)
 
     /**
@@ -238,6 +305,7 @@ class StaticFeedSnapshotStore(private val root: Path) {
         private const val STAGING_DIR = "staging-stop-times"
         private const val STOP_TIME_DATA = "stop-times.dat"
         private const val STOP_TIME_INDEX = "stop-times.idx"
+        private const val STAGED_PAYLOAD_FILE = "gtfs.zip.staging"
         private val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.BASIC_ISO_DATE
     }
 }

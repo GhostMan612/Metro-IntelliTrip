@@ -2,8 +2,6 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("com.google.dagger.hilt.android")
-    id("com.google.devtools.ksp")
 }
 
 android {
@@ -21,8 +19,24 @@ android {
 
     // Shrinking is on only for release. The rules live in proguard-rules.pro and are
     // deliberately conservative: the Atlas modules use no reflection, so every entry
-    // there exists for MapLibre's native layer, Hilt's generated code or Retrofit's
-    // generic signatures.
+    // there exists for MapLibre's native layer or Retrofit's generic signatures.
+    signingConfigs {
+        // Release signing is opt-in via environment variables; without them the
+        // release build stays unsigned on purpose, so a debug-signed artifact
+        // can never be mistaken for a release one. See docs/RELEASE.md.
+        create("releaseFromEnv") {
+            val envFile = System.getenv("KEYSTORE_FILE")
+            val envStorePw = System.getenv("KEYSTORE_PASSWORD")
+            val envAlias = System.getenv("KEY_ALIAS")
+            val envKeyPw = System.getenv("KEY_PASSWORD")
+            if (envFile != null && envStorePw != null && envAlias != null && envKeyPw != null) {
+                storeFile = file(envFile)
+                storePassword = envStorePw
+                keyAlias = envAlias
+                keyPassword = envKeyPw
+            }
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -31,9 +45,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // No signing config is wired yet. A release build is produced unsigned on
-            // purpose: signing keys are handled separately and a debug-signed artifact
-            // must never be mistaken for a release one.
+            // Only wired when KEYSTORE_FILE etc. are set; otherwise unsigned.
+            if (System.getenv("KEYSTORE_FILE") != null) {
+                signingConfig = signingConfigs.getByName("releaseFromEnv")
+            }
         }
     }
     testOptions {
@@ -70,8 +85,6 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("com.google.dagger:hilt-android:2.52")
-    ksp("com.google.dagger:hilt-compiler:2.52")
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

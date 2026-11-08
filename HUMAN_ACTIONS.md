@@ -108,8 +108,9 @@ Not required to build or run. When you want it:
 - Sign the release build with it.
 - First upload is manual review; updates are not.
 
-Note the app currently has no release signing config, no ProGuard rules, and no
-store listing copy. Those are the remaining pieces before a Play submission.
+The app has minification (`app/proguard-rules.pro`, release only) and opt-in
+signing via `KEYSTORE_FILE`/`KEYSTORE_PASSWORD`/`KEY_ALIAS`/`KEY_PASSWORD`
+env vars (see `docs/RELEASE.md`). No store listing copy exists yet.
 
 ---
 

@@ -63,6 +63,17 @@ class DefaultScopeResolverTest {
     }
 
     @Test
+    fun zoomAndRadiusRoundTrip() {
+        // Viewport zoom -> meters -> zoom must be identity within epsilon, or
+        // MapCanvas moves the camera to a derived zoom and the map snaps.
+        for (zoom in listOf(9.0, 11.5, 13.7, 15.0, 16.3)) {
+            val meters = resolver.radiusForZoom(zoom)
+            val back = resolver.zoomForRadius(meters)
+            assertEquals(zoom, back, 0.01)
+        }
+    }
+
+    @Test
     fun radiusFocusIsContinuous() {
         val halfMile = resolver.resolve(Focus.Radius(downtown, 804.0))
         val twoMiles = resolver.resolve(Focus.Radius(downtown, 3218.0))

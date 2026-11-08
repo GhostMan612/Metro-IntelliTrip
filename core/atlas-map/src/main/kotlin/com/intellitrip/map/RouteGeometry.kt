@@ -31,7 +31,7 @@ object RouteGeometry {
 
         return journey.legs.mapIndexedNotNull { index, leg ->
             when (leg) {
-                is Leg.WalkLeg -> line("walk-$index", listOf(leg.from, leg.to))
+                is Leg.WalkLeg -> line("walk-$index", listOf(leg.from, leg.to), kind = "walk")
 
                 is Leg.Transit -> {
                     val from = stopsByKey[leg.fromStopKey]?.location
@@ -40,19 +40,20 @@ object RouteGeometry {
                     line(
                         id = "${leg.tripKey.tripId}-$index",
                         points = shape?.points?.let { trimToSpan(it, from, to) } ?: listOfNotNull(from, to),
+                        kind = "transit",
                     )
                 }
 
-                is Leg.Other -> line("other-$index", listOf(leg.from, leg.to))
+                is Leg.Other -> line("other-$index", listOf(leg.from, leg.to), kind = "other")
             }
         }
     }
 
     /** GeoJSON needs two or more distinct positions; a zero-length line is invalid. */
-    private fun line(id: String, points: List<GeoPoint>): RouteLine? {
+    private fun line(id: String, points: List<GeoPoint>, kind: String = "transit"): RouteLine? {
         val distinct = points.distinctBy { "${it.lat},${it.lon}" }
         if (distinct.size < 2) return null
-        return RouteLine(id, distinct.map { doubleArrayOf(it.lon, it.lat) })
+        return RouteLine(id, distinct.map { doubleArrayOf(it.lon, it.lat) }, kind)
     }
 
     /**

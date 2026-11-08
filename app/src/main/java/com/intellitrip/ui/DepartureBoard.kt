@@ -30,6 +30,12 @@ data class Departure(
     val vehicleUpdatedAt: Instant?,
     /** Minutes until departure, computed once at build time and never negative. */
     val minutesUntil: Int,
+    /** Headway in minutes when the trip is frequency-based, e.g. "every 10 min". */
+    val headwayMinutes: Int? = null,
+    /** Distance from the rider in meters, when known. */
+    val distanceMeters: Double? = null,
+    /** Straight-line walk time in minutes at 1.35 m/s, when distance is known. */
+    val walkMinutes: Int? = null,
 ) {
     /** Present-tense wait text; "Due" when under a minute. */
     val wait: String
@@ -48,7 +54,8 @@ data class Departure(
         val route = routeShortName ?: routeLongName ?: "Bus"
         val where = headsign?.takeIf { it.isNotBlank() }?.let { " to $it" } ?: ""
         val kind = if (isLive) "live" else "scheduled"
-        return "Route $route$where, $stopName, ${wait.lowercase()}, $kind"
+        val freq = headwayMinutes?.let { ", every $it min" } ?: ""
+        return "Route $route$where, $stopName, ${wait.lowercase()}, $kind$freq"
     }
 }
 
@@ -85,7 +92,10 @@ object DepartureBoard {
         tripsByKey: Map<String, Trip>,
         maxStops: Int = 6,
         perStop: Int = 3,
-        zone: ZoneId = ZoneId.systemDefault(),
+        // GTFS times are agency-local. Default to the feed's zone; callers with
+        // a feed should pass the agency timezone explicitly.
+        zone: ZoneId = ZoneId.of("America/Chicago"),
+        headwayMinutesByTrip: Map<String, Int> = emptyMap(),
     ): List<Departure> {
         val nearby = origin?.let { point ->
             stops.filter { abs(metersBetween(point, it.location)) <= radiusMeters }
@@ -108,6 +118,7 @@ object DepartureBoard {
                     } else {
                         scheduled.departure
                     }
+                    val dist = origin?.let { metersBetween(it, stop.location) }
                     Departure(
                         stopName = stop.name,
                         routeShortName = route?.shortName,
@@ -116,8 +127,14 @@ object DepartureBoard {
                         routeColor = route?.color,
                         scheduledTime = when_,
                         isLive = live,
-                        vehicleUpdatedAt = if (live) now else null,
+                        // Never fabricate a vehicle timestamp from `now`: the caller
+                        // supplies only a live-trip set, not vehicle reports, so the
+                        // honest value is null until reportedTime is plumbed through.
+                        vehicleUpdatedAt = scheduled.reportedTime,
                         minutesUntil = (Duration.between(now, when_).seconds / 60).toInt(),
+                        headwayMinutes = headwayMinutesByTrip[scheduled.tripId],
+                        distanceMeters = dist,
+                        walkMinutes = dist?.let { (it / 1.35 / 60).toInt().coerceAtLeast(1) },
                     )
                 }
                 .toList()
@@ -143,7 +160,7 @@ object DepartureBoard {
     fun resolveServiceTime(
         serviceTime: GtfsServiceTime,
         now: Instant,
-        zone: ZoneId = ZoneId.systemDefault(),
+        zone: ZoneId = ZoneId.of("America/Chicago"),
     ): Instant {
         val seconds = serviceTime.secondsSinceServiceDayStart
         val today = LocalDate.ofInstant(now, zone)
@@ -162,6 +179,18 @@ object DepartureBoard {
             .minByOrNull { Duration.between(now, it).seconds }
             ?: today.atStartOfDay(zone).plusSeconds(seconds.toLong()).toInstant()
     }
+
+    /**
+     * Whether [serviceKey] has service on [date]. Delegates to the shared
+     * [com.intellitrip.domain.ServiceCalendar] so board and planner agree.
+     */
+    fun isServiceActive(
+        calendars: List<com.intellitrip.domain.Calendar>,
+        calendarDates: List<com.intellitrip.domain.CalendarDate>,
+        serviceKey: com.intellitrip.domain.ServiceKey,
+        date: LocalDate,
+    ): Boolean = com.intellitrip.domain.ServiceCalendar(calendars, calendarDates)
+        .isActive(serviceKey, date)
 
     /** Great-circle meters between two points. */
     fun metersBetween(a: GeoPoint, b: GeoPoint): Double {

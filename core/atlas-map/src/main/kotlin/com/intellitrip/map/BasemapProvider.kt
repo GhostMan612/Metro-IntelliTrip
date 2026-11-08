@@ -20,8 +20,14 @@ interface BasemapProvider {
 /** Bundled CARTO style reference used as the default development basemap. */
 object CartoBasemapProvider : BasemapProvider {
     override val providerId: String = "carto"
-    override fun style(): BasemapStyle = BasemapStyle(
-        styleUrl = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+    override fun style(): BasemapStyle = style(false)
+
+    fun style(dark: Boolean): BasemapStyle = BasemapStyle(
+        styleUrl = if (dark) {
+            "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+        } else {
+            "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+        },
         styleAssetPath = null,
         attribution = "© OpenStreetMap contributors © CARTO",
     )

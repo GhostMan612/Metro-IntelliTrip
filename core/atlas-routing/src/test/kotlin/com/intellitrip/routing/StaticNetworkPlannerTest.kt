@@ -136,6 +136,266 @@ class StaticNetworkPlannerTest {
         assertEquals(30, local.minute)
         assertEquals(RoutingFixtures.serviceDate.plusDays(1), local.toLocalDate())
     }
+
+    @Test
+    fun walkOutEndsAtBoarding() {
+        val journey = success().first { it.id.endsWith("direct") }
+        val walkOut = journey.legs.first() as Leg.WalkLeg
+        val transit = journey.legs.filterIsInstance<Leg.Transit>().first()
+        // The origin walk must finish at boarding, not start there: a rider who
+        // walks for 20 minutes cannot board the instant the walk begins.
+        assertEquals(transit.departure, walkOut.end)
+        assertTrue(!walkOut.start.isAfter(transit.departure))
+        assertTrue(journey.departure == walkOut.start)
+    }
+
+    @Test
+    fun walkOutStartsBeforeBoardingWhenWalkingIsNeeded() {
+        // Origin is ~110 m south of S1, so the walk takes ~80 s and must start
+        // before the bus leaves.
+        val req = RoutingFixtures.request().copy(origin = GeoPoint(44.9768, -93.2650))
+        val result = kotlinx.coroutines.runBlocking { planner.plan(req) }
+        assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(result)
+        val journey = result.data.first { it.id.endsWith("direct") }
+        val walkOut = journey.legs.first() as Leg.WalkLeg
+        val transit = journey.legs.filterIsInstance<Leg.Transit>().first()
+        assertTrue(walkOut.meters > 0)
+        assertEquals(transit.departure, walkOut.end)
+        assertTrue(walkOut.start.isBefore(transit.departure))
+    }
+
+    @Test
+    fun walkingTransferIsCatchableOnlyWithEnoughBuffer() {
+        // S4 is ~110 m north of S2. T2 boards at S4, not S2, so the only way
+        // to S3 is via transfers.txt S2->S4. Departure at 08:12 is 120 s after
+        // arrival at 08:10; walking takes ~80 s, so it is catchable.
+        val s4 = com.intellitrip.domain.Stop(
+            com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S4"), "S4", "Fourth", null,
+            GeoPoint(44.9870, -93.2650), null, 0, null, null,
+        )
+        val stops = RoutingFixtures.network.stops + s4
+        val times = RoutingFixtures.stopTimes.filter { it.tripKey != RoutingFixtures.tripB1.key } +
+            listOf(
+                com.intellitrip.domain.StopTime(
+                    tripKey = RoutingFixtures.tripB1.key,
+                    stopKey = com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S4"),
+                    stopSequence = 1,
+                    arrivalTime = com.intellitrip.domain.GtfsServiceTime.parse("08:12:00"),
+                    departureTime = com.intellitrip.domain.GtfsServiceTime.parse("08:12:00"),
+                    pickupType = null, dropOffType = null, timepoint = null, shapeDistTraveled = null,
+                ),
+                com.intellitrip.domain.StopTime(
+                    tripKey = RoutingFixtures.tripB1.key,
+                    stopKey = com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S3"),
+                    stopSequence = 2,
+                    arrivalTime = com.intellitrip.domain.GtfsServiceTime.parse("08:25:00"),
+                    departureTime = com.intellitrip.domain.GtfsServiceTime.parse("08:25:00"),
+                    pickupType = null, dropOffType = null, timepoint = null, shapeDistTraveled = null,
+                ),
+            )
+        val net = RoutingNetwork(
+            feedId = RoutingFixtures.feedId,
+            metadata = RoutingFixtures.network.metadata,
+            routes = RoutingFixtures.network.routes,
+            stops = stops,
+            trips = listOf(RoutingFixtures.tripA1, RoutingFixtures.tripB1, RoutingFixtures.tripC1),
+            stopTimes = times,
+            transfers = listOf(
+                com.intellitrip.domain.Transfer(
+                    fromStopKey = com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S2"),
+                    toStopKey = com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S4"),
+                    type = com.intellitrip.domain.TransferType.TRANSFER,
+                    minTransferSeconds = 0,
+                ),
+            ),
+        )
+        val p = StaticNetworkPlanner(net, RoutingFixtures.zone)
+        val result = kotlinx.coroutines.runBlocking { p.plan(RoutingFixtures.request()) }
+        assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(result)
+        val journey = result.data.firstOrNull { it.transfers.isNotEmpty() }
+        assertNotNull(journey, "expected a walking-transfer journey, got ${result.data.map { it.id }}")
+        val walking = journey.transfers.single().walkingDuration
+        assertNotNull(walking)
+        assertTrue(walking.seconds > 0, "walking transfer must carry walking time, got $walking")
+    }
+
+    @Test
+    fun arriveByFiltersLateJourneys() {
+        val req = RoutingFixtures.request().copy(
+            arriveBy = RoutingFixtures.serviceDate.atTime(8, 35, 0)
+                .toInstant(java.time.ZoneOffset.ofHours(-5)),
+        )
+        val result = kotlinx.coroutines.runBlocking { planner.plan(req) }
+        assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(result)
+        assertTrue(result.data.isNotEmpty())
+        assertTrue(result.data.all { !it.arrival.isAfter(req.arriveBy!!) })
+    }
+
+    @Test
+    fun arriveByUnachievableReturnsPartialResult() {
+        val req = RoutingFixtures.request().copy(
+            arriveBy = RoutingFixtures.serviceDate.atTime(7, 30, 0)
+                .toInstant(java.time.ZoneOffset.ofHours(-5)),
+        )
+        val result = kotlinx.coroutines.runBlocking { planner.plan(req) }
+        assertIs<ProviderResult.PartialResult<List<com.intellitrip.domain.JourneyOption>>>(result)
+        assertTrue(result.missing.contains("arrive-by-unachievable"))
+    }
+
+    @Test
+    fun twoTransferJourneyIsFoundWhenRequested() {
+        // Chain: T1 S1->S2 (08:00-08:10), T2 S2->S4 (08:12-08:20), T-new S4->S3
+        // (08:22-08:30). Only reachable with 2 transfers to S3 via S4.
+        val s4 = com.intellitrip.domain.Stop(
+            com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S4"), "S4", "Fourth", null,
+            GeoPoint(44.9890, -93.2650), null, 0, null, null,
+        )
+        val tripD = com.intellitrip.domain.Trip(
+            key = com.intellitrip.domain.TripKey(RoutingFixtures.feedId, "T4"),
+            routeKey = RoutingFixtures.routeA.key,
+            serviceKey = RoutingFixtures.tripA1.serviceKey,
+            headsign = null, directionId = 0, blockId = null, shapeKey = null, wheelchairAccessible = null,
+        )
+        val stops = RoutingFixtures.network.stops + s4
+        val times = RoutingFixtures.stopTimes.filter { it.tripKey != RoutingFixtures.tripB1.key } +
+            listOf(
+                com.intellitrip.domain.StopTime(tripKey = RoutingFixtures.tripB1.key, stopKey = com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S2"), stopSequence = 1, arrivalTime = com.intellitrip.domain.GtfsServiceTime.parse("08:12:00"), departureTime = com.intellitrip.domain.GtfsServiceTime.parse("08:12:00"), pickupType = null, dropOffType = null, timepoint = null, shapeDistTraveled = null),
+                com.intellitrip.domain.StopTime(tripKey = RoutingFixtures.tripB1.key, stopKey = com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S4"), stopSequence = 2, arrivalTime = com.intellitrip.domain.GtfsServiceTime.parse("08:20:00"), departureTime = com.intellitrip.domain.GtfsServiceTime.parse("08:20:00"), pickupType = null, dropOffType = null, timepoint = null, shapeDistTraveled = null),
+                com.intellitrip.domain.StopTime(tripKey = tripD.key, stopKey = com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S4"), stopSequence = 1, arrivalTime = com.intellitrip.domain.GtfsServiceTime.parse("08:22:00"), departureTime = com.intellitrip.domain.GtfsServiceTime.parse("08:22:00"), pickupType = null, dropOffType = null, timepoint = null, shapeDistTraveled = null),
+                com.intellitrip.domain.StopTime(tripKey = tripD.key, stopKey = com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S3"), stopSequence = 2, arrivalTime = com.intellitrip.domain.GtfsServiceTime.parse("08:30:00"), departureTime = com.intellitrip.domain.GtfsServiceTime.parse("08:30:00"), pickupType = null, dropOffType = null, timepoint = null, shapeDistTraveled = null),
+            )
+        val net = RoutingNetwork(
+            feedId = RoutingFixtures.feedId,
+            metadata = RoutingFixtures.network.metadata,
+            routes = RoutingFixtures.network.routes,
+            stops = stops,
+            trips = listOf(RoutingFixtures.tripA1, RoutingFixtures.tripB1, tripD),
+            stopTimes = times,
+        )
+        val p = StaticNetworkPlanner(net, RoutingFixtures.zone)
+        val req = RoutingFixtures.request().copy(maxTransfers = 2)
+        val result = kotlinx.coroutines.runBlocking { p.plan(req) }
+        assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(result)
+        val journey = result.data.firstOrNull { it.transferCount == 2 }
+        assertNotNull(journey, "expected 2-transfer journey, got ${result.data.map { it.id + ':' + it.transferCount }}")
+        assertEquals(3, journey.legs.filterIsInstance<Leg.Transit>().size)
+    }
+
+    @Test
+    fun frequencyTripRepeatsAtHeadway() {
+        // T3 template departs S1 at 08:02. Frequency window 08:00-09:00 every
+        // 10 min means runs at 08:00, 08:10, 08:20 ... Boarding at 08:07 must
+        // get the 08:10 run, not miss the 08:02 template run.
+        val net = RoutingNetwork(
+            feedId = RoutingFixtures.feedId,
+            metadata = RoutingFixtures.network.metadata,
+            routes = RoutingFixtures.network.routes,
+            stops = RoutingFixtures.network.stops,
+            trips = listOf(RoutingFixtures.tripA1, RoutingFixtures.tripB1, RoutingFixtures.tripC1),
+            stopTimes = RoutingFixtures.stopTimes,
+            frequencies = listOf(
+                com.intellitrip.domain.Frequency(
+                    tripKey = RoutingFixtures.tripC1.key,
+                    startTime = com.intellitrip.domain.GtfsServiceTime.parse("08:00:00"),
+                    endTime = com.intellitrip.domain.GtfsServiceTime.parse("09:00:00"),
+                    headwaySeconds = 600,
+                    exactTimes = 1,
+                ),
+            ),
+        )
+        val p = StaticNetworkPlanner(net, RoutingFixtures.zone)
+        val depart = RoutingFixtures.serviceDate.atTime(8, 7, 0)
+            .toInstant(java.time.ZoneOffset.ofHours(-5))
+        val req = RoutingFixtures.request(departAt = depart)
+        val result = kotlinx.coroutines.runBlocking { p.plan(req) }
+        assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(result)
+        val journey = result.data.first { j ->
+            j.legs.filterIsInstance<Leg.Transit>().any { it.tripKey == RoutingFixtures.tripC1.key }
+        }
+        val transit = journey.legs.filterIsInstance<Leg.Transit>().first { it.tripKey == RoutingFixtures.tripC1.key }
+        val dep = transit.departure.atZone(RoutingFixtures.zone)
+        assertEquals(8, dep.hour)
+        assertEquals(10, dep.minute)
+        // Alighting must shift with the same run (28 min duration preserved).
+        assertEquals(38, transit.arrival.atZone(RoutingFixtures.zone).minute)
+    }
+
+    @Test
+    fun calendarFiltersSaturdayService() {
+        val weekdaySvc = com.intellitrip.domain.ServiceKey(RoutingFixtures.feedId, "WEEKDAY")
+        val weekdayTrip = RoutingFixtures.tripA1.copy(serviceKey = weekdaySvc)
+        val net = RoutingNetwork(
+            feedId = RoutingFixtures.feedId,
+            metadata = RoutingFixtures.network.metadata,
+            routes = RoutingFixtures.network.routes,
+            stops = RoutingFixtures.network.stops,
+            trips = listOf(weekdayTrip, RoutingFixtures.tripB1, RoutingFixtures.tripC1),
+            stopTimes = RoutingFixtures.stopTimes,
+            calendars = listOf(
+                com.intellitrip.domain.Calendar(
+                    serviceKey = weekdaySvc,
+                    daysOfWeek = setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY, java.time.DayOfWeek.FRIDAY),
+                    startDate = RoutingFixtures.serviceDate.minusYears(1),
+                    endDate = RoutingFixtures.serviceDate.plusYears(1),
+                ),
+            ),
+        )
+        val plannerSat = StaticNetworkPlanner(net, RoutingFixtures.zone)
+        // 2026-10-03 is a Saturday.
+        val saturday = java.time.LocalDate.of(2026, 10, 3)
+        val departSat = saturday.atTime(7, 0).atZone(RoutingFixtures.zone).toInstant()
+        val result = kotlinx.coroutines.runBlocking {
+            plannerSat.plan(RoutingFixtures.request(departAt = departSat))
+        }
+        assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(result)
+        assertTrue(result.data.isEmpty(), "weekday-only service must not plan on Saturday, got ${result.data.size}")
+    }
+
+    @Test
+    fun calendarDateExceptionOverridesWeekday() {
+        val weekdaySvc = com.intellitrip.domain.ServiceKey(RoutingFixtures.feedId, "WEEKDAY")
+        val net = RoutingNetwork(
+            feedId = RoutingFixtures.feedId,
+            metadata = RoutingFixtures.network.metadata,
+            routes = RoutingFixtures.network.routes,
+            stops = RoutingFixtures.network.stops,
+            trips = RoutingFixtures.network.trips,
+            stopTimes = RoutingFixtures.stopTimes,
+            calendars = listOf(
+                com.intellitrip.domain.Calendar(
+                    serviceKey = weekdaySvc,
+                    daysOfWeek = setOf(java.time.DayOfWeek.MONDAY),
+                    startDate = RoutingFixtures.serviceDate.minusYears(1),
+                    endDate = RoutingFixtures.serviceDate.plusYears(1),
+                ),
+            ),
+            calendarDates = listOf(
+                com.intellitrip.domain.CalendarDate(
+                    serviceKey = weekdaySvc,
+                    date = RoutingFixtures.serviceDate,
+                    exceptionType = com.intellitrip.domain.ServiceExceptionType.REMOVED,
+                ),
+            ),
+        )
+        assertTrue(!net.isActive(weekdaySvc, RoutingFixtures.serviceDate))
+        val addedSvc = com.intellitrip.domain.ServiceKey(RoutingFixtures.feedId, "ADDED")
+        val net2 = RoutingNetwork(
+            feedId = RoutingFixtures.feedId,
+            metadata = RoutingFixtures.network.metadata,
+            routes = RoutingFixtures.network.routes,
+            stops = RoutingFixtures.network.stops,
+            trips = RoutingFixtures.network.trips,
+            stopTimes = RoutingFixtures.stopTimes,
+            calendarDates = listOf(
+                com.intellitrip.domain.CalendarDate(
+                    serviceKey = addedSvc,
+                    date = RoutingFixtures.serviceDate,
+                    exceptionType = com.intellitrip.domain.ServiceExceptionType.ADDED,
+                ),
+            ),
+        )
+        assertTrue(net2.isActive(addedSvc, RoutingFixtures.serviceDate))
+    }
 }
 
 /**

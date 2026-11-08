@@ -49,6 +49,7 @@ fun MapCanvas(
     onRendererCreated: (MapLibreMapRenderer?) -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val isDark = com.intellitrip.ui.theme.LocalIsDark.current
     var renderer by remember { mutableStateOf<MapLibreMapRenderer?>(null) }
     var ready by remember { mutableStateOf(false) }
 
@@ -64,15 +65,16 @@ fun MapCanvas(
 
     // The renderer is created here but is not usable until MapLibre's async map and
     // style are ready. Everything pushed before that point would be dropped, so the
-    // Compose side waits for [ready] before rendering anything.
-    val rendererCreated = remember {
+    // Compose side waits for [ready] before rendering anything. Recreated on
+    // theme change so the basemap follows light/dark (setStyle resets layers).
+    val rendererCreated = remember(isDark) {
         MapLibreMapRenderer(
             mapView = mapView,
             onReady = { ready = true },
             onCameraMoved = onViewportChanged,
             onMapTapped = { lat, lon -> onMapTap(lat, lon) },
         ).also { created ->
-            created.applyBasemap(CartoBasemapProvider.style())
+            created.applyBasemap(CartoBasemapProvider.style(isDark))
             created.moveCamera(
                 com.intellitrip.DEFAULT_LAT,
                 com.intellitrip.DEFAULT_LON,
@@ -154,6 +156,7 @@ fun MapCanvas(
                     vehicles = state.vehicles,
                     stops = feed?.stops ?: emptyList(),
                     shapes = feed?.shapes ?: emptyList(),
+                    routes = feed?.routes ?: emptyList(),
                     snapshotAt = Instant.now(),
                     // Fetch time, not "now": this is what decides whether a vehicle
                     // paints as stale, and it must match the status line.

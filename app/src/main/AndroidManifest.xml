@@ -6,6 +6,8 @@
          a user who declines precise location still gets a usable (less exact) fix. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <application
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="IntelliTrip"
         android:largeHeap="true"
         android:theme="@style/Theme.IntelliTrip">

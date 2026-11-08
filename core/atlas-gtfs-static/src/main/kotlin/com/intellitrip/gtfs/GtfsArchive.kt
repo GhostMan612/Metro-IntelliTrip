@@ -23,7 +23,7 @@ object GtfsArchive {
                 while (entry != null) {
                     val name = entry.name.substringAfterLast('/')
                     if (!entry.isDirectory && name.isNotEmpty()) {
-                        files[name] = zip.readBytes()
+                        files[name] = readEntryBytes(zip)
                     }
                     entry = zip.nextEntry
                 }
@@ -35,6 +35,54 @@ object GtfsArchive {
             throw GtfsArchiveException("GTFS ZIP contained no readable tables")
         }
         return files
+    }
+
+    /** Reads a staged ZIP file directly, without a payload ByteArray. */
+    fun readFile(file: java.nio.file.Path): Map<String, ByteArray> {
+        val files = LinkedHashMap<String, ByteArray>()
+        try {
+            java.util.zip.ZipFile(file.toFile()).use { zipFile ->
+                val entries = zipFile.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    val name = entry.name.substringAfterLast('/')
+                    if (!entry.isDirectory && name.isNotEmpty()) {
+                        zipFile.getInputStream(entry).use { input ->
+                            val out = java.io.ByteArrayOutputStream()
+                            val buf = ByteArray(8 * 1024)
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n < 0) break
+                                out.write(buf, 0, n)
+                            }
+                            files[name] = out.toByteArray()
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            throw GtfsArchiveException("Invalid GTFS ZIP payload", e)
+        }
+        if (files.isEmpty()) {
+            throw GtfsArchiveException("GTFS ZIP contained no readable tables")
+        }
+        return files
+    }
+
+    /**
+     * Streams each entry with an 8 KiB buffer instead of [InputStream.readBytes].
+     * Saves one full-size transient allocation per entry (the 100 MB+ OOM seen
+     * on low-end devices for `stop_times.txt`).
+     */
+    fun readEntryBytes(zip: ZipInputStream): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(8 * 1024)
+        while (true) {
+            val n = zip.read(buf)
+            if (n < 0) break
+            out.write(buf, 0, n)
+        }
+        return out.toByteArray()
     }
 
     fun isZip(bytes: ByteArray): Boolean =

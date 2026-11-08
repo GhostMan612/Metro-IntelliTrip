@@ -11,14 +11,25 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DirectionsBus
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -57,6 +68,8 @@ fun MapFeatureSheet(
     onSelectJourney: (String) -> Unit,
     onZoomToCluster: (MapFeature.VehicleCluster) -> Unit,
     onChooseCandidate: (MapFeature) -> Unit,
+    userLocation: com.intellitrip.domain.GeoPoint? = null,
+    onTrackVehicle: (com.intellitrip.domain.VehicleKey) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     ModalBottomSheet(
@@ -68,7 +81,7 @@ fun MapFeatureSheet(
             when (selection) {
                 is MapSelection.Single -> SingleFeatureBody(
                     selection.feature, stops, vehicles, journeys, departures, now,
-                    onSaveStop, onSelectJourney, onZoomToCluster,
+                    onSaveStop, onSelectJourney, onZoomToCluster, userLocation, onTrackVehicle,
                 )
 
                 is MapSelection.Ambiguous -> AmbiguousBody(
@@ -99,6 +112,8 @@ private fun SingleFeatureBody(
     onSaveStop: (Stop) -> Unit,
     onSelectJourney: (String) -> Unit,
     onZoomToCluster: (MapFeature.VehicleCluster) -> Unit,
+    userLocation: com.intellitrip.domain.GeoPoint? = null,
+    onTrackVehicle: (com.intellitrip.domain.VehicleKey) -> Unit = {},
 ) {
     when (feature) {
         is MapFeature.Stop -> {
@@ -109,12 +124,13 @@ private fun SingleFeatureBody(
                 departures = departures.filter { it.stopName == (stop?.name ?: feature.name) },
                 now = now,
                 onSaveStop = { stop?.let(onSaveStop) },
+                userLocation = userLocation,
             )
         }
 
         is MapFeature.Vehicle -> {
             val vehicle = vehicles[feature.vehicleId]
-            VehicleDetailBody(vehicle = vehicle, fallback = feature, now = now)
+            VehicleDetailBody(vehicle = vehicle, fallback = feature, now = now, onTrackVehicle = onTrackVehicle)
         }
 
         is MapFeature.Journey -> {
@@ -125,14 +141,45 @@ private fun SingleFeatureBody(
             )
         }
 
-        is MapFeature.VehicleCluster -> EmptyPanel(
-            title = "${feature.vehicleCount} vehicles here",
-            body = "These vehicles are grouped so the map stays readable at this zoom. " +
-                "Zoom in to pick out an individual vehicle.",
-            actionLabel = "Zoom in",
-            onAction = { onZoomToCluster(feature) },
+        is MapFeature.VehicleCluster -> ClusterDetailBody(
+            cluster = feature,
+            vehicles = vehicles,
+            onZoomToCluster = onZoomToCluster,
+            onTrackVehicle = onTrackVehicle,
         )
     }
+}
+
+@Composable
+private fun ClusterDetailBody(
+    cluster: MapFeature.VehicleCluster,
+    vehicles: Map<String, Vehicle>,
+    onZoomToCluster: (MapFeature.VehicleCluster) -> Unit,
+    onTrackVehicle: (com.intellitrip.domain.VehicleKey) -> Unit,
+) {
+    Text(text = "${cluster.vehicleCount} vehicles here", style = MaterialTheme.typography.headlineMedium)
+    Text(
+        text = "These vehicles are grouped so the map stays readable at this zoom.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    // Preview nearest vehicles to the centroid (no fabricated membership).
+    val near = vehicles.values
+        .filter { v -> com.intellitrip.ui.DepartureBoard.metersBetween(v.position, com.intellitrip.domain.GeoPoint(cluster.centroidLat, cluster.centroidLon)) <= 500 }
+        .sortedBy { com.intellitrip.ui.DepartureBoard.metersBetween(it.position, com.intellitrip.domain.GeoPoint(cluster.centroidLat, cluster.centroidLon)) }
+        .take(5)
+    near.forEach { v ->
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+            Icon(Icons.Default.DirectionsBus, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+            Text(
+                text = "Route ${v.routeKey?.routeId ?: "—"} · ${v.key.vehicleId}",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { onTrackVehicle(v.key) }) { Text("Track") }
+        }
+    }
+    TextButton(onClick = { onZoomToCluster(cluster) }) { Text("Zoom in") }
 }
 
 /**
@@ -148,8 +195,18 @@ private fun StopDetailBody(
     departures: List<Departure>,
     now: Instant,
     onSaveStop: () -> Unit,
+    userLocation: com.intellitrip.domain.GeoPoint? = null,
 ) {
     Text(text = stop?.name ?: fallbackName, style = MaterialTheme.typography.headlineMedium)
+    if (stop != null && userLocation != null) {
+        val dist = DepartureBoard.metersBetween(userLocation, stop.location)
+        val walk = (dist / 1.35 / 60).toInt().coerceAtLeast(1)
+        Text(
+            text = "${dist.toInt()} m · $walk min walk",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
     if (departures.isEmpty()) {
         EmptyPanel(
             title = "No upcoming departures",
@@ -212,6 +269,7 @@ private fun VehicleDetailBody(
     vehicle: Vehicle?,
     fallback: MapFeature.Vehicle,
     now: Instant,
+    onTrackVehicle: (com.intellitrip.domain.VehicleKey) -> Unit = {},
 ) {
     val route = vehicle?.routeKey?.routeId ?: fallback.routeShortName
     val headsign = vehicle?.tripKey?.let { _ -> fallback.headsign }
@@ -231,6 +289,17 @@ private fun VehicleDetailBody(
         else -> "Live position" to MaterialTheme.status.live
     }
     Text(text = label, style = MaterialTheme.typography.bodyMedium, color = color)
+    var tracking by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Track this", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Switch(
+            checked = tracking,
+            onCheckedChange = {
+                tracking = it
+                if (it && vehicle != null) onTrackVehicle(vehicle.key)
+            },
+        )
+    }
 }
 
 private fun describeAge(seconds: Long): String = when {
@@ -327,6 +396,12 @@ private fun AmbiguousBody(
                 is MapFeature.Journey -> "Planned trip"
                 is MapFeature.VehicleCluster -> "${feature.vehicleCount} vehicles here"
             }
+            val icon = when (feature) {
+                is MapFeature.Stop -> Icons.Default.LocationOn
+                is MapFeature.Vehicle -> Icons.Default.DirectionsBus
+                is MapFeature.Journey -> Icons.Default.Route
+                is MapFeature.VehicleCluster -> Icons.Default.Layers
+            }
             Surface(
                 onClick = { onChoose(feature) },
                 shape = RoundedCornerShape(Radii.chip),
@@ -335,11 +410,13 @@ private fun AmbiguousBody(
                     .fillMaxWidth()
                     .semantics { contentDescription = "$label. Double tap to open details." },
             ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(horizontal = Space.md, vertical = Space.md),
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = Space.md, vertical = Space.md)) {
+                    Icon(icon, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
             }
         }
     }

@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Badge
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,11 +31,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -67,6 +70,21 @@ fun NearbyDeparturesSheet(
     onSelectDeparture: (Departure) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    // Ticker: recompute waits every 30s without refetching. Sheet dismissal
+    // cancels the loop via composition disposal.
+    var tick by remember { mutableStateOf(0L) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            tick += 30
+        }
+    }
+    val display = remember(tick, departures) {
+        departures.map {
+            val mins = (java.time.Duration.between(java.time.Instant.now(), it.scheduledTime).seconds / 60).toInt()
+            it.copy(minutesUntil = mins.coerceAtLeast(0))
+        }
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
@@ -83,7 +101,7 @@ fun NearbyDeparturesSheet(
                     actionLabel = "Download schedules",
                     onAction = onDownloadSchedules,
                 )
-            } else if (departures.isEmpty()) {
+            } else if (display.isEmpty()) {
                 EmptyPanel(
                     title = "No departures nearby",
                     body = "No scheduled service was found near the current map area. " +
@@ -96,7 +114,7 @@ fun NearbyDeparturesSheet(
                     modifier = Modifier.heightIn(max = 380.dp),
                     verticalArrangement = Arrangement.spacedBy(Space.sm),
                 ) {
-                    items(departures, key = { "${it.stopName}-${it.scheduledTime}-${it.routeShortName}" }) { d ->
+                    items(display, key = { "${it.stopName}-${it.scheduledTime}-${it.routeShortName}" }) { d ->
                         DepartureRow(departure = d, onClick = { onSelectDeparture(d) })
                     }
                 }
@@ -144,7 +162,7 @@ fun DepartureRow(
         modifier = modifier
             .fillMaxWidth()
             // 48dp minimum target, from the accessibility floor in section 6.1.
-            .heightIn(min = 64.dp)
+            .heightIn(min = 72.dp)
             .semantics { contentDescription = departure.accessibilityLabel() },
         shape = RoundedCornerShape(Radii.card),
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -153,11 +171,15 @@ fun DepartureRow(
             modifier = Modifier.padding(horizontal = Space.lg, vertical = Space.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.width(64.dp)) {
+            Column(modifier = Modifier.width(72.dp)) {
                 Text(
                     text = departure.wait,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.displayMedium.copy(
+                        fontFeatureSettings = "tnum",
+                    ),
                     color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 ProvenanceBadge(isLive = departure.isLive)
             }
@@ -165,13 +187,11 @@ fun DepartureRow(
             Spacer(Modifier.width(Space.md))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = departure.routeShortName?.let { "Route $it" }
-                        ?: departure.routeLongName
-                        ?: "Bus",
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                RoutePill(
+                    shortName = departure.routeShortName,
+                    longName = departure.routeLongName,
+                    color = parseRouteColor(departure.routeColor),
+                    headway = departure.headwayMinutes,
                 )
                 departure.headsign?.takeIf { it.isNotBlank() }?.let {
                     Text(
@@ -183,7 +203,9 @@ fun DepartureRow(
                     )
                 }
                 Text(
-                    text = departure.stopName,
+                    text = departure.stopName +
+                        (departure.distanceMeters?.let { " · ${it.toInt()} m" } ?: "") +
+                        (departure.walkMinutes?.let { " · ${it} min walk" } ?: ""),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -192,7 +214,32 @@ fun DepartureRow(
             }
 
             RouteColorChip(departure.routeColor)
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
+    }
+}
+
+@Composable
+private fun RoutePill(shortName: String?, longName: String?, color: Color?, headway: Int?) {
+    val label = shortName?.let { "Route $it" } ?: longName ?: "Bus"
+    val suffix = headway?.let { " · every $it min" } ?: ""
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = color ?: MaterialTheme.colorScheme.primary,
+        contentColor = Color.White,
+        tonalElevation = 0.dp,
+    ) {
+        Text(
+            text = label + suffix,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
