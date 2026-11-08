@@ -133,4 +133,7 @@ AAB proof. Style-only fixes after.
 
 ## Status
 
-Not started.
+Implemented. Gate: `assembleDebug` + `lint` green.
+Device drive-through (tween feel, glide between 15s polls, arrival chime
+within 100m, silent-mode suppression, dark map) remains human.
+Signed AAB still needs your keystore + account.

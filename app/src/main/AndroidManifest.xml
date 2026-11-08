@@ -5,6 +5,7 @@
     <!-- Coarse is enough for transit wayfinding and is requested alongside fine, so
          a user who declines precise location still gets a usable (less exact) fix. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <application
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"

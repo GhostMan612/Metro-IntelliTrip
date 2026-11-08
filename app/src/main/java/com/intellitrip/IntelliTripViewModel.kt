@@ -615,6 +615,21 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         locationJob = viewModelScope.launch {
             host.location.positions().collect { fix ->
                 update { it.copy(userLocation = fix, status = locationStatus(fix)) }
+                // Arrival cue (V2): within 100m of the active journey's alight.
+                val journey = _state.value.activeJourney()
+                if (journey != null && fix.isFresh(Instant.now())) {
+                    journey.legs.lastOrNull()?.let { last ->
+                        val dest = when (last) {
+                            is com.intellitrip.domain.Leg.Transit -> _state.value.staticFeed?.stops?.firstOrNull { it.key == last.toStopKey }?.location
+                            is com.intellitrip.domain.Leg.WalkLeg -> last.to
+                            is com.intellitrip.domain.Leg.Other -> null
+                        }
+                        if (dest != null) {
+                            val dist = com.intellitrip.ui.DepartureBoard.metersBetween(fix.position, dest)
+                            if (dist < 100) com.intellitrip.ui.ArrivalCue.playIfAllowed(host.context, true)
+                        }
+                    }
+                }
                 // A stale fix is shown as "last known" but must never move the camera. Indoors
                 // the platform hands back a fix hours or days old; framing on it would
                 // fling the map somewhere the user is not and cannot undo.

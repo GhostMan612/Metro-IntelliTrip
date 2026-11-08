@@ -139,13 +139,14 @@ fun MapCanvas(
 
     // `ready` is part of every key: without it the first render fires before layers exist
     // and is thrown away, and nothing ever repaints because no other key changed.
+    // Previous snapshot is retained so the pipeline can interpolate between polls
+    // at frame cadence (V2 glide) instead of teleporting every 15s.
+    var previousVehicles by remember { mutableStateOf<List<com.intellitrip.domain.Vehicle>>(emptyList()) }
     LaunchedEffect(renderer, ready, state.vehicles, state.staticFeed, state.scope) {
         val active = renderer ?: return@LaunchedEffect
         if (!ready) return@LaunchedEffect
-        if (!throttle.shouldEmit()) return@LaunchedEffect
         val feed = state.staticFeed
-        // Rendering and GeoJSON encoding can touch hundreds of thousands of points,
-        // so it runs off the main thread before the renderer is touched.
+        val prev = previousVehicles
         val snapshot = withContext(Dispatchers.Default) {
             pipeline.render(
                 RenderInput(
@@ -158,6 +159,7 @@ fun MapCanvas(
                     shapes = feed?.shapes ?: emptyList(),
                     routes = feed?.routes ?: emptyList(),
                     snapshotAt = Instant.now(),
+                    previousVehicles = prev,
                     // Fetch time, not "now": this is what decides whether a vehicle
                     // paints as stale, and it must match the status line.
                     fetchedAt = state.vehiclesFetchedAt,
@@ -165,6 +167,37 @@ fun MapCanvas(
             )
         }
         active.render(snapshot)
+        previousVehicles = state.vehicles
+    }
+    // 60fps glide between polls (V2): re-render interpolation without refetch.
+    LaunchedEffect(renderer, ready, state.vehicles, state.scope) {
+        val active = renderer ?: return@LaunchedEffect
+        if (!ready || state.vehicles.isEmpty()) return@LaunchedEffect
+        val feed = state.staticFeed ?: return@LaunchedEffect
+        val prev = previousVehicles
+        while (true) {
+            kotlinx.coroutines.delay(200)
+            val now = Instant.now()
+            val snapshot = withContext(Dispatchers.Default) {
+                pipeline.render(
+                    RenderInput(
+                        camera = CameraView(
+                            bounds = state.scope?.dataScope?.bounds ?: fallbackBounds(),
+                            zoom = state.scope?.cameraScope?.zoom ?: 11.0,
+                        ),
+                        vehicles = state.vehicles,
+                        stops = feed.stops,
+                        shapes = feed.shapes,
+                        routes = feed.routes,
+                        snapshotAt = now,
+                        previousVehicles = prev,
+                        fetchedAt = state.vehiclesFetchedAt,
+                    )
+                )
+            }
+            if (!throttle.shouldEmit()) continue
+            active.render(snapshot)
+        }
     }
 
     // The camera follows scope only after the user changes it. Applying it on the

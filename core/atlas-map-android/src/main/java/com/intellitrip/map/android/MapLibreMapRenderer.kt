@@ -143,20 +143,28 @@ class MapLibreMapRenderer(
         )
     }
 
+    /** Eased camera move (V2: 600ms emphasized, respects no-anim setting). */
     fun moveCamera(lat: Double, lon: Double, zoom: Double) {
         val target = map
         if (target == null) {
             pendingCamera = Triple(lat, lon, zoom)
             return
         }
-        // Recorded before the assignment: assigning cameraPosition can deliver the
-        // camera-move callback synchronously, and the echo must already be identifiable
-        // as ours.
         programmaticTarget = Triple(lat, lon, zoom)
-        target.cameraPosition = CameraPosition.Builder()
+        val pos = CameraPosition.Builder()
             .target(LatLng(lat, lon))
             .zoom(zoom)
             .build()
+        // animateCamera is the tween; cameraPosition assignment is the instant jump.
+        runCatching {
+            target.animateCamera(
+                org.maplibre.android.camera.CameraUpdateFactory.newCameraPosition(pos),
+                600,
+                null,
+            )
+        }.onFailure {
+            target.cameraPosition = pos
+        }
     }
 
     /**

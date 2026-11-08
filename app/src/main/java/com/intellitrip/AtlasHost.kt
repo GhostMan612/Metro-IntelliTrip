@@ -49,7 +49,7 @@ val REALTIME_URLS = PollingGtfsRealtimeClient.RealtimeFeedUrls(
  * Every provider is constructed here and injected into the engine, so the app
  * adds no domain logic of its own and could swap any adapter in one place.
  */
-class AtlasHost(private val context: Context) {
+class AtlasHost(val context: Context) {
 
     val feedId: FeedId = FeedId(FEED_ID)
 

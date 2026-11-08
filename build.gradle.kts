@@ -26,6 +26,7 @@ plugins {
     id("org.jetbrains.kotlin.android") version "2.0.20" apply false
     id("org.jetbrains.kotlin.jvm") version "2.0.20" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.0.20" apply false
+    id("org.jetbrains.kotlin.multiplatform") version "2.0.20" apply false
 }
 
 allprojects {
@@ -39,7 +40,7 @@ allprojects {
     //                        module and non-authoritative; publishing it would put
     //                        superseded code on a resolvable coordinate.
     val moduleName = name
-    val excluded = setOf("atlas-map-android", "atlas-transit")
+    val excluded = setOf("atlas-map-android", "atlas-transit", "atlas-web-spike")
     if (moduleName.startsWith("atlas-") && moduleName !in excluded) {
         apply(plugin = "maven-publish")
         apply(plugin = "java-library")
@@ -84,7 +85,7 @@ tasks.register("publishAtlasToLocalRepo") {
     description = "Publishes the Atlas SDK to build/atlas-maven for consumption by another app."
     dependsOn(
         subprojects
-            .filter { it.name.startsWith("atlas-") && it.name !in setOf("atlas-map-android", "atlas-transit") }
+            .filter { it.name.startsWith("atlas-") && it.name !in setOf("atlas-map-android", "atlas-transit", "atlas-web-spike") }
             .map { "${it.path}:publishAllPublicationsToAtlasLocalRepository" },
     )
 }
