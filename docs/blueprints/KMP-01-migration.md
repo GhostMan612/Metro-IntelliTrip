@@ -103,7 +103,20 @@ Spike wasm bundle loads in Chromium with no console WasmGC error.
 
 ## Status
 
-Implemented. Gate: `:core:atlas-web-spike:jvmTest` + `compileKotlinWasmJs` green.
-Browser run (`wasmJsBrowserDevelopmentRun`) needs a Chromium check by the user.
-`atlas-domain` conversion is M2 (needs API-breaking `java.time → kotlinx.datetime`
-decision recorded above).
+Implemented (M1 spike + M2a bridge). Gate: spike `jvmTest` + `compileKotlinWasmJs`
++ `assembleDebug` + `lint` green. Browser run still needs a Chromium check by
+the user. `TimeBridge` conversions are tested (`Instant`/`LocalDate`/`Duration`/
+`ZoneId`/`DayOfWeek` round-trips).
+
+`atlas-domain` conversion is M2b — a breaking `java.time → kotlinx.datetime`
+rename that must land with the Android app migration in one commit (100+ files).
+It is **not** done here by design: production stays on `java.time` until then.
+
+## M2a delivered (2026-11-08)
+
+- `core/atlas-domain/src/main/.../TimeBridge.kt`: `java.time ↔ kotlinx.datetime`
+  + `kotlin.time.Duration` conversions (kotlinx `Duration` moved to `kotlin.time`
+  in 0.6.2 — first attempt failed to resolve, fixed).
+- `core/atlas-domain/src/test/.../TimeBridgeTest.kt`: 4 round-trip tests.
+- `atlas-domain` depends on `kotlinx-datetime:0.6.2` alongside `java.time`
+  (non-breaking).
