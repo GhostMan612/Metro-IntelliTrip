@@ -354,3 +354,15 @@ MapLibre (CDN pinned 5.0.4 today), and UI parity with Android.
 Gate (all green): contracts/gtfs-static/spike `jvmTest` + `compileKotlinWasmJs`
 + full `test` + `lint` + `assembleDebug` + `assembleRelease` +
 `publishAtlasToLocalRepo` + `:sample:host:run`.
+
+## COMPLETE (2026-11-09) — project finished
+
+`atlas-transit` deleted (ADR-014 executed: zero dependents; removed from
+`settings.gradle.kts` and publishing config; history remains in docs/ADR).
+Closed and gated: M1 spike, M2a bridge, M2b kotlinx rename (SDK 0.2.0),
+M3b toolchain+KMP domain, M3a portable stack, M3c I/O seams, M4a/M4b/M4c
+renderer+shell+glide/radar+async fetch, M4d durable cache, R1 correctness,
+R2 docs+guards, Play track doc. The Android app installs; the web shell
+compiles+renders on wasmJs. Open by necessity (external): live OTP
+endpoint/verification, RainViewer licensing, Chromium eye-check of the
+running shell, and Play upload with your upload key.

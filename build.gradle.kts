@@ -30,23 +30,19 @@ plugins {
 }
 
 allprojects {
-    // Only the portable modules are published. The app, the sample host and the
-    // quarantined prototype are build-time-only and must never reach a consumer.
+    // Only the portable modules are published. The app, the sample host and
+    // the spike are build-time-only and must never reach a consumer.
     //
     // Two modules are excluded, both for the same reason:
     //   atlas-map-android  - an Android library; depends on the MapLibre SDK and
     //                        ships with the host app that renders, not the engine.
-    //   atlas-transit      - the quarantined prototype (ADR-014). It is an Android
-    //                        module and non-authoritative; publishing it would put
-    //                        superseded code on a resolvable coordinate.
+    //   atlas-web-spike    - the web shell host (application, not a library).
     val moduleName = name
     // KMP modules (jvm+wasmJs) publish via their own KMP publications.
     // Applying the `java-library` `maven` publication below to a KMP module is
     // incompatible (Gradle warns) and creates a coordinate collision.
-    // `atlas-domain` (M3b) plus the pure-Kotlin M3a modules; I/O modules stay
-    // JVM-only until their Files/HTTP seams land.
     val excluded = setOf(
-        "atlas-map-android", "atlas-transit", "atlas-web-spike",
+        "atlas-map-android", "atlas-web-spike",
         "atlas-domain", "atlas-contracts", "atlas-scope", "atlas-map", "atlas-map-web",
         "atlas-routing", "atlas-engine",
         "atlas-gtfs-static", "atlas-gtfs-realtime", "atlas-offline", "atlas-weather",
@@ -95,7 +91,7 @@ tasks.register("publishAtlasToLocalRepo") {
     description = "Publishes the Atlas SDK to build/atlas-maven for consumption by another app."
     dependsOn(
         subprojects
-            .filter { it.name.startsWith("atlas-") && it.name !in setOf("atlas-map-android", "atlas-transit", "atlas-web-spike") }
+            .filter { it.name.startsWith("atlas-") && it.name !in setOf("atlas-map-android", "atlas-web-spike") }
             .map { "${it.path}:publishAllPublicationsToAtlasLocalRepository" },
     )
 }
