@@ -14,9 +14,9 @@ kotlin {
         }
         binaries.executable()
     }
-    jvm {
-        withJava()
-    }
+    // No `withJava()` needed: KMP 2.1 always configures the java component
+    // (deprecation warning otherwise — same as atlas-domain).
+    jvm()
 
     sourceSets {
         val commonMain by getting {

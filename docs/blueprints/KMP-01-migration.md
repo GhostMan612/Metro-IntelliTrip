@@ -104,13 +104,13 @@ Spike wasm bundle loads in Chromium with no console WasmGC error.
 ## Status
 
 Implemented (M1 spike + M2a bridge + M2b breaking rename + M3b KMP domain +
-M3a portable-stack KMP + M3c I/O seams — every core module is now KMP
-jvm+wasmJs). Gate: spike `jvmTest` + `compileKotlinWasmJs` + all KMP
-modules `jvmTest` + `compileKotlinWasmJs` +
-`compileCommonMainKotlinMetadata` + `test` + `lint` + `assembleDebug` +
-`assembleRelease` (with R8) + `publishAtlasToLocalRepo` +
-`:sample:host:run` all green. Browser run still needs a Chromium check by
-the user; the web app itself (M4) is next.
+M3a portable-stack KMP + M3c I/O seams + M4a wasm renderer/web shell).
+Gate: spike `jvmTest` + `compileKotlinWasmJs` + all KMP modules
+`jvmTest` + `compileKotlinWasmJs` + `compileCommonMainKotlinMetadata` +
+`test` + `lint` + `assembleDebug` + `assembleRelease` (with R8) +
+`publishAtlasToLocalRepo` + `:sample:host:run` all green. Browser run still
+needs a Chromium check by the user; shell parity (polling, radar, IndexedDB)
+is M4b.
 
 `TimeBridge` (M2a) was removed in M2b when the production code itself moved
 to `kotlinx.datetime` — the bridge's tested conversions were absorbed as the
