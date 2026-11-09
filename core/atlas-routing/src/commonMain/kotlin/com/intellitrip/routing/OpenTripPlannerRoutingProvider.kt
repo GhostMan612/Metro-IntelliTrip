@@ -43,7 +43,7 @@ class OpenTripPlannerRoutingProvider(
     private val baseUrl: String,
     private val feedId: FeedId,
     private val transport: RoutingTransport,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val agencyZone: TimeZone = TimeZone.of("America/Chicago"),
     override val providerId: String = "open-trip-planner",
 ) : RoutingProvider {
@@ -275,3 +275,4 @@ private fun urlEncode(value: String): String {
     }
     return out.toString()
 }
+

@@ -24,9 +24,8 @@ class StaticFeedRefresher(
     private val acquirer: GtfsFeedAcquirer,
     private val store: StaticFeedSnapshotStore,
     private val clock: () -> Instant = { Clock.System.now() },
-    // Download + validate + file moves run on the IO pool (R1 fix:
-    // `Dispatchers.IO` is portable in kotlinx-coroutines 1.9).
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    // `Dispatchers.IO` is JVM-only; Default is the portable choice here.
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
 
     /**
@@ -115,4 +114,5 @@ class StaticFeedRefresher(
         }
     }
 }
+
 

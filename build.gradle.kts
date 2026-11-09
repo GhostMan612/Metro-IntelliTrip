@@ -47,7 +47,7 @@ allprojects {
     // JVM-only until their Files/HTTP seams land.
     val excluded = setOf(
         "atlas-map-android", "atlas-transit", "atlas-web-spike",
-        "atlas-domain", "atlas-contracts", "atlas-scope", "atlas-map",
+        "atlas-domain", "atlas-contracts", "atlas-scope", "atlas-map", "atlas-map-web",
         "atlas-routing", "atlas-engine",
         "atlas-gtfs-static", "atlas-gtfs-realtime", "atlas-offline", "atlas-weather",
     )

@@ -170,10 +170,10 @@ class PollingGtfsRealtimeClient(
     private val pollIntervalMillis: Long = 10_000,
     private val maxBackoffMillis: Long = 120_000,
     private val clock: () -> Instant = { Clock.System.now() },
-    // Network fetch + protobuf decode run on the IO pool, not Default:
-    // Default is CPU-bound and the fetch can starve planning (R1 fix;
-    // `Dispatchers.IO` is portable in kotlinx-coroutines 1.9).
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    // `Dispatchers.IO` is JVM-only (unresolved on wasmJs); Default is the
+    // portable choice. Fetch+decode are short and bounded, so the CPU pool
+    // is acceptable (an expect/actual IO dispatcher is a later refinement).
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.Default,
     /** Defaults to the platform decoder (JVM: Java protobuf; wasmJs: stub). */
     private val decoder: FeedDecoder = platformFeedDecoder(),
 ) {
@@ -268,4 +268,5 @@ object RealtimeScopeFilter {
         return 2 * earthRadius * asin(sqrt(h))
     }
 }
+
 

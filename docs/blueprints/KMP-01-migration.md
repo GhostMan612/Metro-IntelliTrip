@@ -252,8 +252,9 @@ From the repo audit (architecture/quality/production):
   files per call; haversine computed once per stop in `nearbyDepartures`.
 - `SavedPlacesStore.load()` falls back to the backup generation on corruption
   (previously sat unused — a bad write now costs the last change at worst).
-- ViewModel `_state` mutations all atomic (`update{}`); network/file I/O moved
-  from `Dispatchers.Default` to `Dispatchers.IO` (5 fetchers/refresher).
+- ViewModel `_state` mutations all atomic (`update{}`); the IO-dispatcher
+  move was **reverted**: `Dispatchers.IO` does not resolve on wasmJs, so
+  `Default` is the portable choice (documented in code).
 - Planner/board frequency caps documented as deliberate (300 search vs 20
   board/2h horizon) + stale planner comment fixed; OTP `RouteKey` identity
   limitation pinned with KDoc (blocks live OTP until a mapping lands);
@@ -279,3 +280,21 @@ Gate (all green): `test` + `lint` + `assembleDebug` + `assembleRelease`.
   the audit's fresh compile surfaced.
 
 Gate (all green): `test` + `lint` + `assembleDebug` + `assembleRelease`.
+
+## M4a delivered (2026-11-09) — wasm MapRenderer + first browser screen
+
+- New `core/atlas-map-web` (KMP): `WebRenderer` contract + pure
+  `snapshotToSources` bridge (JVM-tested GeoJSON per WebLayer) + wasmJs
+  `WebMapRenderer` (MapLibre GL JS via JS interop; host page loads a pinned
+  CDN build, webpack-free). Each layer = one source + one layer, mirroring
+  the Android bulk-update pipeline. First render centers; later renders
+  refresh data only (never fight a pan).
+- `atlas-web-spike` is the web shell: production `AtlasEngine` +
+  `StaticNetworkPlanner` over a tiny in-memory demo network (3 stops, Blue
+  Line, 2 trips), plans First → Third, renders the demo snapshot via
+  `TransitRenderPipeline` → `WebMapRenderer`. MapLibre pinned 5.0.4; offline
+  vendoring + `IntlTripViewModel` UI parity stay later work.
+
+Gate (all green): `atlas-map-web` + spike `jvmTest` + `compileKotlinWasmJs`
++ full `test` + `lint` + `assembleDebug` + `assembleRelease` +
+`publishAtlasToLocalRepo` + `:sample:host:run`.

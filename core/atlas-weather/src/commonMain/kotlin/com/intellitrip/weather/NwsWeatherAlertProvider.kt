@@ -42,7 +42,7 @@ class NwsWeatherAlertProvider(
     private val context: WeatherRequestContext,
     private val apiBase: String = "https://api.weather.gov",
     private val pollInterval: Duration = 5.minutes,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.Default,
     override val providerId: String = "nws",
 ) : WeatherAlertProvider {
 
@@ -282,3 +282,4 @@ class NwsWeatherAlertProvider(
         private const val apiBase = "https://api.weather.gov"
     }
 }
+

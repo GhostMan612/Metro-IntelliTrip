@@ -25,6 +25,16 @@ kotlin {
                 // Kotlin 2.0.20 wasm compiler (Missing stdlib class). The spike
                 // uses no serializers.
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.2")
+                // First browser screen (WebDemo): production engine + planner +
+                // render pipeline, all KMP since M3c.
+                implementation(project(":core:atlas-domain"))
+                implementation(project(":core:atlas-contracts"))
+                implementation(project(":core:atlas-scope"))
+                implementation(project(":core:atlas-routing"))
+                implementation(project(":core:atlas-map"))
+                implementation(project(":core:atlas-map-web"))
+                implementation(project(":core:atlas-engine"))
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
             }
         }
         val jvmMain by getting

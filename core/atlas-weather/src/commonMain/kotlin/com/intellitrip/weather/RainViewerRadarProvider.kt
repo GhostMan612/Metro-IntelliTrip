@@ -22,7 +22,7 @@ class RainViewerRadarProvider(
     private val http: WeatherHttpClient,
     private val context: WeatherRequestContext,
     private val apiBase: String = "https://api.rainviewer.com",
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.Default,
     override val providerId: String = "rainviewer",
 ) : RadarProvider {
 
@@ -113,3 +113,4 @@ class RainViewerRadarProvider(
             host.trimEnd('/') + "/" + path.trimStart('/')
     }
 }
+
