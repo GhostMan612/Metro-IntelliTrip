@@ -242,3 +242,23 @@ Gate (all green): every KMP module `jvmTest` + `compileKotlinWasmJs` +
 `compileCommonMainKotlinMetadata` + full `test` + `lint` + `assembleDebug` +
 `assembleRelease` + `publishAtlasToLocalRepo` + `:sample:host:run` + spike
 `jvmTest` + `compileKotlinWasmJs`.
+
+## R1 delivered (2026-11-09) — correctness sweep (audit-driven)
+
+From the repo audit (architecture/quality/production):
+
+- Stop-time index cached per snapshot dir (`StaticFeedSnapshotStore`,
+  `SimpleLock`, 4-dir bound) so the departure board no longer re-reads both
+  files per call; haversine computed once per stop in `nearbyDepartures`.
+- `SavedPlacesStore.load()` falls back to the backup generation on corruption
+  (previously sat unused — a bad write now costs the last change at worst).
+- ViewModel `_state` mutations all atomic (`update{}`); network/file I/O moved
+  from `Dispatchers.Default` to `Dispatchers.IO` (5 fetchers/refresher).
+- Planner/board frequency caps documented as deliberate (300 search vs 20
+  board/2h horizon) + stale planner comment fixed; OTP `RouteKey` identity
+  limitation pinned with KDoc (blocks live OTP until a mapping lands);
+  hybrid `UNKNOWN_FRESHNESS` rationale documented vs `StalenessModel`.
+- NWS missing-User-Agent already surfaces as `AuthFailure` — verified, no
+  change.
+
+Gate (all green): `test` + `lint` + `assembleDebug` + `assembleRelease`.

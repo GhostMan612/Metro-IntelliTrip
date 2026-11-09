@@ -331,7 +331,12 @@ serviceDate: LocalDate,
      * Frequency-based trips repeat their template stop times every
      * `headwaySeconds` between `startTime` and `endTime`, anchored at the
      * template's first departure. Without frequencies this is the single
-     * template run. Bounded to 50 repetitions per window for safety.
+     * template run. Bounded to 300 repetitions per window for safety
+     * (an all-day 5-min headway is 288 runs, so 300 keeps full service
+     * without unbounded blowup). The departure board expands the same
+     * frequencies differently (top ~20 departures inside a 2-hour horizon)
+     * because it is a UI listing, not a search — planner completeness wins
+     * there, board boundedness wins here. Both numbers are deliberate.
      */
     private fun expandedRuns(
         tripKey: TripKey,

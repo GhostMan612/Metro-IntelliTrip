@@ -43,7 +43,7 @@ class OpenTripPlannerRoutingProvider(
     private val baseUrl: String,
     private val feedId: FeedId,
     private val transport: RoutingTransport,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val agencyZone: TimeZone = TimeZone.of("America/Chicago"),
     override val providerId: String = "open-trip-planner",
 ) : RoutingProvider {
@@ -170,6 +170,13 @@ class OpenTripPlannerRoutingProvider(
                 )
             }
 
+            // Route identity is the OTP short/long name, NOT a GTFS route_id:
+            // OTP does not return the feed's route ids, so `RouteKey(feedId,
+            // shortName)` will not collide with local GTFS keys but also will
+            // not resolve to them. Remote journeys therefore cannot be replayed
+            // against the local network (live OTP stays disabled until a
+            // name->key mapping lands — Phase-09 item). Do not remove the
+            // fallback silently: returning null drops the leg and the journey.
             val routeId = route?.string("shortName") ?: route?.string("longName") ?: return null
             val tripId = leg.string("tripId")?.takeIf { it.isNotBlank() } ?: return null
             return Leg.Transit(

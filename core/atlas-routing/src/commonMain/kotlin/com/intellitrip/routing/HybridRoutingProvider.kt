@@ -100,7 +100,10 @@ internal fun <T> ProviderResult<T>.freshnessOrNull(): com.intellitrip.contracts.
 /**
  * Age is unbounded rather than zero: a result with no known source time is not
  * fresh, and reporting it as fresh would let the UI present unknown-age data as
- * current.
+ * current. This intentionally sits outside `StalenessModel` (offline module):
+ * hybrid freshness is the `FreshnessMetadata` contract triple (source/fetch/
+ * age), while `StalenessModel.Freshness` classifies cached entries — related,
+ * not identical, so this stays conservative rather than importing offline.
  */
 private val UNKNOWN_FRESHNESS = com.intellitrip.contracts.FreshnessMetadata(
     sourceTimestamp = Instant.DISTANT_PAST,

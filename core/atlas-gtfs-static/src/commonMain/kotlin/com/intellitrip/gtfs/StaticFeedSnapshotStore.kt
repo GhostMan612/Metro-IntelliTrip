@@ -34,6 +34,17 @@ class StaticFeedSnapshotStore(
     // always sees absolute store paths.
     private val root: String = store.resolve(root)
 
+    /**
+     * Stop-time readers by snapshot dir, so repeated board reads reuse the
+     * parsed index instead of re-reading both files per call. Keys are
+     * content-addressed by snapshot dir, so activating a new snapshot simply
+     * misses (old entries stay but are never served). Guarded by [readerLock]
+     * because the board reads from the main thread while the planner reads
+     * from background threads. Bounded: the last 4 dirs are kept.
+     */
+    private val readerCache = mutableMapOf<String, StopTimeIndexReader>()
+    private val readerLock = SimpleLock()
+
     data class Snapshot(val metadata: FeedMetadata, val snapshotDir: String)
 
     /** Opens a stop-time sink writing into a staging area; call [close] to finalize. */
@@ -49,10 +60,17 @@ class StaticFeedSnapshotStore(
 
     fun stopTimeReader(feedId: FeedId): StopTimeIndexReader? {
         val snapshot = activeSnapshot(feedId) ?: return null
-        val data = joinPath(snapshot.snapshotDir, STOP_TIME_DATA)
-        val index = joinPath(snapshot.snapshotDir, STOP_TIME_INDEX)
-        if (!store.exists(data) || !store.exists(index)) return null
-        return StopTimeIndexReader(store.readBytes(index), store.readBytes(data))
+        return readerLock.locked {
+            readerCache[snapshot.snapshotDir]?.let { return@locked it }
+            val data = joinPath(snapshot.snapshotDir, STOP_TIME_DATA)
+            val index = joinPath(snapshot.snapshotDir, STOP_TIME_INDEX)
+            if (!store.exists(data) || !store.exists(index)) return@locked null
+            val reader = StopTimeIndexReader(store.readBytes(index), store.readBytes(data))
+            // Bound the cache: drop oldest dirs (map order = insertion order).
+            while (readerCache.size >= 4) readerCache.remove(readerCache.keys.first())
+            readerCache[snapshot.snapshotDir] = reader
+            reader
+        }
     }
 
     fun activeSnapshot(feedId: FeedId): Snapshot? {

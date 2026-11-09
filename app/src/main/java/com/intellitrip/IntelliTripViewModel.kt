@@ -101,7 +101,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         // Saved places are rider-owned, so they load before anything touches the
         // network and are never gated on a feed being present.
         runCatching { savedPlaces.load() }.getOrNull()?.let { saved ->
-            if (saved.isNotEmpty()) _state.value = _state.value.copy(savedStops = saved)
+            if (saved.isNotEmpty()) _state.update { it.copy(savedStops = saved) }
         }
 
         // Start from any previously stored snapshot so a cold launch has the
@@ -113,22 +113,27 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                 runCatching { host.seedDebugFeedIfNeeded() }
             }
             host.offlineRegistry.loadStaticFeed(host.feedId)?.let { feed ->
-                _state.value = _state.value.copy(
-                    staticFeed = feed,
-                    status = "Loaded offline snapshot (${feed.stops.size} stops)",
-                    scope = host.scopeEngine.currentScope(_state.value.focus),
-                )
+                val focus = _state.value.focus
+                _state.update {
+                    it.copy(
+                        staticFeed = feed,
+                        status = "Loaded offline snapshot (${feed.stops.size} stops)",
+                        scope = host.scopeEngine.currentScope(focus),
+                    )
+                }
                 adoptLegacySavedStops(host.feedId.value, feed.stops)
             }
         }
     }
 
     fun setScope(label: String, focus: Focus?) {
-        _state.value = _state.value.copy(
-            scopeLabel = label,
-            focus = focus,
-            scope = host.scopeEngine.currentScope(focus),
-        )
+        _state.update {
+            it.copy(
+                scopeLabel = label,
+                focus = focus,
+                scope = host.scopeEngine.currentScope(focus),
+            )
+        }
     }
 
     /**
@@ -510,10 +515,14 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         val todayAgency = now.toLocalDateTime(agencyZone).date
         val candidateDates = (-1..1).map { todayAgency.plus(it, DateTimeUnit.DAY) }
 
+        // Distances computed once per stop (filter/sort shared one walk):
+        // the haversine is trig-heavy and was run twice per stop.
         val stopsToScan = origin?.let { point ->
             feed.stops
-                .filter { com.intellitrip.ui.DepartureBoard.metersBetween(point, it.location) <= NEARBY_RADIUS_METERS }
-                .sortedBy { com.intellitrip.ui.DepartureBoard.metersBetween(point, it.location) }
+                .map { it to com.intellitrip.ui.DepartureBoard.metersBetween(point, it.location) }
+                .filter { (_, meters) -> meters <= NEARBY_RADIUS_METERS }
+                .sortedBy { (_, meters) -> meters }
+                .map { (stop, _) -> stop }
                 .take(NEARBY_STOP_SCAN_LIMIT)
         } ?: feed.stops.take(NEARBY_STOP_SCAN_LIMIT)
 
@@ -563,6 +572,11 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                                 if (freq.headwaySeconds <= 0) continue
                                 var runStart = freq.startTime.secondsSinceServiceDayStart
                                 var count = 0
+                                // Top 20 per frequency run, inside the 7200 s horizon
+                                // below: the planner expands up to 300 runs for
+                                // search completeness (StaticNetworkPlanner); the
+                                // board lists only upcoming departures, so the
+                                // tighter cap is deliberate, not a mismatch.
                                 while (runStart <= freq.endTime.secondsSinceServiceDayStart && count < 20) {
                                     val delta = runStart - firstSec
                                     val shifted = com.intellitrip.domain.GtfsServiceTime.ofSeconds(
@@ -677,7 +691,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
 
     /** Selects a journey, draws it on the map, and frames it. */
     fun selectJourney(id: String) {
-        _state.value = _state.value.copy(selectedJourneyId = id)
+        _state.update { it.copy(selectedJourneyId = id) }
         val focus = focusJourney(id) ?: return
         setScope("Selected journey", focus)
     }

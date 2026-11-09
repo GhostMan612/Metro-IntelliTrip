@@ -61,19 +61,29 @@ class SavedPlacesStore(private val root: Path) {
     /**
      * Reads saved stops. A corrupt or missing file yields an empty list, never a crash.
      *
+     * When the main file is corrupt, the previous generation ([BACKUP_FILE])
+     * is tried before giving up, so a single bad write costs its most recent
+     * change at worst — never the whole list. (The backup exists exactly for
+     * this; it used to sit unused.)
+     *
      * Records written by an earlier build carry no feed id. They are still read, tagged
      * with [LEGACY_FEED] so a later feed load can re-scope them, rather than dropped.
      * Silently discarding them would make a rider's saved list appear to vanish on
      * update, which is the kind of quiet data loss they correctly never forgive.
      */
     fun load(): List<SavedStop> {
-        if (!Files.exists(file)) return emptyList()
-        return runCatching {
-            Files.readAllLines(file)
-                .filter { it.isNotBlank() && !it.startsWith(HEADER_PREFIX) }
-                .mapNotNull(::parseLine)
-                .sortedByDescending { it.savedAt }
-        }.getOrElse { emptyList() }
+        if (!Files.exists(file) && !Files.exists(root.resolve(BACKUP_FILE))) return emptyList()
+        val primary = runCatching { readFrom(file) }.getOrNull()
+        if (primary != null) return primary
+        return runCatching { readFrom(root.resolve(BACKUP_FILE)) }.getOrNull() ?: emptyList()
+    }
+
+    private fun readFrom(path: Path): List<SavedStop> {
+        if (!Files.exists(path)) throw java.io.IOException("no saved places file")
+        return Files.readAllLines(path)
+            .filter { it.isNotBlank() && !it.startsWith(HEADER_PREFIX) }
+            .mapNotNull(::parseLine)
+            .sortedByDescending { it.savedAt }
     }
 
     /** Adds or replaces a stop, keeping one entry per (feedId, stopId). */
