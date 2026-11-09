@@ -9,8 +9,8 @@
 // The consumer is Recovery for All, a Flutter app in a separate repository. It
 // cannot use `includeBuild` across repositories, so these modules publish to a
 // Maven coordinate and Recovery for All depends on that coordinate normally. Pure
-// Kotlin runs on Android; `java.time` and friends need core library desugaring on
-// the consumer's side, which Recovery for All already enables.
+// Kotlin runs on Android; the engine's time API is `kotlinx.datetime`
+// (M2b, pure Kotlin, no desugaring needed).
 //
 // Publishing is opt-in via `publishAtlasToLocalRepo`, never part of `build`, so an
 // ordinary clone cannot publish anything by accident.
@@ -22,11 +22,11 @@ val atlasVersion = "0.2.0"
 // plain `apply(plugin = ...)` elsewhere can race plugin resolution and fail with
 // "plugin not found" for no visible reason.
 plugins {
-    id("com.android.application") version "8.5.2" apply false
-    id("org.jetbrains.kotlin.android") version "2.0.20" apply false
-    id("org.jetbrains.kotlin.jvm") version "2.0.20" apply false
-    id("org.jetbrains.kotlin.plugin.compose") version "2.0.20" apply false
-    id("org.jetbrains.kotlin.multiplatform") version "2.0.20" apply false
+    id("com.android.application") version "8.7.3" apply false
+    id("org.jetbrains.kotlin.android") version "2.1.20" apply false
+    id("org.jetbrains.kotlin.jvm") version "2.1.20" apply false
+    id("org.jetbrains.kotlin.plugin.compose") version "2.1.20" apply false
+    id("org.jetbrains.kotlin.multiplatform") version "2.1.20" apply false
 }
 
 allprojects {
@@ -40,10 +40,11 @@ allprojects {
     //                        module and non-authoritative; publishing it would put
     //                        superseded code on a resolvable coordinate.
     val moduleName = name
-    // atlas-domain was briefly KMP in the M2b attempt; it is JVM-only again
-    // (kotlinx types, JVM build) because KMP publishing needs a Kotlin 2.1+
-    // upgrade (M3). The `atlas-web-spike` (wasmJs) is the web proof meanwhile.
-    val excluded = setOf("atlas-map-android", "atlas-transit", "atlas-web-spike")
+    // atlas-domain is KMP (jvm+wasmJs, M3b) and publishes via its own KMP
+    // publications (see core/atlas-domain/build.gradle.kts). Applying the
+    // `java-library` `maven` publication below to a KMP module is
+    // incompatible (Gradle warns) and creates a coordinate collision.
+    val excluded = setOf("atlas-map-android", "atlas-transit", "atlas-web-spike", "atlas-domain")
     if (moduleName.startsWith("atlas-") && moduleName !in excluded) {
         apply(plugin = "maven-publish")
         apply(plugin = "java-library")

@@ -103,10 +103,12 @@ Spike wasm bundle loads in Chromium with no console WasmGC error.
 
 ## Status
 
-Implemented (M1 spike + M2a bridge + M2b breaking rename). Gate: spike
-`jvmTest` + `compileKotlinWasmJs` + `test` + `lint` + `assembleDebug` +
-`assembleRelease` (with R8) + `publishAtlasToLocalRepo` + `:sample:host:run`
-all green. Browser run still needs a Chromium check by the user.
+Implemented (M1 spike + M2a bridge + M2b breaking rename + M3b KMP domain).
+Gate: spike `jvmTest` + `compileKotlinWasmJs` + domain `jvmTest` +
+`compileKotlinWasmJs` + `compileCommonMainKotlinMetadata` + `test` + `lint` +
+`assembleDebug` + `assembleRelease` (with R8) +
+`publishAtlasToLocalRepo` + `:sample:host:run` all green. Browser run still
+needs a Chromium check by the user.
 
 `TimeBridge` (M2a) was removed in M2b when the production code itself moved
 to `kotlinx.datetime` — the bridge's tested conversions were absorbed as the
@@ -151,3 +153,26 @@ build preserved on branch `archive/android-legacy`, tag
 Gate (all green): `test` + `lint` + `assembleDebug` + `assembleRelease` +
 `publishAtlasToLocalRepo` + `:sample:host:run` + spike `jvmTest` +
 `compileKotlinWasmJs`.
+
+## M3b delivered (2026-11-09) — toolchain upgrade + KMP domain
+
+- Toolchain upgraded together (single commit, green at each step): Kotlin
+  `2.0.20` → `2.1.20`, AGP `8.5.2` → `8.7.3` (Gradle stays `8.10`, toolchain
+  stays `17`). All JVM modules + `app` re-verified before the KMP move.
+- `atlas-domain` is now Kotlin Multiplatform (`jvm` + `wasmJs`): sources in
+  `src/commonMain`/`src/commonTest` (`src/main`/`src/test` removed). IDs stay
+  `data class` (`@JvmInline` value classes still do not compile for
+  wasmJs; portability over inlining — same call as M2b).
+- KMP Maven publishing works: `publishAtlasToLocalRepo` publishes
+  `atlas-domain` + `atlas-domain-jvm` + `atlas-domain-wasm-js` (Gradle
+  `.module` metadata) alongside the JVM-only sibling artifacts. The root
+  `java-library` publication stays disabled for this module (`java-library`
+  is incompatible with KMP); `atlas-domain` configures its own publications
+  + `atlasLocal` repo. Remaining M3 work: Files/HTTP seams + converting the
+  other core modules to KMP (engine first per the table above); `app` stays
+  the Android shell.
+
+Gate (all green): domain `jvmTest` + `compileKotlinWasmJs` +
+`compileCommonMainKotlinMetadata` + full `test` + `lint` + `assembleDebug` +
+`assembleRelease` + `publishAtlasToLocalRepo` + `:sample:host:run` + spike
+`jvmTest` + `compileKotlinWasmJs`.
