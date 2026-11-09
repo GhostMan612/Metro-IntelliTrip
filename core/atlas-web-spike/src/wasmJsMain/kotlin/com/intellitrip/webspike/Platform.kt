@@ -17,8 +17,12 @@ private fun loadMapLibreGl(): Boolean =
         for (const s of scripts) {
             if (s.src.includes('maplibre-gl')) return true;
         }
+        const css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = 'https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css';
+        document.head.appendChild(css);
         const el = document.createElement('script');
-        el.src = 'https://unpkg.com/maplibre-gl@5.0.4/dist/maplibre-gl.js';
+        el.src = 'https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js';
         document.head.appendChild(el);
         return true;
     })()"""

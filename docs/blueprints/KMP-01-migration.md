@@ -336,7 +336,7 @@ MapLibre (CDN pinned 5.0.4 today), and UI parity with Android.
   (JVM in-memory actual — files are already durable there; wasmJs actual is
   IndexedDB `atlas-cache`/`files` via the same suspend-completion bridge as
   the fetch seam). Entries are hex-encoded payloads keyed
-  `payload/<feed>/<sha256>` (IndexedDB is per-object-store; no server).
+  `payload/<feed>/<sha>` (IndexedDB is per-object-store; no server).
 - The static-GTFS refresher (async path) writes the activated payload
   best-effort after activation, so a reloaded web shell can skip
   re-downloading bytes it already activated. The snapshot store remains
@@ -344,6 +344,12 @@ MapLibre (CDN pinned 5.0.4 today), and UI parity with Android.
 - The sync `PlatformFileStore` seam and sync IndexedDB stay incompatible by
   design (a durable reload path would require suspending the whole file
   API — guided only by the payload-cache need, kept explicit).
+- Vendoring attempt (documented dead end): vendored the MapLibre 5.24.0 dist
+  into `atlas-web-spike/src/wasmJsResources`, but the Kotlin 2.1.20 web
+  resources plugin (`org.jetbrains.kotlin.plugin.resources`) is not on the
+  plugin portal, so the assets are unwired source files; the shell loads the
+  pinned CDN build (`unpkg`, 5.24.0) instead. A later toolchain that ships
+  resources support can wire the vendored copy without code changes.
 
 Gate (all green): contracts/gtfs-static/spike `jvmTest` + `compileKotlinWasmJs`
 + full `test` + `lint` + `assembleDebug` + `assembleRelease` +

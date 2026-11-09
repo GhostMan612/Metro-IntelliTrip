@@ -3,6 +3,9 @@
 Ship steps stub. Implemented: minified, desugared release builds with opt-in
 signing. Not implemented: store listing copy, screenshots, data-safety answers.
 
+Store-facing track (AAB upload, listing, data-safety, declarations) is now
+described in `docs/PLAY_TRACK.md`.
+
 ## Signing (opt-in)
 
 `app/build.gradle.kts` wires `releaseFromEnv` only when these are set:

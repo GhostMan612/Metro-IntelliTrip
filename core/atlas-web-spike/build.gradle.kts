@@ -13,6 +13,10 @@ kotlin {
             }
         }
         binaries.executable()
+        // NOTE: no resources plugin (not on the portal in 2.1.20), so the
+        // vendored MapLibre dist in src/wasmJsResources is NOT wired into the
+        // webpack output. The shell loads the pinned CDN build instead;
+        // vendoring stays a documented follow-up (see KMP-01 M4d note).
     }
     // No `withJava()` needed: KMP 2.1 always configures the java component
     // (deprecation warning otherwise — same as atlas-domain).
