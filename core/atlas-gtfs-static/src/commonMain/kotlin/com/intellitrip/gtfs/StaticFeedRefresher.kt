@@ -98,7 +98,17 @@ class StaticFeedRefresher(
         store.activateStaged(feedId, stagedPayload, metadata)
         runCatching { store.writeCache(feedId, feed) }
         store.recordValidators(feedId, FeedValidators(acquisition.etag, acquisition.lastModified))
+        // Durable cross-restart payload cache (IndexedDB on wasmJs, in-memory
+        // on JVM): a web shell primed with this can skip re-downloading bytes
+        // it already activated. Best-effort — the snapshot store stays
+        // authoritative; validators still drive the next conditional GET.
+        runCatching { com.intellitrip.contracts.platformDurablePut(durablePayloadKey(feedId, metadata.hash), acquisition.payload) }
         return RefreshOutcome.Activated(feed)
+    }
+
+    companion object {
+        fun durablePayloadKey(feedId: FeedId, hash: String?): String =
+            "payload/" + feedId.value + "/" + (hash ?: "nohash")
     }
 
     /** Blocking refresh for hosts that already run on a background thread. */

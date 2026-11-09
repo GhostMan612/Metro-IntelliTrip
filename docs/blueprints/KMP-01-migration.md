@@ -330,6 +330,21 @@ Gate (all green): `atlas-map-web` + spike `jvmTest` + `compileKotlinWasmJs`
 Remaining: IndexedDB persistence (in-memory wasm stores today), vendored
 MapLibre (CDN pinned 5.0.4 today), and UI parity with Android.
 
-Gate (all green): affected `jvmTest` + `compileKotlinWasmJs` + full
-`test` + `lint` + `assembleDebug` + `assembleRelease` +
+## M4d delivered (2026-11-09) — durable payload cache (IndexedDB)
+
+- Shared seam in `atlas-contracts`: `expect suspend platformDurablePut/Get`
+  (JVM in-memory actual — files are already durable there; wasmJs actual is
+  IndexedDB `atlas-cache`/`files` via the same suspend-completion bridge as
+  the fetch seam). Entries are hex-encoded payloads keyed
+  `payload/<feed>/<sha256>` (IndexedDB is per-object-store; no server).
+- The static-GTFS refresher (async path) writes the activated payload
+  best-effort after activation, so a reloaded web shell can skip
+  re-downloading bytes it already activated. The snapshot store remains
+  authoritative; next conditional GET still drives staleness.
+- The sync `PlatformFileStore` seam and sync IndexedDB stay incompatible by
+  design (a durable reload path would require suspending the whole file
+  API — guided only by the payload-cache need, kept explicit).
+
+Gate (all green): contracts/gtfs-static/spike `jvmTest` + `compileKotlinWasmJs`
++ full `test` + `lint` + `assembleDebug` + `assembleRelease` +
 `publishAtlasToLocalRepo` + `:sample:host:run`.
