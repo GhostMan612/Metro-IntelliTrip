@@ -21,7 +21,7 @@ Published coordinates — group `com.intellitrip.atlas`, version `0.2.0`:
 | Artifact | What it gives you |
 | --- | --- |
 | `atlas-engine` | `AtlasEngine`, the composition root. **Start here.** |
-| `atlas-domain` | Feed-scoped identities, journeys, scope, geo types. KMP (M3b): also publishes `atlas-domain-jvm` + `atlas-domain-wasm-js` variants — a Kotlin/JS or wasm consumer resolves the right variant from the same `atlas-domain:0.2.0` coordinate. |
+| `atlas-domain` | Feed-scoped identities, journeys, scope, geo types. KMP (M3): every module publishes `*-jvm` + `*-wasm-js` variants — a Kotlin/JS or wasm consumer resolves the right variant from the same coordinate (e.g. `atlas-domain:0.2.0`). |
 | `atlas-contracts` | `RoutingProvider`, `RadarProvider`, `ProviderResult`, freshness |
 | `atlas-scope` | `Focus` → camera/data/render resolution |
 | `atlas-routing` | `StaticNetworkPlanner`, `HybridRoutingProvider`, OTP adapter |

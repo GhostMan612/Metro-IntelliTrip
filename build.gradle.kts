@@ -49,6 +49,7 @@ allprojects {
         "atlas-map-android", "atlas-transit", "atlas-web-spike",
         "atlas-domain", "atlas-contracts", "atlas-scope", "atlas-map",
         "atlas-routing", "atlas-engine",
+        "atlas-gtfs-static", "atlas-gtfs-realtime", "atlas-offline", "atlas-weather",
     )
     if (moduleName.startsWith("atlas-") && moduleName !in excluded) {
         apply(plugin = "maven-publish")

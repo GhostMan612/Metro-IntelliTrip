@@ -2,10 +2,13 @@ package com.intellitrip
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.intellitrip.gtfs.PlatformFileStore
 import com.intellitrip.gtfs.StaticFeedSnapshotStore
 import com.intellitrip.gtfs.StaticFeedSnapshotStore as Store
 import com.intellitrip.map.RouteGeometry
+import com.intellitrip.offline.JvmOfflineSnapshotPort
 import com.intellitrip.offline.OfflineRegistry
+import com.intellitrip.offline.loadStaticFeed
 import com.intellitrip.routing.RoutingNetwork
 import com.intellitrip.routing.StaticNetworkPlanner
 import com.intellitrip.domain.TripPlanRequest
@@ -42,7 +45,7 @@ class AtlasHostInstrumentedTest {
     @Test
     fun snapshotStoreRoundTripsOnDevice() {
         val root = Files.createTempDirectory("device-store")
-        val store = Store(root)
+        val store = Store(PlatformFileStore(root.toString()))
         val payload = GtfsFixture().zip()
         val metadata = com.intellitrip.domain.FeedMetadata(
             feedId = com.intellitrip.domain.FeedId(FEED_ID),
@@ -66,7 +69,7 @@ class AtlasHostInstrumentedTest {
     @Test
     fun offlineRegistryReportsMissingSnapshot() {
         val root = Files.createTempDirectory("device-offline")
-        val registry = OfflineRegistry(StaticFeedSnapshotStore(root))
+        val registry = OfflineRegistry(JvmOfflineSnapshotPort(StaticFeedSnapshotStore(PlatformFileStore(root.toString()))))
         val capabilities = registry.capabilities(com.intellitrip.domain.FeedId(FEED_ID))
         assertTrue(!capabilities.staticNetworkUsable)
         assertTrue(capabilities.notes.isNotEmpty())
@@ -80,11 +83,13 @@ class AtlasHostInstrumentedTest {
     fun routeGeometryFollowsFeedShapes() {
         val feedId = com.intellitrip.domain.FeedId(FEED_ID)
         val feed = OfflineRegistry(
-            StaticFeedSnapshotStore(Files.createTempDirectory("device-geometry")).also {
-                it.activate(feedId, GtfsFixture(withShapes = true).zip(), com.intellitrip.domain.FeedMetadata(
-                    feedId, null, null, null, "1", "h", Clock.System.now(), null, null, null,
-                ))
-            }
+            JvmOfflineSnapshotPort(
+                StaticFeedSnapshotStore(PlatformFileStore(Files.createTempDirectory("device-geometry").toString())).also {
+                    it.activate(feedId, GtfsFixture(withShapes = true).zip(), com.intellitrip.domain.FeedMetadata(
+                        feedId, null, null, null, "1", "h", Clock.System.now(), null, null, null,
+                    ))
+                }
+            )
         ).loadStaticFeed(feedId)!!
 
         assertTrue("fixture should carry a shape", feed.shapes.isNotEmpty())
@@ -118,11 +123,13 @@ class AtlasHostInstrumentedTest {
     fun routeGeometryFallsBackWhenShapeIsMissing() {
         val feedId = com.intellitrip.domain.FeedId(FEED_ID)
         val feed = OfflineRegistry(
-            StaticFeedSnapshotStore(Files.createTempDirectory("device-geometry-fallback")).also {
-                it.activate(feedId, GtfsFixture(withShapes = false).zip(), com.intellitrip.domain.FeedMetadata(
-                    feedId, null, null, null, "1", "h", Clock.System.now(), null, null, null,
-                ))
-            }
+            JvmOfflineSnapshotPort(
+                StaticFeedSnapshotStore(PlatformFileStore(Files.createTempDirectory("device-geometry-fallback").toString())).also {
+                    it.activate(feedId, GtfsFixture(withShapes = false).zip(), com.intellitrip.domain.FeedMetadata(
+                        feedId, null, null, null, "1", "h", Clock.System.now(), null, null, null,
+                    ))
+                }
+            )
         ).loadStaticFeed(feedId)!!
         assertTrue("fixture should have no shapes", feed.shapes.isEmpty())
 
@@ -170,12 +177,12 @@ class AtlasHostInstrumentedTest {
 
     @Test
     fun plannerRunsOnDeviceFilesystem() = runBlocking {
-        val store = StaticFeedSnapshotStore(Files.createTempDirectory("device-plan"))
+        val store = StaticFeedSnapshotStore(PlatformFileStore(Files.createTempDirectory("device-plan").toString()))
         val feedId = com.intellitrip.domain.FeedId(FEED_ID)
         store.activate(feedId, GtfsFixture().zip(), com.intellitrip.domain.FeedMetadata(
             feedId, null, null, null, "1", "h", Clock.System.now(), null, null, null,
         ))
-        val registry = OfflineRegistry(store)
+        val registry = OfflineRegistry(JvmOfflineSnapshotPort(store))
         val feed = registry.loadStaticFeed(feedId)
         assertNotNull("stored fixture should parse on device", feed)
         val planner = StaticNetworkPlanner(
@@ -211,7 +218,7 @@ class AtlasHostInstrumentedTest {
     @Test
     fun riderJourneyEndToEndOnDevice() = runBlocking {
         val feedId = com.intellitrip.domain.FeedId(FEED_ID)
-        val store = StaticFeedSnapshotStore(Files.createTempDirectory("device-rider"))
+        val store = StaticFeedSnapshotStore(PlatformFileStore(Files.createTempDirectory("device-rider").toString()))
 
         // 1. Load transit data through the same sequence the refresher uses: parse with a
         // stop-time sink that writes the disk index, then activate the snapshot.

@@ -104,12 +104,13 @@ Spike wasm bundle loads in Chromium with no console WasmGC error.
 ## Status
 
 Implemented (M1 spike + M2a bridge + M2b breaking rename + M3b KMP domain +
-M3a portable-stack KMP). Gate: spike `jvmTest` + `compileKotlinWasmJs` + all
-KMP modules `jvmTest` + `compileKotlinWasmJs` +
+M3a portable-stack KMP + M3c I/O seams — every core module is now KMP
+jvm+wasmJs). Gate: spike `jvmTest` + `compileKotlinWasmJs` + all KMP
+modules `jvmTest` + `compileKotlinWasmJs` +
 `compileCommonMainKotlinMetadata` + `test` + `lint` + `assembleDebug` +
 `assembleRelease` (with R8) + `publishAtlasToLocalRepo` +
 `:sample:host:run` all green. Browser run still needs a Chromium check by
-the user.
+the user; the web app itself (M4) is next.
 
 `TimeBridge` (M2a) was removed in M2b when the production code itself moved
 to `kotlinx.datetime` — the bridge's tested conversions were absorbed as the
@@ -203,6 +204,39 @@ All six KMP modules publish `*-jvm` + `*-wasm-js` variants at `0.2.0`.
 Remaining JVM-only (need Files/HTTP seams next): `atlas-gtfs-static`
 (`java.nio`/`java.io`), `atlas-gtfs-realtime` (protobuf/`java.io`),
 `atlas-offline` (`java.nio`), `atlas-weather` (`java.net`).
+
+Gate (all green): every KMP module `jvmTest` + `compileKotlinWasmJs` +
+`compileCommonMainKotlinMetadata` + full `test` + `lint` + `assembleDebug` +
+`assembleRelease` + `publishAtlasToLocalRepo` + `:sample:host:run` + spike
+`jvmTest` + `compileKotlinWasmJs`.
+
+## M3c delivered (2026-11-09) — I/O seams (files + HTTP), every core module KMP
+
+The last JVM-only modules converted with `expect`/`actual` seams; wasm.js
+stubs are explicit (throw with TODO for IndexedDB/async-fetch) rather than
+fake data:
+
+- `atlas-gtfs-static`: `PlatformFileStore` seam (JVM `java.nio`, wasm
+  in-memory), portable DEFLATE ZIP reader over `ByteArray`, portable
+  SHA-256. Byte-identical on-disk formats (golden test). New
+  `StaticFeedSnapshotStore.readCache()` (byte fast path, used by offline).
+- `atlas-gtfs-realtime`: portable decoded model + `FeedDecoder` expect seam
+  (JVM Java-protobuf actual, wasm stub); `UrlGtfsRealtimeFetcher` expect
+  (JVM `HttpURLConnection`, wasm stub). Mapping/polling fully portable.
+- `atlas-offline`: `OfflineFileStore` expect seam; pure `StalenessModel` /
+  `BasemapPolicy` / digest in common. `OfflineRegistry` takes portable
+  `OfflineSnapshotPort`; `loadStaticFeed` is a jvmMain extension.
+- `atlas-weather`: `WeatherHttpClient` expect seam (JVM `HttpURLConnection`,
+  wasm stub); providers already pure JSON.
+
+Host migrations (app): `StaticFeedSnapshotStore(PlatformFileStore(path))`,
+`OfflineRegistry(JvmOfflineSnapshotPort(store))` + `loadStaticFeed` import,
+`OfflineBasemapStore(String)`, stop-time reader read without `use`
+(in-memory, no longer `Closeable`).
+
+All ten core modules now publish `*-jvm` + `*-wasm-js` at `0.2.0`.
+Next: `atlas-map-android` renderer `expect`/`actual` (M4 web shell) +
+IndexedDB persistence follow-ups.
 
 Gate (all green): every KMP module `jvmTest` + `compileKotlinWasmJs` +
 `compileCommonMainKotlinMetadata` + full `test` + `lint` + `assembleDebug` +

@@ -7,6 +7,7 @@ import com.intellitrip.contracts.LocationProvider
 import com.intellitrip.domain.FeedId
 import com.intellitrip.location.AndroidLocationProvider
 import com.intellitrip.gtfs.GtfsFeedAcquirer
+import com.intellitrip.gtfs.PlatformFileStore
 import com.intellitrip.gtfs.StaticFeedRefresher
 import com.intellitrip.gtfs.StaticFeedSnapshotStore
 import com.intellitrip.gtfs.StaticFeed
@@ -14,6 +15,7 @@ import com.intellitrip.gtfsrt.PollingGtfsRealtimeClient
 import com.intellitrip.gtfsrt.UrlGtfsRealtimeFetcher
 import com.intellitrip.map.RenderUpdateThrottle
 import com.intellitrip.map.TransitRenderPipeline
+import com.intellitrip.offline.JvmOfflineSnapshotPort
 import com.intellitrip.offline.OfflineRegistry
 import com.intellitrip.routing.StaticNetworkPlanner
 import com.intellitrip.routing.RoutingNetwork
@@ -64,7 +66,7 @@ class AtlasHost(val context: Context) {
      */
     val location: LocationProvider = AndroidLocationProvider(context)
 
-    val snapshotStore = StaticFeedSnapshotStore(context.filesDir.toPath())
+    val snapshotStore = StaticFeedSnapshotStore(PlatformFileStore(context.filesDir.toPath().toString()))
 
     /**
      * Private on-device storage for rider-owned data.
@@ -116,9 +118,9 @@ class AtlasHost(val context: Context) {
         return runBlocking(kotlinx.coroutines.Dispatchers.IO) { refresher.refresh() } is com.intellitrip.gtfs.RefreshOutcome.Activated
     }
 
-    val offlineRegistry = OfflineRegistry(snapshotStore)
+    val offlineRegistry = OfflineRegistry(JvmOfflineSnapshotPort(snapshotStore))
     val basemapStore = com.intellitrip.offline.OfflineBasemapStore(
-        context.filesDir.toPath().resolve("basemaps"),
+        context.filesDir.toPath().resolve("basemaps").toString(),
     )
     val scopeEngine = ScopeEngine()
     val pipeline = TransitRenderPipeline()

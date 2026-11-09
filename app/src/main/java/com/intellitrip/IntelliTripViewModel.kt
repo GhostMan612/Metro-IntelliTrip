@@ -21,6 +21,7 @@ import com.intellitrip.gtfs.RefreshOutcome
 import com.intellitrip.gtfs.StaticFeed
 import com.intellitrip.offline.BasemapAvailability
 import com.intellitrip.offline.CacheEntry
+import com.intellitrip.offline.loadStaticFeed
 import com.intellitrip.routing.RoutingNetwork
 import com.intellitrip.routing.TransferIntelligenceService
 import kotlin.time.Duration.Companion.seconds
@@ -516,7 +517,10 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                 .take(NEARBY_STOP_SCAN_LIMIT)
         } ?: feed.stops.take(NEARBY_STOP_SCAN_LIMIT)
 
-        return reader.use { index ->
+        // In-memory reader (bytes, no channel to close); `use` no longer
+        // applies since the KMP port dropped Closeable. See StopTimeIndex.
+        return run {
+            val index = reader
             // Template first-departure per frequency trip, cached for this board.
             val firstDepartureSec = mutableMapOf<String, Int>()
             com.intellitrip.ui.DepartureBoard.build(
