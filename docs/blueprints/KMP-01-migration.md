@@ -298,3 +298,20 @@ Gate (all green): `test` + `lint` + `assembleDebug` + `assembleRelease`.
 Gate (all green): `atlas-map-web` + spike `jvmTest` + `compileKotlinWasmJs`
 + full `test` + `lint` + `assembleDebug` + `assembleRelease` +
 `publishAtlasToLocalRepo` + `:sample:host:run`.
+
+## M4b delivered (2026-11-09) — shell parity (glide loop + radar overlay)
+
+- `WebRenderer.setRadarOverlay(RadarOverlay?)`: raster-tile source/layer
+  (`radar-layer`, `setData`-style replacement on re-set, clean removal).
+  The demo shell mounts the RainViewer past-frame overlay; providers hand
+  it `RadarFrame.tileUrlTemplate` directly.
+- Demo vehicle glides S1 → S3: `WebDemo.demoSnapshot(progress)` interpolates
+  the fix; the wasm host polls `setSources` every 200 ms (Android glide
+  parity), and the renderer still never recenters after the first frame.
+- Spike + `atlas-map-web` covered by `jvmTest` + `compileKotlinWasmJs`.
+
+Gate (all green): `atlas-map-web` + spike `jvmTest` + `compileKotlinWasmJs`
++ full `test` + `lint` + `assembleDebug` + `assembleRelease` +
+`publishAtlasToLocalRepo` + `:sample:host:run`. Remaining stubs: wasm
+HTTP fetch (async seam) + IndexedDB persistence + vendored MapLibre —
+all follow-ups with the app UI parity track.

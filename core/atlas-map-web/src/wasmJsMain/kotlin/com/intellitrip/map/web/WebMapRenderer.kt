@@ -48,6 +48,15 @@ class WebMapRenderer : WebRenderer {
         }
     }
 
+    override fun setRadarOverlay(overlay: RadarOverlay?) {
+        val current = map ?: error("WebMapRenderer.setStyle() must be called before setRadarOverlay()")
+        if (overlay == null) {
+            removeRadarLayer(current)
+        } else {
+            applyRadarLayer(current, overlay.tileUrlTemplate, overlay.opacity.toDouble())
+        }
+    }
+
     override fun destroy() {
         map?.let { current -> destroyMap(current) }
         map = null
@@ -65,6 +74,27 @@ private fun centerMap(map: JsAny, lon: Double, lat: Double, zoom: Double): JsAny
 
 private fun destroyMap(map: JsAny): JsAny =
     js("""(map.remove(), map)""")
+
+private fun applyRadarLayer(map: JsAny, tileUrl: String, opacity: Double): JsAny =
+    js("""(() => {
+        const m = map;
+        const existing = m.getSource('radar');
+        if (existing) {
+            m.removeLayer('radar-layer');
+        } else {
+            m.addSource('radar', { type: 'raster', tiles: [tileUrl], tileSize: 256 });
+            m.addLayer({ id: 'radar-layer', type: 'raster', source: 'radar', paint: { 'raster-opacity': opacity } });
+        }
+        return m;
+    })()""")
+
+private fun removeRadarLayer(map: JsAny): JsAny =
+    js("""(() => {
+        const m = map;
+        if (m.getLayer('radar-layer')) m.removeLayer('radar-layer');
+        if (m.getSource('radar')) m.removeSource('radar');
+        return m;
+    })()""")
 
 private fun applySource(map: JsAny, sourceId: String, geoJson: String, isLine: Boolean): JsAny =
     js("""(() => {

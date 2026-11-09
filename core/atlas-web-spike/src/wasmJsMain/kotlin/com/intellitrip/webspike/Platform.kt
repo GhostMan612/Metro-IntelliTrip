@@ -68,13 +68,26 @@ fun main() {
         val renderer = WebMapRenderer()
         renderer.mount("atlas-map")
         renderer.setStyle(CartoBasemapProvider.style(dark = false))
-        val snapshot = WebDemo.demoSnapshot()
-        renderer.setSources(
-            snapshotToSources(snapshot),
-            centerLon = -93.26,
-            centerLat = 44.98,
-            zoom = 15.0,
-        )
+        // Demo radar overlay (RainViewer past frame). Remove to go back to
+        // a bare basemap; providers supply a live RadarFrame in the real shell.
+        renderer.setRadarOverlay(WebDemo.demoRadarOverlay())
+
+        // 200 ms glide loop mirroring Android's: the demo vehicle walks
+        // S1 -> S3 over ~10 s; sources refresh, camera never recenters after
+        // the first frame (the renderer owns that rule).
+        var progress = 0.0
+        while (true) {
+            val snapshot = WebDemo.demoSnapshot(progress = progress)
+            renderer.setSources(
+                snapshotToSources(snapshot),
+                centerLon = -93.26,
+                centerLat = 44.98,
+                zoom = 15.0,
+            )
+            progress += 0.02
+            if (progress >= 1.0) progress = 0.0
+            kotlinx.coroutines.delay(200L)
+        }
     }
     println(describeNow())
 }

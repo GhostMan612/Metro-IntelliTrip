@@ -18,6 +18,16 @@ data class SourcePayload(
     val geoJson: String,
 )
 
+/**
+ * Radar tile overlay (e.g. RainViewer frames converted from `RadarFrame`).
+ * Raster, not GeoJSON — the renderer adds it as a raster-tile source.
+ */
+data class RadarOverlay(
+    /** XYZ tile URL template, e.g. `https://tilecache.../{z}/{x}/{y}.png`. */
+    val tileUrlTemplate: String,
+    val opacity: Float = 0.7f,
+)
+
 enum class WebLayer {
     VEHICLES,
     CLUSTERS,
@@ -50,5 +60,7 @@ interface WebRenderer {
     fun mount(containerId: String)
     fun setStyle(style: BasemapStyle)
     fun setSources(payloads: List<SourcePayload>, centerLon: Double, centerLat: Double, zoom: Double)
+    /** Adds/removes the radar tile overlay (null removes it). */
+    fun setRadarOverlay(overlay: RadarOverlay?)
     fun destroy()
 }
