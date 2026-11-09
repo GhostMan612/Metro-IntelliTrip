@@ -8,3 +8,7 @@ gradle/gradle-daemon-jvm.properties
 bin/
 *.zip
 !gradle-wrapper.jar
+# Play upload keys: never committed (docs/RELEASE.md, docs/PLAY_TRACK.md)
+*.jks
+*.keystore
+upload-key.jks*

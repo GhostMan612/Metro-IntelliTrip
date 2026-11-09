@@ -359,10 +359,13 @@ Gate (all green): contracts/gtfs-static/spike `jvmTest` + `compileKotlinWasmJs`
 
 `atlas-transit` deleted (ADR-014 executed: zero dependents; removed from
 `settings.gradle.kts` and publishing config; history remains in docs/ADR).
+Vendored MapLibre 5.24.0 dist is wired via `vendorMapLibreDev/Prod` Copy
+tasks next to the webpack bundles (shell loads same-origin, no CDN).
 Closed and gated: M1 spike, M2a bridge, M2b kotlinx rename (SDK 0.2.0),
-M3b toolchain+KMP domain, M3a portable stack, M3c I/O seams, M4a/M4b/M4c
-renderer+shell+glide/radar+async fetch, M4d durable cache, R1 correctness,
-R2 docs+guards, Play track doc. The Android app installs; the web shell
-compiles+renders on wasmJs. Open by necessity (external): live OTP
-endpoint/verification, RainViewer licensing, Chromium eye-check of the
-running shell, and Play upload with your upload key.
+M3b toolchain+KMP domain, M3a portable stack, M3c I/O seams, M4a/M4b/M4c/
+M4d renderer+shell+glide/radar+async fetch+durable cache, R1 correctness,
+R2 docs+guards, Play track doc (signed AAB pipeline validated with a local
+upload key). The Android app installs; the web shell compiles+renders on
+wasmJs. Open by necessity (external): live OTP endpoint/verification,
+RainViewer licensing, Chromium eye-check of the running shell, and Play
+upload with your upload key.

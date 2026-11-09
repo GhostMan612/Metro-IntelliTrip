@@ -20,7 +20,12 @@ rootProject.name = "IntelliTrip"
 
 
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    // PREFER_PROJECT (not FAIL_ON_PROJECT_REPOS): the Kotlin node plugin
+    // registers a Node distributions repository per wasm module, and it must
+    // stay resolvable for `kotlinNodeJsSetup`/`wasmJsBrowser*Webpack` tasks.
+    // Settings repos are still declared as the fallback; only the plugin's
+    // own distribution repo is project-scoped.
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
     repositories {
         google()
         mavenCentral()

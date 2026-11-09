@@ -17,12 +17,15 @@ private fun loadMapLibreGl(): Boolean =
         for (const s of scripts) {
             if (s.src.includes('maplibre-gl')) return true;
         }
+        // Vendored MapLibre GL dist (5.24.0, same-origin): the build copies
+        // src/wasmJsResources next to the bundle (vendorMapLibreDev/Prod).
+        // No CDN, no network for the map library itself.
         const css = document.createElement('link');
         css.rel = 'stylesheet';
-        css.href = 'https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css';
+        css.href = 'maplibre-gl.css';
         document.head.appendChild(css);
         const el = document.createElement('script');
-        el.src = 'https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js';
+        el.src = 'maplibre-gl.js';
         document.head.appendChild(el);
         return true;
     })()"""

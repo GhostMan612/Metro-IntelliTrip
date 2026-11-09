@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.Copy
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 
 plugins {
@@ -53,5 +54,28 @@ kotlin {
 
 tasks.withType<Test>().configureEach {
     testLogging { showStandardStreams = true }
+}
+
+// Vendor check: the shell loads maplibre-gl.js/maplibre-gl.css from the
+// same origin (vendored dist under src/wasmJsResources). These Copy tasks
+// place the assets next to the webpack bundles so `wasmJsBrowser*Run`
+// serves them locally with no CDN dependency.
+tasks.register<Copy>("vendorMapLibreDev") {
+    group = "web"
+    description = "Copy vendored MapLibre GL dist next to the dev bundle."
+    dependsOn("wasmJsBrowserDevelopmentWebpack")
+    from(layout.projectDirectory.dir("src/wasmJsResources")) {
+        include("maplibre-gl.js", "maplibre-gl.css")
+    }
+    into(layout.projectDirectory.dir("build/kotlin-webpack/wasmJs/developmentExecutable"))
+}
+tasks.register<Copy>("vendorMapLibreProd") {
+    group = "web"
+    description = "Copy vendored MapLibre GL dist next to the prod bundle."
+    dependsOn("wasmJsBrowserProductionWebpack")
+    from(layout.projectDirectory.dir("src/wasmJsResources")) {
+        include("maplibre-gl.js", "maplibre-gl.css")
+    }
+    into(layout.projectDirectory.dir("build/kotlin-webpack/wasmJs/productionExecutable"))
 }
 
