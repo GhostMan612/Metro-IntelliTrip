@@ -103,12 +103,13 @@ Spike wasm bundle loads in Chromium with no console WasmGC error.
 
 ## Status
 
-Implemented (M1 spike + M2a bridge + M2b breaking rename + M3b KMP domain).
-Gate: spike `jvmTest` + `compileKotlinWasmJs` + domain `jvmTest` +
-`compileKotlinWasmJs` + `compileCommonMainKotlinMetadata` + `test` + `lint` +
-`assembleDebug` + `assembleRelease` (with R8) +
-`publishAtlasToLocalRepo` + `:sample:host:run` all green. Browser run still
-needs a Chromium check by the user.
+Implemented (M1 spike + M2a bridge + M2b breaking rename + M3b KMP domain +
+M3a portable-stack KMP). Gate: spike `jvmTest` + `compileKotlinWasmJs` + all
+KMP modules `jvmTest` + `compileKotlinWasmJs` +
+`compileCommonMainKotlinMetadata` + `test` + `lint` + `assembleDebug` +
+`assembleRelease` (with R8) + `publishAtlasToLocalRepo` +
+`:sample:host:run` all green. Browser run still needs a Chromium check by
+the user.
 
 `TimeBridge` (M2a) was removed in M2b when the production code itself moved
 to `kotlinx.datetime` — the bridge's tested conversions were absorbed as the
@@ -173,6 +174,37 @@ Gate (all green): `test` + `lint` + `assembleDebug` + `assembleRelease` +
   the Android shell.
 
 Gate (all green): domain `jvmTest` + `compileKotlinWasmJs` +
+`compileCommonMainKotlinMetadata` + full `test` + `lint` + `assembleDebug` +
+`assembleRelease` + `publishAtlasToLocalRepo` + `:sample:host:run` + spike
+`jvmTest` + `compileKotlinWasmJs`.
+
+## M3a delivered (2026-11-09) — portable stack KMP (contracts/scope/map/routing/engine)
+
+Pure-Kotlin modules converted to KMP (`jvm` + `wasmJs`, `src/commonMain` /
+`src/commonTest`; `atlas-routing` keeps its real-feed test in `src/jvmTest` —
+it needs `java.nio` temp files + the still-JVM-only gtfs-static):
+
+- `atlas-contracts`, `atlas-scope`, `atlas-map` were already pure — straight
+  move + KMP publishing (same `withType` template as the domain).
+- `atlas-routing`: `Dispatchers.IO` → `Dispatchers.Default`,
+  `IOException`-specific catch merged into generic `Exception`
+  (NetworkFailure unchanged), `URLEncoder` → percent-encode helper (identical
+  output), `%04d` date formatting → `padStart`, `Math.toRadians` →
+  `kotlin.math.PI` math. Planner logic untouched.
+- `atlas-engine` decoupled from JVM-only `atlas-offline` (blocked engine
+  wasm): replaced `offlineRegistry: OfflineRegistry?` with portable
+  `offlineAvailable: Boolean` and removed the `offlineCapabilities()` delegate
+  (its only callers were tests; app `ViewModel` already queries
+  `host.offlineRegistry` directly). Engine now has zero offline dependency;
+  offline detail remains host-side until the offline Files seam lands.
+  App `AtlasHost` updated (`offlineAvailable = true`).
+
+All six KMP modules publish `*-jvm` + `*-wasm-js` variants at `0.2.0`.
+Remaining JVM-only (need Files/HTTP seams next): `atlas-gtfs-static`
+(`java.nio`/`java.io`), `atlas-gtfs-realtime` (protobuf/`java.io`),
+`atlas-offline` (`java.nio`), `atlas-weather` (`java.net`).
+
+Gate (all green): every KMP module `jvmTest` + `compileKotlinWasmJs` +
 `compileCommonMainKotlinMetadata` + full `test` + `lint` + `assembleDebug` +
 `assembleRelease` + `publishAtlasToLocalRepo` + `:sample:host:run` + spike
 `jvmTest` + `compileKotlinWasmJs`.

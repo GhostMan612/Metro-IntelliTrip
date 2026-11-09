@@ -40,11 +40,16 @@ allprojects {
     //                        module and non-authoritative; publishing it would put
     //                        superseded code on a resolvable coordinate.
     val moduleName = name
-    // atlas-domain is KMP (jvm+wasmJs, M3b) and publishes via its own KMP
-    // publications (see core/atlas-domain/build.gradle.kts). Applying the
-    // `java-library` `maven` publication below to a KMP module is
+    // KMP modules (jvm+wasmJs) publish via their own KMP publications.
+    // Applying the `java-library` `maven` publication below to a KMP module is
     // incompatible (Gradle warns) and creates a coordinate collision.
-    val excluded = setOf("atlas-map-android", "atlas-transit", "atlas-web-spike", "atlas-domain")
+    // `atlas-domain` (M3b) plus the pure-Kotlin M3a modules; I/O modules stay
+    // JVM-only until their Files/HTTP seams land.
+    val excluded = setOf(
+        "atlas-map-android", "atlas-transit", "atlas-web-spike",
+        "atlas-domain", "atlas-contracts", "atlas-scope", "atlas-map",
+        "atlas-routing", "atlas-engine",
+    )
     if (moduleName.startsWith("atlas-") && moduleName !in excluded) {
         apply(plugin = "maven-publish")
         apply(plugin = "java-library")

@@ -183,7 +183,7 @@ class AtlasHost(val context: Context) {
     fun engine(providers: AtlasProviders = AtlasProviders()): AtlasEngine = AtlasEngine(
         feedId = feedId,
         providers = providers,
-        offlineRegistry = offlineRegistry,
+        offlineAvailable = true,
         scopeEngine = scopeEngine,
         renderPipeline = pipeline,
     )
