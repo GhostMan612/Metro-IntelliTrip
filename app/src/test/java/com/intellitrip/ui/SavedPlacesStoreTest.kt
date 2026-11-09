@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Instant
+import kotlinx.datetime.Instant
 
 /**
  * Saved places are the only rider-owned data in the app, and the review found three

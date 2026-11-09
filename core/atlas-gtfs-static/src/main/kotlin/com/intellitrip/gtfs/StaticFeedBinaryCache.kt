@@ -29,9 +29,10 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.DayOfWeek
-import java.time.Instant
-import java.time.LocalDate
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 
 /**
  * Binary cache for a parsed [StaticFeed] (stop_times excluded — those live in
@@ -140,7 +141,7 @@ object StaticFeedBinaryCache {
     }
     private fun readAgency(i: DataInputStream, feedId: FeedId): Agency = Agency(
         id = AgencyId(i.readUTF()), feedId = feedId, name = i.readUTF(), url = i.readOptStr(),
-        timezone = i.readOptStr()?.let { runCatching { java.time.ZoneId.of(it) }.getOrNull() },
+        timezone = i.readOptStr()?.let { runCatching { TimeZone.of(it) }.getOrNull() },
         lang = i.readOptStr(), phone = i.readOptStr(), fareUrl = i.readOptStr(), email = i.readOptStr(),
     )
 

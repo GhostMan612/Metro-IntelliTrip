@@ -14,9 +14,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.time.Instant
-import java.time.ZoneId
-import java.time.ZonedDateTime
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * The departure board is the first surface a rider reads, and the recovery plan is
@@ -28,9 +33,9 @@ import java.time.ZonedDateTime
  */
 class DepartureBoardTest {
 
-    private val zone: ZoneId = ZoneId.of("America/Chicago")
+    private val zone: TimeZone = TimeZone.of("America/Chicago")
     private val feedId = FeedId("test")
-    private val now: Instant = ZonedDateTime.of(2026, 10, 5, 7, 0, 0, 0, zone).toInstant()
+    private val now: Instant = LocalDateTime(2026, 10, 5, 7, 0, 0).toInstant(zone)
 
     private fun stop(id: String, name: String, lat: Double, lon: Double) = Stop(
         key = StopKey(feedId, id),
@@ -90,7 +95,7 @@ class DepartureBoardTest {
         val stop = stop("S1", "First", 44.97, -93.26)
         val result = board(
             listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now.plusSeconds(240)))),
+            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 240.seconds))),
         )
         val departure = result.single()
         assertFalse("no vehicle is reporting, so this must not be Live", departure.isLive)
@@ -102,8 +107,8 @@ class DepartureBoardTest {
     @Test
     fun aReportingTripIsLiveAndUsesItsReportedTime() {
         val stop = stop("S1", "First", 44.97, -93.26)
-        val scheduled = now.plusSeconds(600)
-        val reported = now.plusSeconds(60)
+        val scheduled = now + 600.seconds
+        val reported = now + 60.seconds
         val result = board(
             listOf(stop),
             mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", scheduled, reportedTime = reported))),
@@ -120,7 +125,7 @@ class DepartureBoardTest {
         val stop = stop("S1", "First", 44.97, -93.26)
         val result = board(
             listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now.minusSeconds(600)))),
+            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now - 600.seconds))),
         )
         assertTrue("a service that left ten minutes ago is not boardable", result.isEmpty())
     }
@@ -132,9 +137,9 @@ class DepartureBoardTest {
             listOf(stop),
             mapOf(
                 "S1" to listOf(
-                    DepartureBoard.ScheduledDeparture("T1", now.plusSeconds(1800)),
-                    DepartureBoard.ScheduledDeparture("T1", now.plusSeconds(300)),
-                    DepartureBoard.ScheduledDeparture("T1", now.plusSeconds(900)),
+                    DepartureBoard.ScheduledDeparture("T1", now + 1800.seconds),
+                    DepartureBoard.ScheduledDeparture("T1", now + 300.seconds),
+                    DepartureBoard.ScheduledDeparture("T1", now + 900.seconds),
                 ),
             ),
         )
@@ -150,7 +155,7 @@ class DepartureBoardTest {
             origin = near.location,
             stops = listOf(near, far),
             radiusMeters = 500.0,
-            departuresFor = { listOf(DepartureBoard.ScheduledDeparture("T1", now.plusSeconds(300))) },
+            departuresFor = { listOf(DepartureBoard.ScheduledDeparture("T1", now + 300.seconds)) },
             liveTrips = emptySet(),
             routesByKey = emptyMap(),
             tripsByKey = emptyMap(),
@@ -167,21 +172,21 @@ class DepartureBoardTest {
         val late = DepartureBoard.resolveServiceTime(GtfsServiceTime.parse("25:30:00"), now, zone)
         assertTrue(
             "expected the next day's 01:30, got $late",
-            late.isAfter(now.plusSeconds(60)),
+            late > now + 60.seconds,
         )
-        val hour = late.atZone(zone).hour
+        val hour = late.toLocalDateTime(zone).hour
         assertEquals(1, hour)
-        assertEquals(6, late.atZone(zone).dayOfMonth)
+        assertEquals(6, late.toLocalDateTime(zone).dayOfMonth)
     }
 
     @Test
     fun serviceDayStartingOnThePreviousDateResolvesForward() {
         // A 03:00 service on a feed whose service day began "yesterday" is still a
         // trip the rider can board.
-        val early = ZonedDateTime.of(2026, 10, 5, 2, 0, 0, 0, zone).toInstant()
+        val early = LocalDateTime(2026, 10, 5, 2, 0, 0).toInstant(zone)
         val resolved = DepartureBoard.resolveServiceTime(GtfsServiceTime.parse("03:00:00"), early, zone)
-        assertTrue(resolved.isAfter(early))
-        assertEquals(3, resolved.atZone(zone).hour)
+        assertTrue(resolved > early)
+        assertEquals(3, resolved.toLocalDateTime(zone).hour)
     }
 
     @Test
@@ -189,7 +194,7 @@ class DepartureBoardTest {
         val stop = stop("S1", "First & Main", 44.97, -93.26)
         val live = board(
             listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now.plusSeconds(240)))),
+            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 240.seconds))),
             liveTrips = setOf("T1"),
         ).single()
         val spoken = live.accessibilityLabel()
@@ -200,7 +205,7 @@ class DepartureBoardTest {
 
         val scheduled = board(
             listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now.plusSeconds(240)))),
+            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 240.seconds))),
         ).single()
         assertTrue(
             scheduled.accessibilityLabel(),
@@ -224,28 +229,28 @@ class DepartureBoardTest {
         val calendars = listOf(
             com.intellitrip.domain.Calendar(
                 serviceKey = svc,
-                daysOfWeek = setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY, java.time.DayOfWeek.FRIDAY),
-                startDate = java.time.LocalDate.of(2026, 1, 1),
-                endDate = java.time.LocalDate.of(2026, 12, 31),
+                daysOfWeek = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY),
+                startDate = LocalDate(2026, 1, 1),
+                endDate = LocalDate(2026, 12, 31),
             ),
         )
         // 2026-10-03 is a Saturday, 2026-10-05 is a Monday.
-        assertFalse(DepartureBoard.isServiceActive(calendars, emptyList(), svc, java.time.LocalDate.of(2026, 10, 3)))
-        assertTrue(DepartureBoard.isServiceActive(calendars, emptyList(), svc, java.time.LocalDate.of(2026, 10, 5)))
+        assertFalse(DepartureBoard.isServiceActive(calendars, emptyList(), svc, LocalDate(2026, 10, 3)))
+        assertTrue(DepartureBoard.isServiceActive(calendars, emptyList(), svc, LocalDate(2026, 10, 5)))
         val removed = listOf(
-            com.intellitrip.domain.CalendarDate(svc, java.time.LocalDate.of(2026, 10, 5), com.intellitrip.domain.ServiceExceptionType.REMOVED),
+            com.intellitrip.domain.CalendarDate(svc, LocalDate(2026, 10, 5), com.intellitrip.domain.ServiceExceptionType.REMOVED),
         )
-        assertFalse(DepartureBoard.isServiceActive(calendars, removed, svc, java.time.LocalDate.of(2026, 10, 5)))
-        assertTrue(DepartureBoard.isServiceActive(emptyList(), emptyList(), svc, java.time.LocalDate.of(2026, 10, 3)))
+        assertFalse(DepartureBoard.isServiceActive(calendars, removed, svc, LocalDate(2026, 10, 5)))
+        assertTrue(DepartureBoard.isServiceActive(emptyList(), emptyList(), svc, LocalDate(2026, 10, 3)))
     }
 
     @Test
     fun liveDepartureDoesNotFabricateVehicleTimestamp() {
         val stop = stop("S1", "First", 44.97, -93.26)
-        val reported = now.plusSeconds(60)
+        val reported = now + 60.seconds
         val result = board(
             listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now.plusSeconds(600), reportedTime = reported))),
+            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 600.seconds, reportedTime = reported))),
             liveTrips = setOf("T1"),
         ).single()
         assertEquals(reported, result.vehicleUpdatedAt)
@@ -256,7 +261,7 @@ class DepartureBoardTest {
         val stop = stop("S1", "First", 44.97, -93.26)
         val result = board(
             listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now.plusSeconds(20)))),
+            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 20.seconds))),
         )
         assertEquals("Due", result.single().wait)
     }

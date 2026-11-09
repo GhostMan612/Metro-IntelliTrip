@@ -22,10 +22,9 @@ import com.intellitrip.domain.Transfer
 import com.intellitrip.domain.TransferType
 import com.intellitrip.domain.Trip
 import com.intellitrip.domain.TripKey
-import java.time.DayOfWeek
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
@@ -92,7 +91,14 @@ private class CollectingStopTimeSink : StopTimeSink {
 
 object GtfsStaticParser {
 
-    private val dateFormat: DateTimeFormatter = DateTimeFormatter.BASIC_ISO_DATE
+    /** Parses a GTFS `yyyyMMdd` date (formerly `BASIC_ISO_DATE`); also accepts ISO `yyyy-MM-dd`. */
+    private fun parseGtfsDate(value: String): LocalDate {
+        if (value.contains('-')) return LocalDate.parse(value)
+        val year = value.substring(0, 4).toInt()
+        val month = value.substring(4, 6).toInt()
+        val day = value.substring(6, 8).toInt()
+        return LocalDate(year, month, day)
+    }
 
     private val DAY_FIELDS = listOf(
         "monday" to DayOfWeek.MONDAY,
@@ -271,7 +277,7 @@ object GtfsStaticParser {
                     name = name,
                     url = GtfsCsv.value(values, columns, "agency_url"),
                     timezone = GtfsCsv.value(values, columns, "agency_timezone")?.let {
-                        runCatching { ZoneId.of(it) }.getOrNull()
+                        runCatching { TimeZone.of(it) }.getOrNull()
                     },
                     lang = GtfsCsv.value(values, columns, "agency_lang"),
                     phone = GtfsCsv.value(values, columns, "agency_phone"),
@@ -462,8 +468,8 @@ object GtfsStaticParser {
                 daysOfWeek = DAY_FIELDS.mapNotNull { (field, day) ->
                     if (GtfsCsv.int(values, columns, field) == 1) day else null
                 }.toSet(),
-                startDate = LocalDate.parse(startDate, dateFormat),
-                endDate = LocalDate.parse(endDate, dateFormat),
+                startDate = parseGtfsDate(startDate),
+                endDate = parseGtfsDate(endDate),
             )
         })
         return result
@@ -483,7 +489,7 @@ object GtfsStaticParser {
                 ?: throw GtfsValidationException("calendar_dates.txt row is missing exception_type")
             result += CalendarDate(
                 serviceKey = ServiceKey(feedId, serviceId),
-                date = LocalDate.parse(date, dateFormat),
+                date = parseGtfsDate(date),
                 exceptionType = if (exception == 2) ServiceExceptionType.REMOVED else ServiceExceptionType.ADDED,
             )
         })

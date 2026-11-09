@@ -2,7 +2,8 @@ package com.intellitrip.gtfs
 
 import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.FeedMetadata
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -23,7 +24,7 @@ class StaticFeedRefresher(
     private val sourceUrl: String,
     private val acquirer: GtfsFeedAcquirer,
     private val store: StaticFeedSnapshotStore,
-    private val clock: () -> Instant = Instant::now,
+    private val clock: () -> Instant = { Clock.System.now() },
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
 

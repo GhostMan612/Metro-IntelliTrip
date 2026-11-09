@@ -7,7 +7,7 @@ import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.FeedMetadata
 import com.intellitrip.domain.RouteKey
 import com.intellitrip.domain.TripKey
-import java.time.Instant
+import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -17,7 +17,7 @@ import kotlinx.coroutines.runBlocking
 class InMemoryStaticTransitProviderTest {
 
     private val feedId = FeedId("metro-transit-regional")
-    private val metadata = FeedMetadata(feedId, null, null, null, "1", "hash", Instant.EPOCH, null, null, null)
+    private val metadata = FeedMetadata(feedId, null, null, null, "1", "hash", Instant.DISTANT_PAST, null, null, null)
 
     private fun provider(): TransitStaticProvider =
         InMemoryStaticTransitProvider(GtfsStaticParser.parse(feedId, GtfsFixtures.minimalFeed, metadata))

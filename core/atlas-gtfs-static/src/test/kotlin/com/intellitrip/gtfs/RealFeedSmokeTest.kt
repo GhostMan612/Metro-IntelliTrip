@@ -2,7 +2,8 @@ package com.intellitrip.gtfs
 
 import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.FeedMetadata
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -39,7 +40,7 @@ class RealFeedSmokeTest {
         val payload = file.readBytes()
         assertTrue(GtfsArchive.isZip(payload), "fixture is not a ZIP archive")
         val files = GtfsArchive.read(payload).toMutableMap()
-        val metadata = FeedMetadata(feedId, null, null, null, null, null, Instant.now(), null, null, null)
+        val metadata = FeedMetadata(feedId, null, null, null, null, null, Clock.System.now(), null, null, null)
         val feed = runCatching { GtfsStaticParser.parse(feedId, files, metadata) }.getOrElse { error ->
             fail("real feed failed to parse: ${error.message}")
         }

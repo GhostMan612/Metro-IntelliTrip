@@ -1,7 +1,7 @@
 package com.intellitrip.contracts
 
-import java.time.Duration
-import java.time.Instant
+import kotlin.time.Duration
+import kotlinx.datetime.Instant
 
 data class ProviderIdentity(val providerId: String, val feedId: String? = null)
 

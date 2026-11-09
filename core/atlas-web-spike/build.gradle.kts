@@ -21,6 +21,9 @@ kotlin {
     sourceSets {
         val commonMain by getting {
             dependencies {
+                // datetime only: serialization-core in commonMain breaks the
+                // Kotlin 2.0.20 wasm compiler (Missing stdlib class). The spike
+                // uses no serializers.
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.2")
             }
         }
@@ -37,3 +40,4 @@ kotlin {
 tasks.withType<Test>().configureEach {
     testLogging { showStandardStreams = true }
 }
+

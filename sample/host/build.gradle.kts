@@ -11,6 +11,7 @@ dependencies {
     implementation(project(":core:atlas-engine"))
     implementation(project(":core:atlas-gtfs-static"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.2")
 }
 
 application {

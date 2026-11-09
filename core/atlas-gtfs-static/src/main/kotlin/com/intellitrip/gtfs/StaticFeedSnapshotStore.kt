@@ -6,9 +6,8 @@ import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
-import java.time.Instant
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 
 /**
  * Conditional-request validators returned with the active payload.
@@ -70,9 +69,9 @@ class StaticFeedSnapshotStore(private val root: Path) {
                 lang = null,
                 version = meta["version"]?.takeIf { it.isNotEmpty() },
                 hash = meta["hash"]?.takeIf { it.isNotEmpty() },
-                fetchedAt = Instant.parse(meta["fetchedAt"] ?: Instant.EPOCH.toString()),
-                validFrom = meta["validFrom"]?.takeIf { it.isNotEmpty() }?.let { LocalDate.parse(it, DATE_FORMAT) },
-                validTo = meta["validTo"]?.takeIf { it.isNotEmpty() }?.let { LocalDate.parse(it, DATE_FORMAT) },
+                fetchedAt = Instant.parse(meta["fetchedAt"] ?: Instant.DISTANT_PAST.toString()),
+                validFrom = meta["validFrom"]?.takeIf { it.isNotEmpty() }?.let { parseBasicIsoDate(it) },
+                validTo = meta["validTo"]?.takeIf { it.isNotEmpty() }?.let { parseBasicIsoDate(it) },
                 sourceUrl = meta["sourceUrl"]?.takeIf { it.isNotEmpty() },
             ),
             snapshotDir = dir,
@@ -109,8 +108,8 @@ class StaticFeedSnapshotStore(private val root: Path) {
             metadata.version?.let { "version=$it" },
             metadata.hash?.let { "hash=$it" },
             "fetchedAt=${metadata.fetchedAt}",
-            metadata.validFrom?.let { "validFrom=${it.format(DATE_FORMAT)}" },
-            metadata.validTo?.let { "validTo=${it.format(DATE_FORMAT)}" },
+            metadata.validFrom?.let { "validFrom=${formatBasicIsoDate(it)}" },
+            metadata.validTo?.let { "validTo=${formatBasicIsoDate(it)}" },
             metadata.sourceUrl?.let { "sourceUrl=$it" },
         ))
         listOf(STOP_TIME_DATA, STOP_TIME_INDEX).forEach { name ->
@@ -139,8 +138,8 @@ class StaticFeedSnapshotStore(private val root: Path) {
             metadata.version?.let { "version=$it" },
             metadata.hash?.let { "hash=$it" },
             "fetchedAt=${metadata.fetchedAt}",
-            metadata.validFrom?.let { "validFrom=${it.format(DATE_FORMAT)}" },
-            metadata.validTo?.let { "validTo=${it.format(DATE_FORMAT)}" },
+            metadata.validFrom?.let { "validFrom=${formatBasicIsoDate(it)}" },
+            metadata.validTo?.let { "validTo=${formatBasicIsoDate(it)}" },
             metadata.sourceUrl?.let { "sourceUrl=$it" },
         ))
         // Carry the staged stop-time index into the snapshot when present.
@@ -306,6 +305,18 @@ class StaticFeedSnapshotStore(private val root: Path) {
         private const val STOP_TIME_DATA = "stop-times.dat"
         private const val STOP_TIME_INDEX = "stop-times.idx"
         private const val STAGED_PAYLOAD_FILE = "gtfs.zip.staging"
-        private val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.BASIC_ISO_DATE
+
+        /** Formats a [LocalDate] as GTFS `yyyyMMdd` (formerly `BASIC_ISO_DATE`). */
+        private fun formatBasicIsoDate(date: LocalDate): String =
+            "%04d%02d%02d".format(date.year, date.monthNumber, date.dayOfMonth)
+
+        /** Parses a GTFS `yyyyMMdd` date; also accepts ISO `yyyy-MM-dd` for forward compat. */
+        private fun parseBasicIsoDate(value: String): LocalDate {
+            if (value.contains('-')) return LocalDate.parse(value)
+            val year = value.substring(0, 4).toInt()
+            val month = value.substring(4, 6).toInt()
+            val day = value.substring(6, 8).toInt()
+            return LocalDate(year, month, day)
+        }
     }
 }

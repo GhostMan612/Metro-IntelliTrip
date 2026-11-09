@@ -26,7 +26,7 @@ import com.intellitrip.map.android.MapLibreMapRenderer
 import com.intellitrip.weather.WeatherLayer
 import com.intellitrip.weather.WeatherLayerComposer
 import com.intellitrip.weather.WeatherLayerState
-import java.time.Instant
+import kotlinx.datetime.Clock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.maplibre.android.maps.MapView
@@ -158,7 +158,7 @@ fun MapCanvas(
                     stops = feed?.stops ?: emptyList(),
                     shapes = feed?.shapes ?: emptyList(),
                     routes = feed?.routes ?: emptyList(),
-                    snapshotAt = Instant.now(),
+                    snapshotAt = Clock.System.now(),
                     previousVehicles = prev,
                     // Fetch time, not "now": this is what decides whether a vehicle
                     // paints as stale, and it must match the status line.
@@ -177,7 +177,7 @@ fun MapCanvas(
         val prev = previousVehicles
         while (true) {
             kotlinx.coroutines.delay(200)
-            val now = Instant.now()
+            val now = Clock.System.now()
             val snapshot = withContext(Dispatchers.Default) {
                 pipeline.render(
                     RenderInput(

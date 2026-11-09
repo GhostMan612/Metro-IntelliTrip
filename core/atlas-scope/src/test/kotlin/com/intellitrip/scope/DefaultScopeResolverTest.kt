@@ -8,7 +8,7 @@ import com.intellitrip.domain.RouteKey
 import com.intellitrip.domain.TripKey
 import com.intellitrip.domain.VehicleKey
 import com.intellitrip.domain.ZoomBucket
-import java.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -59,7 +59,7 @@ class DefaultScopeResolverTest {
         val vehicle = VehicleKey(feedId, "bus-4242")
         val resolution = resolver.resolve(Focus.Vehicle(vehicle))
         assertEquals(setOf(vehicle), resolution.dataScope.vehicles)
-        assertEquals(Duration.ofSeconds(20), resolution.dataScope.maxAge)
+        assertEquals(20.seconds, resolution.dataScope.maxAge)
     }
 
     @Test

@@ -23,7 +23,13 @@ import com.intellitrip.offline.BasemapAvailability
 import com.intellitrip.offline.CacheEntry
 import com.intellitrip.routing.RoutingNetwork
 import com.intellitrip.routing.TransferIntelligenceService
-import java.time.Instant
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -195,8 +201,8 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         update { it.copy(status = "Loading live transit…") }
         viewModelScope.launch {
             when (val result = host.realtime.vehiclePositions().first()) {
-                is ProviderResult.Success -> onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.seconds)
-                is ProviderResult.StaleSuccess -> onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.seconds)
+                is ProviderResult.Success -> onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.inWholeSeconds)
+                is ProviderResult.StaleSuccess -> onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.inWholeSeconds)
                 else -> update { it.copy(status = "Live transit unavailable: ${describe(result)}") }
             }
         }
@@ -257,7 +263,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
             val request = TripPlanRequest(
                 origin = current.origin,
                 destination = current.destination,
-                departAt = Instant.now().plusSeconds(120),
+                departAt = Clock.System.now() + 120.seconds,
                 arriveBy = null,
                 maxTransfers = 2,
             )
@@ -295,8 +301,8 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
             while (isActive) {
                 delay(backoffMs(failures))
                 when (val result = host.realtime.vehiclePositions().first()) {
-                    is ProviderResult.Success -> { failures = 0; onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.seconds) }
-                    is ProviderResult.StaleSuccess -> { failures = 0; onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.seconds) }
+                    is ProviderResult.Success -> { failures = 0; onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.inWholeSeconds) }
+                    is ProviderResult.StaleSuccess -> { failures = 0; onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.inWholeSeconds) }
                     is ProviderResult.RateLimited -> {
                         failures++
                         update { it.copy(status = "Refresh rate-limited (backing off ${backoffMs(failures) / 1000}s)") }
@@ -481,7 +487,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
      * horizon) the same way the planner expands them, so the board shows the
      * next real departures, not the template time.
      */
-    fun nearbyDepartures(now: Instant = Instant.now()): List<com.intellitrip.ui.Departure> {
+    fun nearbyDepartures(now: Instant = Clock.System.now()): List<com.intellitrip.ui.Departure> {
         val current = _state.value
         val feed = current.staticFeed ?: return emptyList()
         val reader = host.snapshotStore.stopTimeReader(host.feedId) ?: return emptyList()
@@ -497,11 +503,11 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         // GTFS times are agency-local, not device-local. Use the feed's zone so
         // a device in another timezone does not shift every departure.
         val agencyZone = feed.agencies.firstOrNull { it.timezone != null }?.timezone
-            ?: java.time.ZoneId.of("America/Chicago")
+            ?: TimeZone.of("America/Chicago")
         // Service-day candidates mirror DepartureBoard.resolveServiceTime's
         // -1..+1 window, so a 25:30 trip's service day is considered.
-        val todayAgency = java.time.LocalDate.ofInstant(now, agencyZone)
-        val candidateDates = (-1L..1L).map { todayAgency.plusDays(it) }
+        val todayAgency = now.toLocalDateTime(agencyZone).date
+        val candidateDates = (-1..1).map { todayAgency.plus(it, DateTimeUnit.DAY) }
 
         val stopsToScan = origin?.let { point ->
             feed.stops
@@ -559,7 +565,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                                         scheduled.secondsSinceServiceDayStart + delta,
                                     )
                                     val instant = com.intellitrip.ui.DepartureBoard.resolveServiceTime(shifted, now, agencyZone)
-                                    if (instant.isAfter(now.plusSeconds(7200))) break
+                                    if (instant > now + 7200.seconds) break
                                     out += com.intellitrip.ui.DepartureBoard.ScheduledDeparture(
                                         tripId = stopTime.tripKey.tripId,
                                         departure = instant,
@@ -617,7 +623,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                 update { it.copy(userLocation = fix, status = locationStatus(fix)) }
                 // Arrival cue (V2): within 100m of the active journey's alight.
                 val journey = _state.value.activeJourney()
-                if (journey != null && fix.isFresh(Instant.now())) {
+                if (journey != null && fix.isFresh(Clock.System.now())) {
                     journey.legs.lastOrNull()?.let { last ->
                         val dest = when (last) {
                             is com.intellitrip.domain.Leg.Transit -> _state.value.staticFeed?.stops?.firstOrNull { it.key == last.toStopKey }?.location
@@ -716,7 +722,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         vehicle: com.intellitrip.domain.Vehicle,
         now: Instant,
     ): Boolean {
-        val age = java.time.Duration.between(vehicle.updatedAt, now).seconds
+        val age = (now - vehicle.updatedAt).inWholeSeconds
         return age in 0..LIVE_VEHICLE_MAX_AGE_SECONDS
     }
 

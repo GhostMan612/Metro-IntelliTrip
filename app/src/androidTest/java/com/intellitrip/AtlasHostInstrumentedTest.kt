@@ -9,7 +9,10 @@ import com.intellitrip.offline.OfflineRegistry
 import com.intellitrip.routing.RoutingNetwork
 import com.intellitrip.routing.StaticNetworkPlanner
 import com.intellitrip.domain.TripPlanRequest
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -48,7 +51,7 @@ class AtlasHostInstrumentedTest {
             lang = null,
             version = "1",
             hash = "abc",
-            fetchedAt = java.time.Instant.now(),
+            fetchedAt = Clock.System.now(),
             validFrom = null,
             validTo = null,
             sourceUrl = null,
@@ -79,7 +82,7 @@ class AtlasHostInstrumentedTest {
         val feed = OfflineRegistry(
             StaticFeedSnapshotStore(Files.createTempDirectory("device-geometry")).also {
                 it.activate(feedId, GtfsFixture(withShapes = true).zip(), com.intellitrip.domain.FeedMetadata(
-                    feedId, null, null, null, "1", "h", java.time.Instant.now(), null, null, null,
+                    feedId, null, null, null, "1", "h", Clock.System.now(), null, null, null,
                 ))
             }
         ).loadStaticFeed(feedId)!!
@@ -117,7 +120,7 @@ class AtlasHostInstrumentedTest {
         val feed = OfflineRegistry(
             StaticFeedSnapshotStore(Files.createTempDirectory("device-geometry-fallback")).also {
                 it.activate(feedId, GtfsFixture(withShapes = false).zip(), com.intellitrip.domain.FeedMetadata(
-                    feedId, null, null, null, "1", "h", java.time.Instant.now(), null, null, null,
+                    feedId, null, null, null, "1", "h", Clock.System.now(), null, null, null,
                 ))
             }
         ).loadStaticFeed(feedId)!!
@@ -138,7 +141,7 @@ class AtlasHostInstrumentedTest {
         feedId: com.intellitrip.domain.FeedId,
         trip: com.intellitrip.domain.Trip,
     ): com.intellitrip.domain.JourneyOption {
-        val departure = java.time.Instant.parse("2026-10-05T13:00:00Z")
+        val departure = Instant.parse("2026-10-05T13:00:00Z")
         return com.intellitrip.domain.JourneyOption(
             id = "test",
             legs = listOf(
@@ -150,18 +153,18 @@ class AtlasHostInstrumentedTest {
                     fromStopKey = com.intellitrip.domain.StopKey(feedId, "S1"),
                     toStopKey = com.intellitrip.domain.StopKey(feedId, "S2"),
                     departure = departure,
-                    arrival = departure.plusSeconds(600),
+                    arrival = departure + 600.seconds,
                     vehicleKey = null,
                     realtimeStatus = com.intellitrip.domain.RealtimeStatus.SCHEDULED,
                     delaySeconds = null,
                     scheduledDeparture = null,
                     scheduledArrival = null,
-                    duration = java.time.Duration.ofSeconds(600),
+                    duration = 600.seconds,
                 )
             ),
             transfers = emptyList(),
             departure = departure,
-            arrival = departure.plusSeconds(600),
+            arrival = departure + 600.seconds,
         )
     }
 
@@ -170,7 +173,7 @@ class AtlasHostInstrumentedTest {
         val store = StaticFeedSnapshotStore(Files.createTempDirectory("device-plan"))
         val feedId = com.intellitrip.domain.FeedId(FEED_ID)
         store.activate(feedId, GtfsFixture().zip(), com.intellitrip.domain.FeedMetadata(
-            feedId, null, null, null, "1", "h", java.time.Instant.now(), null, null, null,
+            feedId, null, null, null, "1", "h", Clock.System.now(), null, null, null,
         ))
         val registry = OfflineRegistry(store)
         val feed = registry.loadStaticFeed(feedId)
@@ -189,8 +192,7 @@ class AtlasHostInstrumentedTest {
             TripPlanRequest(
                 origin = feed.stops.first().location,
                 destination = feed.stops.last().location,
-                departAt = java.time.LocalDate.of(2026, 10, 5).atTime(7, 0)
-                    .toInstant(java.time.ZoneOffset.ofHours(-5)),
+                departAt = Instant.parse("2026-10-05T12:00:00Z"),
                 arriveBy = null,
                 maxTransfers = 0,
             )
@@ -220,7 +222,7 @@ class AtlasHostInstrumentedTest {
             feedId,
             files,
             com.intellitrip.domain.FeedMetadata(
-                feedId, null, null, null, "1", "h", java.time.Instant.now(), null, null, null,
+                feedId, null, null, null, "1", "h", Clock.System.now(), null, null, null,
             ),
             sink,
         )
@@ -267,8 +269,7 @@ class AtlasHostInstrumentedTest {
             TripPlanRequest(
                 origin = planned.origin,
                 destination = planned.destination,
-                departAt = java.time.LocalDate.of(2026, 10, 5).atTime(7, 0)
-                    .toInstant(java.time.ZoneOffset.ofHours(-5)),
+                departAt = Instant.parse("2026-10-05T12:00:00Z"),
                 arriveBy = null,
                 maxTransfers = 0,
             )

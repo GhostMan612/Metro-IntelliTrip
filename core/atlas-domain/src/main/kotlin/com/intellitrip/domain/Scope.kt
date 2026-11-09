@@ -1,7 +1,8 @@
 package com.intellitrip.domain
 
-import java.time.Duration
-import java.time.Instant
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.datetime.Instant
 
 sealed interface Focus {
     data class Trip(val key: TripKey) : Focus
@@ -42,7 +43,7 @@ data class DataScope(
             bounds = null,
             radius = null,
             timeWindow = null,
-            maxAge = Duration.ofSeconds(45),
+            maxAge = 45.seconds,
             includeAlerts = true,
             systemWide = true,
         )

@@ -1,6 +1,7 @@
 package com.intellitrip.domain
 
-import java.time.LocalDate
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.DayOfWeek
 
 /**
  * Single source of truth for GTFS calendar service activity.
@@ -33,8 +34,8 @@ class ServiceCalendar(
         return calendars.any {
             it.serviceKey == serviceKey &&
                 day in it.daysOfWeek &&
-                !date.isBefore(it.startDate) &&
-                !date.isAfter(it.endDate)
+                date >= it.startDate &&
+                date <= it.endDate
         }
     }
 

@@ -20,10 +20,10 @@ import com.intellitrip.domain.Vehicle
 import com.intellitrip.domain.VehicleKey
 import com.intellitrip.domain.VehicleType
 import java.io.IOException
-import java.time.Duration
-import java.time.Instant
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import kotlin.time.Duration
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -53,7 +53,14 @@ class GtfsRealtimeMapper(
     private val routeTypes: Map<String, Int> = emptyMap(),
 ) {
 
-    private val dateFormat: DateTimeFormatter = DateTimeFormatter.BASIC_ISO_DATE
+    /** Parses a GTFS `yyyyMMdd` date (formerly `BASIC_ISO_DATE`); also accepts ISO `yyyy-MM-dd`. */
+    private fun parseGtfsDate(value: String): LocalDate {
+        if (value.contains('-')) return LocalDate.parse(value)
+        val year = value.substring(0, 4).toInt()
+        val month = value.substring(4, 6).toInt()
+        val day = value.substring(6, 8).toInt()
+        return LocalDate(year, month, day)
+    }
 
     fun vehicles(feed: GtfsRealtime.FeedMessage): List<Vehicle> =
         feed.entityList.mapNotNull { entity ->
@@ -63,8 +70,8 @@ class GtfsRealtimeMapper(
             val vehicleId = vehicle.vehicle?.id?.takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null
             val trip = vehicle.trip
-            val timestamp = vehicle.timestamp.takeIf { it > 0 }?.let { Instant.ofEpochSecond(it) }
-                ?: feed.header.timestamp.takeIf { it > 0 }?.let { Instant.ofEpochSecond(it) }
+            val timestamp = vehicle.timestamp.takeIf { it > 0 }?.let { Instant.fromEpochSeconds(it) }
+                ?: feed.header.timestamp.takeIf { it > 0 }?.let { Instant.fromEpochSeconds(it) }
             val routeId = trip?.routeId?.takeIf { it.isNotBlank() }
             Vehicle(
                 key = VehicleKey(feedId, vehicleId),
@@ -73,7 +80,7 @@ class GtfsRealtimeMapper(
                 position = GeoPoint(position.latitude.toDouble(), position.longitude.toDouble()),
                 bearing = position.bearing.toDouble(),
                 speedMps = position.speed.toDouble(),
-                updatedAt = timestamp ?: Instant.EPOCH,
+                updatedAt = timestamp ?: Instant.DISTANT_PAST,
                 vehicleType = vehicleType(routeId?.let { routeTypes[it] }),
             )
         }
@@ -88,12 +95,12 @@ class GtfsRealtimeMapper(
                 vehicleKey = update.vehicle?.id?.takeIf { it.isNotBlank() }?.let { VehicleKey(feedId, it) },
                 directionId = if (update.trip.hasDirectionId()) update.trip.directionId else null,
                 startDate = update.trip.startDate.takeIf { it.isNotBlank() }?.let {
-                    runCatching { LocalDate.parse(it, dateFormat) }.getOrNull()
+                    runCatching { parseGtfsDate(it) }.getOrNull()
                 },
                 startTime = update.trip.startTime.takeIf { it.isNotBlank() }?.let {
                     runCatching { GtfsServiceTime.parse(it) }.getOrNull()
                 },
-                timestamp = if (update.hasTimestamp()) Instant.ofEpochSecond(update.timestamp) else null,
+                timestamp = if (update.hasTimestamp()) Instant.fromEpochSeconds(update.timestamp) else null,
                 scheduleRelationship = ScheduleRelationship.SCHEDULED,
                 stopTimeUpdates = update.stopTimeUpdateList.map { stopUpdate ->
                     StopTimeUpdate(
@@ -154,7 +161,7 @@ class PollingGtfsRealtimeClient(
     private val providerId: String = "gtfs-realtime",
     private val pollIntervalMillis: Long = 10_000,
     private val maxBackoffMillis: Long = 120_000,
-    private val clock: () -> Instant = Instant::now,
+    private val clock: () -> Instant = { Clock.System.now() },
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
@@ -187,13 +194,13 @@ class PollingGtfsRealtimeClient(
                     val bytes = fetcher.fetch(url)
                     val feed = GtfsRealtime.FeedMessage.parseFrom(bytes)
                     val sourceTimestamp = feed.header.timestamp.takeIf { it > 0 }
-                        ?.let { Instant.ofEpochSecond(it) }
+                        ?.let { Instant.fromEpochSeconds(it) }
                     ProviderResult.Success(
                         data = transform(feed),
                         freshness = FreshnessMetadata(
                             sourceTimestamp = sourceTimestamp,
                             fetchedAt = fetchedAt,
-                            age = Duration.between(sourceTimestamp ?: fetchedAt, fetchedAt),
+                            age = fetchedAt - (sourceTimestamp ?: fetchedAt),
                             providerId = providerId,
                         ),
                     )

@@ -1,13 +1,13 @@
 package com.intellitrip.domain
 
-import java.time.ZoneId
+import kotlinx.datetime.TimeZone
 
 data class Agency(
     val id: AgencyId,
     val feedId: FeedId,
     val name: String,
     val url: String?,
-    val timezone: ZoneId?,
+    val timezone: TimeZone?,
     val lang: String?,
     val phone: String?,
     val fareUrl: String?,

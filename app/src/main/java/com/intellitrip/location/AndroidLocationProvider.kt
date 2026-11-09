@@ -13,7 +13,8 @@ import androidx.core.content.ContextCompat
 import com.intellitrip.contracts.LocationProvider
 import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.UserLocation
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -132,7 +133,7 @@ class AndroidLocationProvider(context: Context) : LocationProvider {
         } else {
             DEFAULT_ACCURACY_M
         },
-        timestamp = if (time > 0) Instant.ofEpochMilli(time) else Instant.now(),
+        timestamp = if (time > 0) Instant.fromEpochMilliseconds(time) else Clock.System.now(),
     )
 
     private companion object {

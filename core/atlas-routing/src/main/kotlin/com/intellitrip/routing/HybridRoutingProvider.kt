@@ -4,10 +4,10 @@ import com.intellitrip.contracts.ProviderResult
 import com.intellitrip.contracts.RoutingProvider
 import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.JourneyOption
-import com.intellitrip.domain.Leg
 import com.intellitrip.domain.TripPlanRequest
-import java.time.Duration
-import java.time.Instant
+import kotlinx.datetime.Instant
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
 
 /**
  * Hybrid routing: local first, remote for what local cannot answer.
@@ -103,8 +103,8 @@ internal fun <T> ProviderResult<T>.freshnessOrNull(): com.intellitrip.contracts.
  * current.
  */
 private val UNKNOWN_FRESHNESS = com.intellitrip.contracts.FreshnessMetadata(
-    sourceTimestamp = Instant.EPOCH,
-    fetchedAt = Instant.EPOCH,
-    age = Duration.ofDays(365),
+    sourceTimestamp = Instant.DISTANT_PAST,
+    fetchedAt = Instant.DISTANT_PAST,
+    age = 365.days,
     providerId = "unknown",
 )

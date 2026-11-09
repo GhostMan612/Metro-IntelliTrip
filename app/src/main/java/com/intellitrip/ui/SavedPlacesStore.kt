@@ -5,7 +5,8 @@ import com.intellitrip.domain.Stop
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 
 /**
  * A stop the rider has chosen to keep.
@@ -260,7 +261,7 @@ class SavedPlacesStore(private val root: Path) {
          */
         const val LEGACY_FEED = ""
 
-        fun from(stop: Stop, now: Instant = Instant.now(), lastRouteId: String? = null) = SavedStop(
+        fun from(stop: Stop, now: Instant = Clock.System.now(), lastRouteId: String? = null) = SavedStop(
             feedId = stop.key.feedId.value,
             stopId = stop.key.stopId,
             name = stop.name,

@@ -10,10 +10,12 @@ import com.intellitrip.domain.Vehicle
 import com.intellitrip.domain.VehicleKey
 import com.intellitrip.domain.VehicleType
 import com.intellitrip.domain.ZoomBucket
-import java.time.Instant
+import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class TransitRenderPipelineTest {
 
@@ -89,7 +91,7 @@ class TransitRenderPipelineTest {
     fun staleVehiclesAreFlagged() {
         val pipeline = TransitRenderPipeline(staleThresholdSeconds = 60)
         val fresh = vehicle("fresh", 44.95, -93.20, now)
-        val stale = vehicle("stale", 44.951, -93.201, now.minusSeconds(600))
+        val stale = vehicle("stale", 44.951, -93.201, now - 600.seconds)
         val snapshot = pipeline.render(renderInput(15.0, listOf(fresh, stale)))
         assertEquals(false, snapshot.vehicles.first { it.id == "fresh" }.stale)
         assertEquals(true, snapshot.vehicles.first { it.id == "stale" }.stale)
@@ -98,9 +100,9 @@ class TransitRenderPipelineTest {
     @Test
     fun interpolationMovesVehiclesBetweenSnapshots() {
         val pipeline = TransitRenderPipeline()
-        val previous = listOf(vehicle("a", 44.90, -93.20, now.minusSeconds(20)))
+        val previous = listOf(vehicle("a", 44.90, -93.20, now - 20.seconds))
         val current = listOf(vehicle("a", 44.91, -93.20, now))
-        val interpolated = pipeline.interpolate(previous, current, now.plusSeconds(10))
+        val interpolated = pipeline.interpolate(previous, current, now + 10.seconds)
         val (moved, wasInterpolated) = interpolated.single()
         assertTrue(wasInterpolated)
         assertTrue(moved.position.lat > 44.90 && moved.position.lat < 44.91)
@@ -141,9 +143,9 @@ class TransitRenderPipelineTest {
 
     @Test
     fun throttleLimitsUpdateFrequency() {
-        val throttle = RenderUpdateThrottle(minimumInterval = java.time.Duration.ofMillis(250))
+        val throttle = RenderUpdateThrottle(minimumInterval = 250.milliseconds)
         assertTrue(throttle.shouldEmit(now))
-        assertTrue(!throttle.shouldEmit(now.plusMillis(100)))
-        assertTrue(throttle.shouldEmit(now.plusMillis(300)))
+        assertTrue(!throttle.shouldEmit(now + 100.milliseconds))
+        assertTrue(throttle.shouldEmit(now + 300.milliseconds))
     }
 }

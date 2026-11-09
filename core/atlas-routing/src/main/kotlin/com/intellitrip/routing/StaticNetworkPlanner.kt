@@ -30,15 +30,19 @@ import com.intellitrip.domain.Trip
 import com.intellitrip.domain.TripKey
 import com.intellitrip.domain.TripPlanRequest
 import com.intellitrip.domain.TripUpdate
-import java.time.Duration
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.toLocalDateTime
 import kotlin.math.abs
 import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /** Supplies a trip's ordered stop times; backed by memory or by the disk index. */
 /**
@@ -131,7 +135,7 @@ class RoutingNetwork(
     }
 
     /** Zone of the first agency that declares one, for service-date conversion. */
-    fun agencyZone(fallback: ZoneId = ZoneId.of("America/Chicago")): ZoneId =
+    fun agencyZone(fallback: TimeZone = TimeZone.of("America/Chicago")): TimeZone =
         agencies.firstOrNull { it.timezone != null }?.timezone ?: fallback
 
     /** Delegates to [ServiceCalendar] — the planner and board share one implementation. */
@@ -153,7 +157,7 @@ class RoutingNetwork(
  */
 class StaticNetworkPlanner(
     private val network: RoutingNetwork,
-    private val agencyZone: ZoneId = ZoneId.of("America/Chicago"),
+    private val agencyZone: TimeZone = TimeZone.of("America/Chicago"),
     private val maxJourneys: Int = 5,
     /**
      * How far ahead departures are considered. Journeys leaving hours later are not
@@ -183,7 +187,7 @@ class StaticNetworkPlanner(
 ) : RoutingProvider {
 
     /** Feed truth wins: the network's agency timezone overrides the default. */
-    private val effectiveZone: ZoneId get() = network.agencyZone(agencyZone)
+    private val effectiveZone: TimeZone get() = network.agencyZone(agencyZone)
 
     override suspend fun plan(request: TripPlanRequest): ProviderResult<List<JourneyOption>> =
         planWithRealtime(request, emptyList())
@@ -192,8 +196,8 @@ class StaticNetworkPlanner(
         request: TripPlanRequest,
         updates: List<TripUpdate>,
     ): ProviderResult<List<JourneyOption>> {
-        val earliest = request.departAt ?: Instant.now().plusSeconds(60)
-        val serviceDate = LocalDate.ofInstant(earliest, effectiveZone)
+        val earliest = request.departAt ?: Clock.System.now() + 60.seconds
+        val serviceDate = earliest.toLocalDateTime(effectiveZone).date
 
 val originStops = nearestStops(request.origin, request.maxWalkMeters, maxStopsPerEnd)
         val destinationStops = nearestStops(request.destination, request.maxWalkMeters, maxStopsPerEnd)
@@ -211,13 +215,13 @@ val options = buildOptions(
             destinationStops,
             serviceDate,
             earliest,
-            earliest.plusSeconds(departureWindowMinutes * 60),
+            earliest + (departureWindowMinutes * 60).seconds,
             updates,
         )
         val sorted = options.sortedBy { it.arrival }
         val arriveBy = request.arriveBy
         if (arriveBy != null) {
-            val feasible = sorted.filter { !it.arrival.isAfter(arriveBy) }
+            val feasible = sorted.filter { it.arrival <= arriveBy }
             if (feasible.isEmpty() && sorted.isNotEmpty()) {
                 return ProviderResult.PartialResult(
                     data = emptyList(),
@@ -232,8 +236,8 @@ val options = buildOptions(
 
     private fun freshness(): FreshnessMetadata = FreshnessMetadata(
         sourceTimestamp = network.metadata.fetchedAt,
-        fetchedAt = Instant.now(),
-        age = Duration.between(network.metadata.fetchedAt, Instant.now()).let { if (it.isNegative) Duration.ZERO else it },
+        fetchedAt = Clock.System.now(),
+        age = (Clock.System.now() - network.metadata.fetchedAt).let { if (it.isNegative()) Duration.ZERO else it },
         providerId = providerId,
     )
 
@@ -275,8 +279,8 @@ serviceDate: LocalDate,
                     for ((board, shiftedTimes) in expandedRuns(trip.key, times, boardIndexOnTrip)) {
                         val boardInstant =
                             board.departureTime?.instantOn(serviceDate, effectiveZone) ?: continue
-                        if (boardInstant.isBefore(earliest)) continue
-                        if (boardInstant.isAfter(horizonEnd)) break
+                        if (boardInstant < earliest) continue
+                        if (boardInstant > horizonEnd) break
                         candidates += Candidate(origin, board, alightIndex, shiftedTimes)
                     }
                 }
@@ -412,12 +416,10 @@ serviceDate: LocalDate,
         val secondLeg = transitLeg(secondTrip, secondBoard, finalAlight, serviceDate, updates)
 
         val transferStop = network.stopsByKey[firstAlight.stopKey] ?: return null
-        val scheduledBuffer = Duration.between(firstLeg.arrival, secondLeg.departure)
+        val scheduledBuffer = secondLeg.departure - firstLeg.arrival
         val predictedBuffer = if (firstLeg.delaySeconds != null || secondLeg.delaySeconds != null) {
-            Duration.between(
-                firstLeg.arrival.plusSeconds((firstLeg.delaySeconds ?: 0).toLong()),
-                secondLeg.departure.plusSeconds((secondLeg.delaySeconds ?: 0).toLong()),
-            )
+            (secondLeg.departure + (secondLeg.delaySeconds ?: 0).seconds) -
+                (firstLeg.arrival + (firstLeg.delaySeconds ?: 0).seconds)
         } else {
             null
         }
@@ -479,7 +481,7 @@ serviceDate: LocalDate,
             val t1 = TransferConnection(
                 arrivingLeg = firstLeg, departingLeg = secondLeg,
                 transferStop = firstAlight.stopKey,
-                scheduledBuffer = Duration.between(firstLeg.arrival, secondLeg.departure),
+                scheduledBuffer = secondLeg.departure - firstLeg.arrival,
                 predictedBuffer = null, walkingDuration = walking1,
                 confidence = TransferConfidence.SCHEDULED_UNKNOWN,
                 rationale = "scheduled buffer from static timetable",
@@ -487,7 +489,7 @@ serviceDate: LocalDate,
             val t2 = TransferConnection(
                 arrivingLeg = secondLeg, departingLeg = thirdLeg,
                 transferStop = midAlight.stopKey,
-                scheduledBuffer = Duration.between(secondLeg.arrival, thirdLeg.departure),
+                scheduledBuffer = thirdLeg.departure - secondLeg.arrival,
                 predictedBuffer = null, walkingDuration = walking2,
                 confidence = TransferConfidence.SCHEDULED_UNKNOWN,
                 rationale = "scheduled buffer from static timetable",
@@ -501,7 +503,7 @@ serviceDate: LocalDate,
                 departure = walkOut.start,
                 arrival = walkIn.end,
             )
-            if (best == null || journey.arrival.isBefore(best.arrival)) best = journey
+            if (best == null || journey.arrival < best.arrival) best = journey
         }
         return best
     }
@@ -552,7 +554,7 @@ serviceDate: LocalDate,
         var best: Quad<Trip, StopTime, Duration, List<StopTime>>? = null
         var bestDeparture: Instant? = null
         for ((boardingKey, requiredSeconds) in boardingStops) {
-            val earliestBoard = arrivalInstant.plusSeconds(requiredSeconds)
+            val earliestBoard = arrivalInstant + requiredSeconds.seconds
             for (trip in network.tripsServing(boardingKey)) {
                 if (trip.key == firstAlight.tripKey) continue
                 if (!network.isActive(trip.serviceKey, serviceDate)) continue
@@ -563,10 +565,10 @@ serviceDate: LocalDate,
                 for (bi in boardIndexes) {
                     for ((candidate, shifted) in expandedRuns(trip.key, times, bi)) {
                         val departure = candidate.departureTime?.instantOn(serviceDate, effectiveZone) ?: continue
-                        if (departure.isBefore(earliestBoard)) continue
-                        if (bestDeparture == null || departure.isBefore(bestDeparture)) {
+                        if (departure < earliestBoard) continue
+                        if (bestDeparture == null || departure < bestDeparture) {
                             bestDeparture = departure
-                            best = Quad(trip, candidate, Duration.ofSeconds(requiredSeconds), shifted)
+                            best = Quad(trip, candidate, requiredSeconds.seconds, shifted)
                         }
                     }
                 }
@@ -597,7 +599,7 @@ serviceDate: LocalDate,
             delay == 0 -> RealtimeStatus.ON_TIME
             else -> RealtimeStatus.DELAYED
         }
-        val departure = scheduledDeparture ?: Instant.EPOCH
+        val departure = scheduledDeparture ?: Instant.DISTANT_PAST
         val arrival = scheduledArrival ?: departure
         return Leg.Transit(
             agencyId = network.routesByKey[trip.routeKey]?.agencyId,
@@ -613,7 +615,7 @@ serviceDate: LocalDate,
             delaySeconds = delay,
             scheduledDeparture = scheduledDeparture,
             scheduledArrival = scheduledArrival,
-            duration = Duration.between(departure, arrival),
+            duration = arrival - departure,
         )
     }
 
@@ -634,8 +636,8 @@ serviceDate: LocalDate,
         val meters = haversineMeters(from, to)
         if (meters > request.maxWalkMeters) return null
         val seconds = (meters / request.walkSpeedMetersPerSecond).toLong().coerceAtLeast(0)
-        val start = if (anchorIsEnd) anchor.minusSeconds(seconds) else anchor
-        return Leg.WalkLeg(from, to, start, Duration.ofSeconds(seconds), meters)
+        val start = if (anchorIsEnd) anchor - seconds.seconds else anchor
+        return Leg.WalkLeg(from, to, start, seconds.seconds, meters)
     }
 
     private data class Stoped(val stop: Stop, val meters: Double)
@@ -662,11 +664,11 @@ private fun nearestStops(point: GeoPoint, maxMeters: Double, limit: Int): List<S
  * Converts a GTFS service-day-relative time into an instant for a service date in
  * the agency timezone. Times past 24:00:00 correctly land on the following day.
  */
-fun GtfsServiceTime.instantOn(date: LocalDate, zone: ZoneId = ZoneId.of("America/Chicago")): Instant? {
+fun GtfsServiceTime.instantOn(date: LocalDate, zone: TimeZone = TimeZone.of("America/Chicago")): Instant? {
     val seconds = secondsSinceServiceDayStart
     if (seconds < 0) return null
-    val startOfDay = date.atStartOfDay(zone).toEpochSecond()
-    return Instant.ofEpochSecond(startOfDay + seconds)
+    val startOfDay = date.atStartOfDayIn(zone)
+    return startOfDay + seconds.seconds
 }
 
 fun haversineMeters(a: GeoPoint, b: GeoPoint): Double {

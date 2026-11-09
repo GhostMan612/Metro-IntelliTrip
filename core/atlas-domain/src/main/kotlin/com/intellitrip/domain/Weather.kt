@@ -1,7 +1,7 @@
 package com.intellitrip.domain
 
-import java.time.Instant
-import java.time.LocalDate
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 
 data class WeatherAlert(
     val id: String,

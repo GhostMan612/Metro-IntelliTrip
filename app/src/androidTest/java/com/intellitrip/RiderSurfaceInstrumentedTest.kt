@@ -21,7 +21,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.time.Instant
+import kotlinx.datetime.Instant
 
 /**
  * Device-side checks that the rider surfaces actually render.

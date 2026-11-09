@@ -1,8 +1,9 @@
 package com.intellitrip.map
 
-import java.time.Clock
-import java.time.Duration
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Minimal GeoJSON writer used to push bulk source updates to the map renderer.
@@ -133,15 +134,15 @@ object GeoJsonWriter {
  * often than the renderer can present.
  */
 class RenderUpdateThrottle(
-    private val minimumInterval: Duration = Duration.ofMillis(250),
-    private val clock: Clock = Clock.systemUTC(),
+    private val minimumInterval: Duration = 250.milliseconds,
+    private val clock: Clock = Clock.System,
 ) {
 
     private var lastUpdate: Instant? = null
 
-    fun shouldEmit(now: Instant = clock.instant()): Boolean {
+    fun shouldEmit(now: Instant = clock.now()): Boolean {
         val last = lastUpdate
-        if (last == null || Duration.between(last, now) >= minimumInterval) {
+        if (last == null || now - last >= minimumInterval) {
             lastUpdate = now
             return true
         }

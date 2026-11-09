@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
+import kotlinx.datetime.Clock
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -81,7 +82,7 @@ fun NearbyDeparturesSheet(
     }
     val display = remember(tick, departures) {
         departures.map {
-            val mins = (java.time.Duration.between(java.time.Instant.now(), it.scheduledTime).seconds / 60).toInt()
+            val mins = ((it.scheduledTime - Clock.System.now()).inWholeSeconds / 60).toInt()
             it.copy(minutesUntil = mins.coerceAtLeast(0))
         }
     }

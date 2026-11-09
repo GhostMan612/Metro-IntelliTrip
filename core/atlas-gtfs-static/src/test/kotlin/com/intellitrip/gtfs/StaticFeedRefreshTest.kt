@@ -3,7 +3,8 @@ package com.intellitrip.gtfs
 import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.FeedMetadata
 import java.nio.file.Files
-import java.time.Instant
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -59,7 +60,7 @@ class StaticFeedRefreshTest {
     fun invalidPayloadDoesNotReplaceActiveSnapshot() {
         val root = createTempDirectory("gtfs-store")
         val store = StaticFeedSnapshotStore(root)
-        val metadata = FeedMetadata(feedId, null, null, null, "old", "oldhash", Instant.EPOCH, null, null, "src")
+        val metadata = FeedMetadata(feedId, null, null, null, "old", "oldhash", Instant.DISTANT_PAST, null, null, "src")
         store.activate(feedId, zip, metadata)
 
         val transport = GtfsFeedAcquirer.HttpTransport { GtfsFeedAcquirer.HttpResponse(200, "not-a-zip".toByteArray(), emptyMap()) }
@@ -72,7 +73,7 @@ class StaticFeedRefreshTest {
     fun conditionalHeadersAreSentWhenSnapshotExists() {
         val root = createTempDirectory("gtfs-store")
         val store = StaticFeedSnapshotStore(root)
-        val metadata = FeedMetadata(feedId, null, null, null, "v", "h", Instant.EPOCH, null, null, "src")
+        val metadata = FeedMetadata(feedId, null, null, null, "v", "h", Instant.DISTANT_PAST, null, null, "src")
         store.activate(feedId, zip, metadata)
 
         var seen: GtfsFeedAcquirer.HttpRequest? = null
@@ -96,8 +97,8 @@ class StaticFeedRefreshTest {
             version = "42",
             hash = "abc",
             fetchedAt = Instant.parse("2026-10-07T00:00:00Z"),
-            validFrom = java.time.LocalDate.parse("20260101", java.time.format.DateTimeFormatter.BASIC_ISO_DATE),
-            validTo = java.time.LocalDate.parse("20261231", java.time.format.DateTimeFormatter.BASIC_ISO_DATE),
+            validFrom = LocalDate(2026, 1, 1),
+            validTo = LocalDate(2026, 12, 31),
             sourceUrl = "https://example/gtfs.zip",
         )
         store.activate(feedId, zip, metadata)

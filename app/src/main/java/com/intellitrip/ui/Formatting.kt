@@ -1,15 +1,17 @@
 package com.intellitrip.ui
 
-import java.time.Duration
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import com.intellitrip.domain.Leg
 
-private val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
-
 /** Shared time formatting so every surface renders times identically. */
-fun formatterTime(instant: Instant): String = TIME.format(instant)
+fun formatterTime(instant: Instant): String {
+    val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    val hour = local.hour.toString().padStart(2, '0')
+    val minute = local.minute.toString().padStart(2, '0')
+    return "$hour:$minute"
+}
 
 fun journeyHeadline(departure: Instant, arrival: Instant, minutes: Long): String =
     "${formatterTime(departure)} → ${formatterTime(arrival)} · ${minutes} min"

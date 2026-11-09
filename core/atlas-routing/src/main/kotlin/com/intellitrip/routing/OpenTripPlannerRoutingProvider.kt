@@ -19,11 +19,15 @@ import com.intellitrip.domain.TripUpdate
 import java.io.IOException
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import java.time.Duration
-import java.time.Instant
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /** Transport abstraction so the adapter can be exercised without a live service. */
 fun interface RoutingTransport {
@@ -43,7 +47,7 @@ class OpenTripPlannerRoutingProvider(
     private val feedId: FeedId,
     private val transport: RoutingTransport,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val agencyZone: java.time.ZoneId = java.time.ZoneId.of("America/Chicago"),
+    private val agencyZone: TimeZone = TimeZone.of("America/Chicago"),
     override val providerId: String = "open-trip-planner",
 ) : RoutingProvider {
 
@@ -77,11 +81,13 @@ class OpenTripPlannerRoutingProvider(
         // anchor instant (arriveBy wins when set) in the agency zone.
         val anchor = request.arriveBy ?: request.departAt
         if (anchor != null) {
-            val zoned = anchor.atZone(agencyZone)
+            val local = anchor.toLocalDateTime(agencyZone)
+            val datePart = "%04d%02d%02d".format(local.year, local.monthNumber, local.dayOfMonth)
+            val timePart = "%02d%02d".format(local.hour, local.minute)
             builder.append("&date=")
-                .append(zoned.format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE))
+                .append(datePart)
                 .append("&time=")
-                .append(zoned.format(java.time.format.DateTimeFormatter.ofPattern("HHmm", java.util.Locale.ROOT)))
+                .append(timePart)
         }
         return builder.toString()
     }
@@ -101,7 +107,7 @@ class OpenTripPlannerRoutingProvider(
             body: String,
             request: TripPlanRequest,
             feedId: FeedId = FeedId("metro-transit-regional"),
-            now: Instant = Instant.now(),
+            now: Instant = Clock.System.now(),
         ): ProviderResult<List<JourneyOption>> {
             val root = try {
                 JsonValue.parse(body)
@@ -125,14 +131,14 @@ class OpenTripPlannerRoutingProvider(
         ): JourneyOption? {
             val legs = itinerary.array("legs").mapNotNull { mapLeg(it, feedId, now) }
             if (legs.isEmpty()) return null
-            val start = itinerary.long("startTime")?.let { Instant.ofEpochMilli(it) }
+            val start = itinerary.long("startTime")?.let { Instant.fromEpochMilliseconds(it) }
                 ?: (legs.firstOrNull() as? Leg.WalkLeg)?.start
                 ?: return null
-            val end = itinerary.long("endTime")?.let { Instant.ofEpochMilli(it) }
+            val end = itinerary.long("endTime")?.let { Instant.fromEpochMilliseconds(it) }
                 ?: (legs.lastOrNull() as? Leg.WalkLeg)?.end
                 ?: return null
             return JourneyOption(
-                id = itinerary.string("id") ?: "otp-${start.toEpochMilli()}",
+                id = itinerary.string("id") ?: "otp-${start.toEpochMilliseconds()}",
                 legs = legs,
                 transfers = buildTransfers(legs),
                 departure = start,
@@ -145,9 +151,9 @@ class OpenTripPlannerRoutingProvider(
             val to = leg.obj("to") ?: return null
             val fromPoint = point(from) ?: return null
             val toPoint = point(to) ?: return null
-            val departure = leg.long("startTime")?.let { Instant.ofEpochMilli(it) } ?: return null
-            val arrival = leg.long("endTime")?.let { Instant.ofEpochMilli(it) } ?: return null
-            val duration = Duration.between(departure, arrival)
+            val departure = leg.long("startTime")?.let { Instant.fromEpochMilliseconds(it) } ?: return null
+            val arrival = leg.long("endTime")?.let { Instant.fromEpochMilliseconds(it) } ?: return null
+            val duration = arrival - departure
 
             // OTP marks walking legs with mode WALK and no route; anything carrying a
             // route is a transit leg.
@@ -209,12 +215,12 @@ class OpenTripPlannerRoutingProvider(
                 val arriving = legs[aIdx] as Leg.Transit
                 val departing = legs[bIdx] as Leg.Transit
                 val between = legs.subList(aIdx + 1, bIdx)
-                val walking = between.filterIsInstance<Leg.WalkLeg>().sumOf { it.duration.toSeconds() }.let { Duration.ofSeconds(it) }
+                val walking = between.filterIsInstance<Leg.WalkLeg>().sumOf { it.duration.inWholeSeconds }.seconds
                 com.intellitrip.domain.TransferConnection(
                     arrivingLeg = arriving,
                     departingLeg = departing,
                     transferStop = arriving.toStopKey,
-                    scheduledBuffer = Duration.between(arriving.arrival, departing.departure),
+                    scheduledBuffer = departing.departure - arriving.arrival,
                     predictedBuffer = null,
                     walkingDuration = walking,
                     confidence = com.intellitrip.domain.TransferConfidence.SCHEDULED_UNKNOWN,

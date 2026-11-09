@@ -1,21 +1,23 @@
 package com.intellitrip.domain
 
-import java.time.DayOfWeek
-import java.time.LocalDate
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.plus
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ServiceCalendarTest {
     private val svc = ServiceKey(FeedId("f"), "SVC")
-    private val monday = LocalDate.of(2026, 10, 5) // Monday
-    private val saturday = LocalDate.of(2026, 10, 3) // Saturday
+    private val monday = LocalDate(2026, 10, 5) // Monday
+    private val saturday = LocalDate(2026, 10, 3) // Saturday
 
     private fun weekdayCalendar() = Calendar(
         serviceKey = svc,
         daysOfWeek = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY),
-        startDate = monday.minusYears(1),
-        endDate = monday.plusYears(1),
+        startDate = LocalDate(monday.year - 1, monday.month, monday.dayOfMonth),
+        endDate = LocalDate(monday.year + 1, monday.month, monday.dayOfMonth),
     )
 
     @Test
@@ -32,7 +34,7 @@ class ServiceCalendarTest {
             listOf(CalendarDate(svc, monday, ServiceExceptionType.REMOVED)),
         )
         assertFalse(cal.isActive(svc, monday))
-        assertTrue(cal.isActive(svc, monday.plusDays(1)))
+        assertTrue(cal.isActive(svc, monday.plus(1, DateTimeUnit.DAY)))
     }
 
     @Test
@@ -70,6 +72,6 @@ class ServiceCalendarTest {
             emptyList(),
         )
         assertTrue(cal.isActive(svc, monday))
-        assertFalse(cal.isActive(svc, monday.plusWeeks(1)))
+        assertFalse(cal.isActive(svc, monday.plus(1, DateTimeUnit.WEEK)))
     }
 }

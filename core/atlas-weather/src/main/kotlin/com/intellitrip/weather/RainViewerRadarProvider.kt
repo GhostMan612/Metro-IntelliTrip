@@ -6,7 +6,7 @@ import com.intellitrip.contracts.RadarProvider
 import com.intellitrip.domain.RadarFrame
 import com.intellitrip.domain.RadarFrameKind
 import java.io.IOException
-import java.time.Instant
+import kotlinx.datetime.Instant
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -37,7 +37,7 @@ class RainViewerRadarProvider(
     override suspend fun frames(since: Instant): ProviderResult<List<RadarFrame>> {
         val index = withContext(ioDispatcher) { fetchIndex() }
             ?: return failureOr("RainViewer index unavailable")
-        val selected = index.frames.filter { !it.timestamp.isBefore(since) }
+        val selected = index.frames.filter { it.timestamp >= since }
         return ProviderResult.Success(selected, context.freshness(index.generatedAt))
     }
 
@@ -69,7 +69,7 @@ class RainViewerRadarProvider(
         fun parseIndex(payload: String): RadarIndex? {
             val root = Json.parse(payload).asObject()
             val host = root["host"].asStringOrNull() ?: return null
-            val generated = root["generated"].asLongOrNull()?.let(Instant::ofEpochSecond)
+            val generated = root["generated"].asLongOrNull()?.let { Instant.fromEpochSeconds(it) }
             val radar = root["radar"].asObject()
             // Only observed frames are published. RainViewer's `nowcast` entry is a
             // model forecast, not measurement: labelling it alongside past frames
@@ -93,7 +93,7 @@ class RainViewerRadarProvider(
             val path = obj["path"].asStringOrNull() ?: return@mapNotNull null
             RadarFrame(
                 providerId = "rainviewer",
-                timestamp = Instant.ofEpochSecond(time),
+                timestamp = Instant.fromEpochSeconds(time),
                 tileUrlTemplate = tileUrl(host, path),
                 attribution = ATTRIBUTION,
                 kind = kind,

@@ -7,8 +7,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.time.Duration
-import java.time.Instant
+import kotlin.time.Duration.Companion.minutes
+import kotlinx.datetime.Instant
 
 /**
  * A plan is only meaningful for the endpoints it was computed from.
@@ -105,7 +105,7 @@ class PlannerEndpointStateTest {
     fun planningDurationIsUnaffectedByEndpointClearing() {
         // Guards against the clear path accidentally touching unrelated fields.
         val after = stateWithPlan().withEndpoints(origin = elsewhere)
-        assertEquals(Duration.ofMinutes(30), journey.duration)
+        assertEquals(30.minutes, journey.duration)
     }
 
     // --- which journey is drawn -----------------------------------------------

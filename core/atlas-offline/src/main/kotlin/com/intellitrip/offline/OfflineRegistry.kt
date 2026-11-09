@@ -6,7 +6,8 @@ import com.intellitrip.gtfs.GtfsArchive
 import com.intellitrip.gtfs.GtfsStaticParser
 import com.intellitrip.gtfs.StaticFeed
 import com.intellitrip.gtfs.StaticFeedSnapshotStore
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import java.nio.file.Path
 
 /**
@@ -37,7 +38,7 @@ class OfflineRegistry(
         feedId: FeedId,
         realtimeEntry: CacheEntry? = null,
         basemap: BasemapAvailability = BasemapAvailability.OnlineOnly,
-        now: Instant = Instant.now(),
+        now: Instant = Clock.System.now(),
     ): Capabilities {
         val staticEntry = store.activeSnapshot(feedId)?.metadata?.let { metadata ->
             CacheEntry(
@@ -115,6 +116,6 @@ class OfflineRegistry(
     }
 
     /** Realtime positions are only handed out while they are fresh. */
-    fun liveVehicles(entry: CacheEntry?, vehicles: List<Vehicle>, now: Instant = Instant.now()): List<Vehicle> =
+    fun liveVehicles(entry: CacheEntry?, vehicles: List<Vehicle>, now: Instant = Clock.System.now()): List<Vehicle> =
         if (staleness.isPresentableAsLive(entry, now)) vehicles else emptyList()
 }

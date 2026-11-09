@@ -18,15 +18,17 @@ import com.intellitrip.domain.TripKey
 import com.intellitrip.domain.TripPlanRequest
 import com.intellitrip.domain.TripUpdate
 import com.intellitrip.domain.StopTimeUpdate
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 
 internal object RoutingFixtures {
 
     val feedId = FeedId("metro-transit-regional")
-    val zone: ZoneId = ZoneId.of("America/Chicago")
-    val serviceDate: LocalDate = LocalDate.of(2026, 10, 5)
+    val zone: TimeZone = TimeZone.of("America/Chicago")
+    val serviceDate: LocalDate = LocalDate(2026, 10, 5)
 
     val agency = Agency(
         id = AgencyId("$feedId/1"),
@@ -96,14 +98,14 @@ internal object RoutingFixtures {
 
     val network = RoutingNetwork(
         feedId = feedId,
-        metadata = FeedMetadata(feedId, null, null, null, "1", "hash", Instant.EPOCH, null, null, null),
+        metadata = FeedMetadata(feedId, null, null, null, "1", "hash", Instant.DISTANT_PAST, null, null, null),
         routes = listOf(routeA, routeB, routeC),
         stops = stops,
         trips = listOf(tripA1, tripB1, tripC1),
         stopTimes = stopTimes,
     )
 
-    fun request(departAt: Instant = serviceDate.atTime(7, 0).toInstant(java.time.ZoneOffset.ofHours(-5))): TripPlanRequest =
+    fun request(departAt: Instant = LocalDateTime(serviceDate.year, serviceDate.monthNumber, serviceDate.dayOfMonth, 7, 0).toInstant(zone)): TripPlanRequest =
         TripPlanRequest(
             origin = GeoPoint(44.9778, -93.2650),
             destination = GeoPoint(44.9930, -93.2650),

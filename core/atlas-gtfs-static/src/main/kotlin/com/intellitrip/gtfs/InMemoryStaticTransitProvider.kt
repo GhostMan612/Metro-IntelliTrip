@@ -17,7 +17,7 @@ import com.intellitrip.domain.StopTime
 import com.intellitrip.domain.Transfer
 import com.intellitrip.domain.Trip
 import com.intellitrip.domain.TripKey
-import java.time.Duration
+import kotlin.time.Duration
 
 /** Read-only [TransitStaticProvider] backed by an in-memory [StaticFeed]. */
 class InMemoryStaticTransitProvider(

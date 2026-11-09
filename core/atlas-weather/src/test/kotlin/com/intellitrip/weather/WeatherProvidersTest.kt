@@ -4,10 +4,10 @@ import com.intellitrip.domain.AlertSeverity
 import com.intellitrip.domain.AlertUrgency
 import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.RadarFrameKind
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -38,7 +38,13 @@ class WeatherProvidersTest {
     """.trimIndent()
 
     private fun context(providerId: String, userAgent: String?) =
-        WeatherRequestContext(providerId, userAgent, Clock.fixed(now, ZoneOffset.UTC))
+        WeatherRequestContext(
+            providerId,
+            userAgent,
+            object : Clock {
+                override fun now(): Instant = this@WeatherProvidersTest.now
+            },
+        )
 
     @Test
     fun radarIndexPublishesObservedFramesOnly() {
@@ -121,7 +127,7 @@ class WeatherProvidersTest {
             // Observed frames only. The payload's nowcast entry is a forecast and is
             // deliberately not published, so the latest frame is the past frame.
             assertEquals(RadarFrameKind.PAST, result.data.kind)
-            assertEquals(Instant.ofEpochSecond(1791556800), result.data.timestamp)
+            assertEquals(Instant.fromEpochSeconds(1791556800), result.data.timestamp)
         }
     }
 
@@ -132,7 +138,7 @@ class WeatherProvidersTest {
                 http = { _, _ -> radarPayload.toByteArray() },
                 context = context("rainviewer", "IntelliTrip/0.1"),
             )
-            val result = provider.frames(Instant.ofEpochSecond(1791557400))
+            val result = provider.frames(Instant.fromEpochSeconds(1791557400))
             assertIs<com.intellitrip.contracts.ProviderResult.Success<List<com.intellitrip.domain.RadarFrame>>>(result)
             // The payload holds one past frame at 1791556800 and one nowcast frame at
             // 1791558000. Both precede the requested "since", and the nowcast frame is
@@ -174,7 +180,7 @@ class WeatherProvidersTest {
                     alertsPayload.toByteArray()
                 },
                 context = context("nws", "IntelliTrip/0.1 (contact@example.com)"),
-                pollInterval = java.time.Duration.ofMillis(1),
+                pollInterval = 1.milliseconds,
             )
             val result = provider.alerts().first()
             assertIs<com.intellitrip.contracts.ProviderResult.Success<List<com.intellitrip.domain.WeatherAlert>>>(result)
@@ -194,7 +200,7 @@ class WeatherProvidersTest {
             val provider = NwsWeatherAlertProvider(
                 http = { _, _ -> throw java.io.IOException("offline") },
                 context = context("nws", "IntelliTrip/0.1"),
-                pollInterval = java.time.Duration.ofMillis(1),
+                pollInterval = 1.milliseconds,
             )
             assertIs<com.intellitrip.contracts.ProviderResult.NetworkFailure>(provider.alerts().first())
         }

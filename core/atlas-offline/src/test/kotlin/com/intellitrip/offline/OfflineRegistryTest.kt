@@ -7,9 +7,12 @@ import com.intellitrip.domain.VehicleKey
 import com.intellitrip.domain.VehicleType
 import com.intellitrip.gtfs.GtfsStaticParser
 import com.intellitrip.gtfs.StaticFeedSnapshotStore
-import java.time.Duration
-import java.time.Instant
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 import kotlin.io.path.createTempDirectory
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.seconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -21,22 +24,22 @@ class StalenessModelTest {
 
     private val now = Instant.parse("2026-10-09T12:00:00Z")
     private val model = StalenessModel(
-        FreshnessPolicy(freshWithin = Duration.ofHours(1), usableWithin = Duration.ofDays(1))
+        FreshnessPolicy(freshWithin = 1.hours, usableWithin = 1.days)
     )
 
     @Test
     fun recentDataIsFresh() {
-        assertEquals(Freshness.FRESH, model.classify(now.minusSeconds(600), now))
+        assertEquals(Freshness.FRESH, model.classify(now - 600.seconds, now))
     }
 
     @Test
     fun agingDataIsStaleButUsable() {
-        assertEquals(Freshness.STALE, model.classify(now.minus(Duration.ofHours(6)), now))
+        assertEquals(Freshness.STALE, model.classify(now - 6.hours, now))
     }
 
     @Test
     fun oldDataIsExpired() {
-        assertEquals(Freshness.EXPIRED, model.classify(now.minus(Duration.ofDays(3)), now))
+        assertEquals(Freshness.EXPIRED, model.classify(now - 3.days, now))
     }
 
     @Test
@@ -46,15 +49,15 @@ class StalenessModelTest {
 
     @Test
     fun onlyFreshRealtimeIsPresentableAsLive() {
-        assertTrue(model.isPresentableAsLive(CacheEntry(FeedId("f"), now.minusSeconds(60)), now))
-        assertFalse(model.isPresentableAsLive(CacheEntry(FeedId("f"), now.minus(Duration.ofHours(6))), now))
+        assertTrue(model.isPresentableAsLive(CacheEntry(FeedId("f"), now - 60.seconds), now))
+        assertFalse(model.isPresentableAsLive(CacheEntry(FeedId("f"), now - 6.hours), now))
         assertFalse(model.isPresentableAsLive(null, now))
     }
 
     @Test
     fun staticStaysUsableWhileNotExpired() {
-        assertTrue(model.isUsableStatic(CacheEntry(FeedId("f"), now.minus(Duration.ofHours(6))), now))
-        assertFalse(model.isUsableStatic(CacheEntry(FeedId("f"), now.minus(Duration.ofDays(3))), now))
+        assertTrue(model.isUsableStatic(CacheEntry(FeedId("f"), now - 6.hours), now))
+        assertFalse(model.isUsableStatic(CacheEntry(FeedId("f"), now - 3.days), now))
     }
 }
 
@@ -74,8 +77,8 @@ class OfflineRegistryTest {
         version = "1",
         hash = "abc123",
         fetchedAt = fetchedAt,
-        validFrom = java.time.LocalDate.parse("20261001", java.time.format.DateTimeFormatter.BASIC_ISO_DATE),
-        validTo = java.time.LocalDate.parse("20261231", java.time.format.DateTimeFormatter.BASIC_ISO_DATE),
+        validFrom = LocalDate(2026, 10, 1),
+        validTo = LocalDate(2026, 12, 31),
         sourceUrl = "https://svc.metrotransit.org/mtgtfs/gtfs.zip",
     )
 
@@ -125,7 +128,7 @@ class OfflineRegistryTest {
     fun staleRealtimeIsCachedButNeverPresentedAsLive() {
         val registry = OfflineRegistry(store)
         // default policy: fresh for 12h, usable for 7d -> 13h old is stale
-        val entry = CacheEntry(feedId, now.minus(Duration.ofHours(13)))
+        val entry = CacheEntry(feedId, now - 13.hours)
         val capabilities = registry.capabilities(feedId, realtimeEntry = entry, now = now)
         assertTrue(capabilities.realtimeCached)
         assertFalse(capabilities.realtimeUsable)
@@ -136,7 +139,7 @@ class OfflineRegistryTest {
 
     @Test
     fun freshRealtimeIsPresentedAsLive() {
-        val entry = CacheEntry(feedId, now.minusSeconds(60))
+        val entry = CacheEntry(feedId, now - 60.seconds)
         val registry = OfflineRegistry(store)
         assertEquals(1, registry.liveVehicles(entry, listOf(vehicle()), now).size)
     }

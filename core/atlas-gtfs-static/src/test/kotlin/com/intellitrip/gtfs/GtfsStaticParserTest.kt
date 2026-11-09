@@ -6,7 +6,7 @@ import com.intellitrip.domain.GtfsServiceTime
 import com.intellitrip.domain.ShapeKey
 import com.intellitrip.domain.StopKey
 import com.intellitrip.domain.TripKey
-import java.time.Instant
+import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 class GtfsStaticParserTest {
 
     private val feedId = FeedId("metro-transit-regional")
-    private val metadata = FeedMetadata(feedId, null, null, null, "1", "hash", Instant.EPOCH, null, null, null)
+    private val metadata = FeedMetadata(feedId, null, null, null, "1", "hash", Instant.DISTANT_PAST, null, null, null)
 
     private fun parse(files: Map<String, String>) = GtfsStaticParser.parse(feedId, files, metadata)
 
@@ -43,7 +43,7 @@ class GtfsStaticParserTest {
         val b = GtfsStaticParser.parse(
             FeedId("other-feed"),
             GtfsFixtures.minimalFeed,
-            FeedMetadata(FeedId("other-feed"), null, null, null, "1", "hash", Instant.EPOCH, null, null, null),
+            FeedMetadata(FeedId("other-feed"), null, null, null, "1", "hash", Instant.DISTANT_PAST, null, null, null),
         )
         assertTrue(a.stops.first().key != b.stops.first().key)
         assertTrue(a.routes.first().key != b.routes.first().key)

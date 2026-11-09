@@ -3,7 +3,8 @@ package com.intellitrip.gtfs
 import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.FeedMetadata
 import java.nio.file.Files
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -13,7 +14,7 @@ class StaticFeedBinaryCacheTest {
     fun roundTripsMinimalFeed() {
         val root = Files.createTempDirectory("cache-test")
         val feedId = FeedId("metro-transit-regional")
-        val metadata = FeedMetadata(feedId, null, null, null, "1", "hash", Instant.now(), null, null, null)
+        val metadata = FeedMetadata(feedId, null, null, null, "1", "hash", Clock.System.now(), null, null, null)
         val feed = GtfsStaticParser.parse(
             feedId,
             GtfsFixtures.minimalFeed.mapValues { it.value.toByteArray() }.toMutableMap(),

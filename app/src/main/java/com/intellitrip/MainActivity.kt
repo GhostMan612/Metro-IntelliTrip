@@ -43,7 +43,7 @@ import com.intellitrip.ui.RiderNavigationBar
 import com.intellitrip.ui.RiderNavigationRail
 import com.intellitrip.ui.theme.IntelliTripTheme
 import com.intellitrip.ui.theme.Space
-import java.time.Instant
+import kotlinx.datetime.Clock
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -295,7 +295,7 @@ private fun MapPane(
                 vehicles = state.vehicles.associateBy { it.key.vehicleId },
                 journeys = state.journeys,
                 departures = model.nearbyDepartures(),
-                now = Instant.now(),
+                now = Clock.System.now(),
                 onDismiss = model::clearSelection,
                 onSaveStop = model::toggleSavedStop,
                 onSelectJourney = model::selectJourney,

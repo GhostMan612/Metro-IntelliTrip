@@ -8,7 +8,7 @@ gradlew.bat assembleDebug
 
 ## Publish the SDK for another app
 The portable `core/atlas-*` modules publish to `build/atlas-maven` (group
-`com.intellitrip.atlas`, version `0.1.0`) so a separate repository can consume them:
+`com.intellitrip.atlas`, version `0.2.0`) so a separate repository can consume them:
 ```
 gradlew.bat publishAtlasToLocalRepo
 ```

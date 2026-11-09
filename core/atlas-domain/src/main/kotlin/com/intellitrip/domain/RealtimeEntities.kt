@@ -1,6 +1,6 @@
 package com.intellitrip.domain
 
-import java.time.Instant
+import kotlinx.datetime.Instant
 
 enum class VehicleType { BUS, RAIL, FERRY, OTHER }
 

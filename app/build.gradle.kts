@@ -89,6 +89,10 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.2")
+    // kotlinx-datetime serializers reference kotlinx-serialization-core; R8
+    // fails release on the missing class without it explicitly.
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.0")
     implementation(project(":core:atlas-domain"))
     implementation(project(":core:atlas-contracts"))
     implementation(project(":core:atlas-gtfs-realtime"))

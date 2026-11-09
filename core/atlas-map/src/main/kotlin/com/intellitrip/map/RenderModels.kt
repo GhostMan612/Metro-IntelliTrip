@@ -8,7 +8,7 @@ import com.intellitrip.domain.StopKey
 import com.intellitrip.domain.Vehicle
 import com.intellitrip.domain.VehicleType
 import com.intellitrip.domain.ZoomBucket
-import java.time.Instant
+import kotlinx.datetime.Instant
 
 /** Immutable render input: a transit snapshot plus the current camera. */
 data class RenderInput(

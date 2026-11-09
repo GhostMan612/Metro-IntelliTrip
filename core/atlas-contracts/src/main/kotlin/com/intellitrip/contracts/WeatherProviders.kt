@@ -5,7 +5,7 @@ import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.LatLngBounds
 import com.intellitrip.domain.RadarFrame
 import com.intellitrip.domain.WeatherAlert
-import java.time.Instant
+import kotlinx.datetime.Instant
 import kotlinx.coroutines.flow.Flow
 
 /**

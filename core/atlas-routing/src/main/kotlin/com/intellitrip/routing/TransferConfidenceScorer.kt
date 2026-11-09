@@ -7,8 +7,10 @@ import com.intellitrip.domain.Transfer
 import com.intellitrip.domain.TransferConfidence
 import com.intellitrip.domain.TransferConnection
 import com.intellitrip.domain.TripUpdate
-import java.time.Duration
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * Scores a single [TransferConnection].
@@ -18,9 +20,9 @@ import java.time.Instant
  * `UNKNOWN` rather than false reassurance.
  */
 class TransferConfidenceScorer(
-    private val comfortableBuffer: Duration = Duration.ofMinutes(5),
-    private val tightBuffer: Duration = Duration.ofMinutes(2),
-    private val staleAfter: Duration = Duration.ofMinutes(10),
+    private val comfortableBuffer: Duration = 5.minutes,
+    private val tightBuffer: Duration = 2.minutes,
+    private val staleAfter: Duration = 10.minutes,
 ) {
 
     data class Inputs(
@@ -28,7 +30,7 @@ class TransferConfidenceScorer(
         val arrivingUpdate: TripUpdate? = null,
         val departingUpdate: TripUpdate? = null,
         val transfer: Transfer? = null,
-        val now: Instant = Instant.now(),
+        val now: Instant = Clock.System.now(),
     )
 
     fun score(inputs: Inputs): TransferConnection {
@@ -61,28 +63,28 @@ class TransferConfidenceScorer(
         val minTransfer = inputs.transfer?.minTransferSeconds
         val buffer = connection.predictedBuffer ?: connection.scheduledBuffer
 
-        if (buffer.isNegative) {
+        if (buffer.isNegative()) {
             return Verdict(TransferConfidence.LOW, "Predicted arrival is after the connecting departure")
         }
-        if (minTransfer != null && buffer.seconds < minTransfer) {
+        if (minTransfer != null && buffer.inWholeSeconds < minTransfer) {
             return Verdict(
                 TransferConfidence.LOW,
-                "Buffer ${buffer.seconds}s is below the minimum transfer time of ${minTransfer}s",
+                "Buffer ${buffer.inWholeSeconds}s is below the minimum transfer time of ${minTransfer}s",
             )
         }
         if (buffer < tightBuffer) {
-            return Verdict(TransferConfidence.MEDIUM, "Tight transfer buffer of ${buffer.seconds}s")
+            return Verdict(TransferConfidence.MEDIUM, "Tight transfer buffer of ${buffer.inWholeSeconds}s")
         }
         if (buffer >= comfortableBuffer) {
-            return Verdict(TransferConfidence.HIGH, "Comfortable transfer buffer of ${buffer.seconds}s")
+            return Verdict(TransferConfidence.HIGH, "Comfortable transfer buffer of ${buffer.inWholeSeconds}s")
         }
-        return Verdict(TransferConfidence.MEDIUM, "Transfer buffer of ${buffer.seconds}s")
+        return Verdict(TransferConfidence.MEDIUM, "Transfer buffer of ${buffer.inWholeSeconds}s")
     }
 
     private fun isStale(update: TripUpdate, now: Instant): Boolean {
         val timestamp = update.timestamp ?: return true
-        val age = Duration.between(timestamp, now)
-        return age.isNegative || age > staleAfter
+        val age = now - timestamp
+        return age.isNegative() || age > staleAfter
     }
 }
 

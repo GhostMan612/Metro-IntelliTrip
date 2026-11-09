@@ -1,5 +1,6 @@
 package com.intellitrip.domain
 
+import kotlin.time.Duration.Companion.seconds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -56,8 +57,8 @@ class IdentityTest {
     @Test
     fun feedIdentitySurvivesSnapshotVersionChanges() {
         val feed = FeedId("metro-transit-regional")
-        val snapshotA = FeedMetadata(feed, null, null, null, "1790802061", "abc123", java.time.Instant.EPOCH, null, null, null)
-        val snapshotB = FeedMetadata(feed, null, null, null, "1790802999", "def456", java.time.Instant.EPOCH.plusSeconds(86400), null, null, null)
+        val snapshotA = FeedMetadata(feed, null, null, null, "1790802061", "abc123", kotlinx.datetime.Instant.DISTANT_PAST, null, null, null)
+        val snapshotB = FeedMetadata(feed, null, null, null, "1790802999", "def456", kotlinx.datetime.Instant.DISTANT_PAST + 86400.seconds, null, null, null)
         assertEquals(snapshotA.feedId, snapshotB.feedId)
     }
 }

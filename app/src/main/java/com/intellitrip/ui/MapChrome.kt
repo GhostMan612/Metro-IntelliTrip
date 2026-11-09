@@ -502,7 +502,7 @@ private fun PlanSheet(
             Column(modifier = Modifier.padding(Space.md)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = journeyHeadline(journey.departure, journey.arrival, journey.duration.toMinutes()),
+                        text = journeyHeadline(journey.departure, journey.arrival, journey.duration.inWholeMinutes),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f),
                     )
@@ -589,7 +589,7 @@ private fun JourneyTimeline(journey: com.intellitrip.domain.JourneyOption) {
                             .background(confidenceColor(transfer.confidence), CircleShape),
                     )
                     Text(
-                        text = "Transfer ${transfer.scheduledBuffer.toMinutes()} min · ${transfer.confidence.name.lowercase()}",
+                        text = "Transfer ${transfer.scheduledBuffer.inWholeMinutes} min · ${transfer.confidence.name.lowercase()}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 6.dp),

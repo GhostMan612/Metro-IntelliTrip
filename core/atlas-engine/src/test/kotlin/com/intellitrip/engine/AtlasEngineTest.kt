@@ -21,9 +21,11 @@ import com.intellitrip.domain.TripKey
 import com.intellitrip.domain.TripUpdate
 import com.intellitrip.routing.RoutingNetwork
 import com.intellitrip.routing.StaticNetworkPlanner
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -35,7 +37,7 @@ class AtlasEngineTest {
     private val feedId = FeedId("metro-transit-regional")
 
     private fun network(): RoutingNetwork {
-        val zone = ZoneId.of("America/Chicago")
+        val zone = TimeZone.of("America/Chicago")
         val agency = com.intellitrip.domain.Agency(
             id = com.intellitrip.domain.AgencyId("metro-transit-regional/1"),
             feedId = feedId,
@@ -68,7 +70,7 @@ class AtlasEngineTest {
         )
         return RoutingNetwork(
             feedId = feedId,
-            metadata = com.intellitrip.domain.FeedMetadata(feedId, null, null, null, "1", "hash", Instant.EPOCH, null, null, null),
+            metadata = com.intellitrip.domain.FeedMetadata(feedId, null, null, null, "1", "hash", Instant.DISTANT_PAST, null, null, null),
             routes = listOf(route),
             stops = stops,
             trips = listOf(trip),
@@ -101,7 +103,7 @@ class AtlasEngineTest {
                 TripPlanRequest(
                     origin = GeoPoint(44.9778, -93.2650),
                     destination = GeoPoint(44.99, -93.2650),
-                    departAt = Instant.now(),
+                    departAt = Clock.System.now(),
                     arriveBy = null,
                     maxTransfers = 0,
                 )
@@ -119,7 +121,7 @@ class AtlasEngineTest {
                 TripPlanRequest(
                     origin = GeoPoint(44.9778, -93.2650),
                     destination = GeoPoint(44.99, -93.2650),
-                    departAt = LocalDate.of(2026, 10, 5).atTime(7, 0).toInstant(java.time.ZoneOffset.ofHours(-5)),
+                    departAt = LocalDateTime(2026, 10, 5, 7, 0).toInstant(TimeZone.of("America/Chicago")),
                     arriveBy = null,
                     maxTransfers = 0,
                 )
@@ -162,7 +164,7 @@ class AtlasEngineTest {
                 vehicles = emptyList(),
                 stops = emptyList(),
                 shapes = emptyList(),
-                snapshotAt = Instant.EPOCH,
+                snapshotAt = Instant.DISTANT_PAST,
             )
         )
         assertEquals(com.intellitrip.domain.ZoomBucket.INDIVIDUAL, snapshot.zoomBucket)

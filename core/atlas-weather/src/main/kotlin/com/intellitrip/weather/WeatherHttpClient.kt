@@ -3,9 +3,8 @@ package com.intellitrip.weather
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import java.time.Clock
-import java.time.Duration
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 
 /** Explicit HTTP fetcher for weather providers. Never invoked at app startup. */
 fun interface WeatherHttpClient {
@@ -42,17 +41,17 @@ fun interface WeatherHttpClient {
 class WeatherRequestContext(
     private val providerId: String,
     private val userAgent: String?,
-    private val clock: Clock = Clock.systemUTC(),
+    private val clock: Clock = Clock.System,
 ) {
     fun headers(): Map<String, String> =
         userAgent?.let { mapOf("User-Agent" to it) } ?: emptyMap()
 
     fun freshness(sourceTimestamp: Instant?): com.intellitrip.contracts.FreshnessMetadata {
-        val now = clock.instant()
+        val now = clock.now()
         return com.intellitrip.contracts.FreshnessMetadata(
             sourceTimestamp = sourceTimestamp,
             fetchedAt = now,
-            age = Duration.between(sourceTimestamp ?: now, now),
+            age = now - (sourceTimestamp ?: now),
             providerId = providerId,
         )
     }

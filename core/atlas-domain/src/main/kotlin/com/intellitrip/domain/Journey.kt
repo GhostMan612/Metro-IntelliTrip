@@ -1,8 +1,8 @@
 package com.intellitrip.domain
 
-import java.time.Duration
-import java.time.Instant
-import java.time.LocalDate
+import kotlin.time.Duration
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 
 data class TripPlanRequest(
     val origin: GeoPoint,
@@ -26,7 +26,7 @@ data class JourneyOption(
     val arrival: Instant,
 ) {
     val transferCount: Int get() = transfers.size
-    val duration: Duration get() = Duration.between(departure, arrival)
+    val duration: Duration get() = arrival - departure
 }
 
 sealed interface Leg {
@@ -39,7 +39,7 @@ sealed interface Leg {
         override val duration: Duration,
         val meters: Double,
     ) : Leg {
-        val end: Instant get() = start.plus(duration)
+        val end: Instant get() = start + duration
     }
 
     data class Transit(
@@ -70,7 +70,7 @@ sealed interface Leg {
         val label: String,
     ) : Leg {
         val start: Instant get() = departure
-        val end: Instant get() = departure.plus(duration)
+        val end: Instant get() = departure + duration
     }
 }
 

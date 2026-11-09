@@ -1,6 +1,7 @@
 package com.intellitrip.domain
 
-import java.time.Instant
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 
 data class StopTimeUpdate(
     val stopKey: StopKey,
@@ -13,7 +14,7 @@ data class TripUpdate(
     val routeKey: RouteKey,
     val vehicleKey: VehicleKey?,
     val directionId: Int?,
-    val startDate: java.time.LocalDate?,
+    val startDate: LocalDate?,
     val startTime: GtfsServiceTime?,
     val timestamp: Instant?,
     val scheduleRelationship: ScheduleRelationship,

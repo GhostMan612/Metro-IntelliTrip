@@ -13,9 +13,10 @@ import com.intellitrip.domain.Stop
 import com.intellitrip.domain.StopKey
 import com.intellitrip.domain.Trip
 import com.intellitrip.domain.TripKey
-import java.time.Duration
-import java.time.Instant
+import kotlinx.datetime.Instant
 import kotlin.test.Test
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -56,13 +57,13 @@ class RouteGeometryTest {
         fromStopKey = StopKey(feedId, from),
         toStopKey = StopKey(feedId, to),
         departure = departure,
-        arrival = departure.plusSeconds(600),
+        arrival = departure + 600.seconds,
         vehicleKey = null,
         realtimeStatus = RealtimeStatus.SCHEDULED,
         delaySeconds = null,
         scheduledDeparture = null,
         scheduledArrival = null,
-        duration = Duration.ofSeconds(600),
+        duration = 600.seconds,
     )
 
     private fun journey(vararg legs: Leg) = JourneyOption(
@@ -70,7 +71,7 @@ class RouteGeometryTest {
         legs = legs.toList(),
         transfers = emptyList(),
         departure = departure,
-        arrival = departure.plusSeconds(600),
+        arrival = departure + 600.seconds,
     )
 
     private val shapePoints = listOf(
@@ -159,7 +160,7 @@ class RouteGeometryTest {
             from = GeoPoint(44.97, -93.26),
             to = GeoPoint(44.971, -93.261),
             start = departure,
-            duration = Duration.ofSeconds(120),
+            duration = 120.seconds,
             meters = 150.0,
         )
         val lines = RouteGeometry.build(journey(walk), emptyList(), emptyList(), emptyList())
@@ -198,12 +199,12 @@ class RouteGeometryTest {
             journey = journey(
                 Leg.WalkLeg(
                     GeoPoint(44.96, -93.25), GeoPoint(44.97, -93.26),
-                    departure, Duration.ofSeconds(300), 400.0,
+                    departure, 300.seconds, 400.0,
                 ),
                 transitLeg("S1", "S4"),
                 Leg.WalkLeg(
                     GeoPoint(44.985, -93.265), GeoPoint(44.99, -93.27),
-                    departure, Duration.ofSeconds(200), 300.0,
+                    departure, 200.seconds, 300.0,
                 ),
             ),
             shapes = listOf(Shape(ShapeKey(feedId, "SH1"), shapePoints)),

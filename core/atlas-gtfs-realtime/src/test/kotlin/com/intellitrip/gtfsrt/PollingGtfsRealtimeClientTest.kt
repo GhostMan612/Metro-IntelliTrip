@@ -7,8 +7,9 @@ import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.LatLngBounds
 import com.intellitrip.domain.RadiusFilter
 import java.io.IOException
-import java.time.Duration
-import java.time.Instant
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -71,10 +72,10 @@ class PollingGtfsRealtimeClientTest {
             com.google.transit.realtime.GtfsRealtime.FeedMessage.parseFrom(RealtimeFixtures.vehiclePositionsFeed())
         )
         val bounds = LatLngBounds(GeoPoint(0.0, 0.0), GeoPoint(10.0, 10.0))
-        val scope = DataScope(null, null, null, null, bounds, null, null, Duration.ofSeconds(30), false, false)
+        val scope = DataScope(null, null, null, null, bounds, null, null, 30.seconds, false, false)
         assertTrue(RealtimeScopeFilter.filter(vehicles, scope).isEmpty())
 
-        val radiusScope = DataScope(null, null, null, null, null, RadiusFilter(GeoPoint(44.89, -93.19), 5_000.0), null, Duration.ofSeconds(30), false, false)
+        val radiusScope = DataScope(null, null, null, null, null, RadiusFilter(GeoPoint(44.89, -93.19), 5_000.0), null, 30.seconds, false, false)
         assertEquals(1, RealtimeScopeFilter.filter(vehicles, radiusScope).size)
     }
 }

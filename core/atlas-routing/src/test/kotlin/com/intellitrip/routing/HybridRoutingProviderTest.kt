@@ -5,9 +5,12 @@ import com.intellitrip.domain.JourneyOption
 import com.intellitrip.domain.Leg
 import com.intellitrip.domain.TripPlanRequest
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 
 /**
  * Covers the hybrid policy: local answers first, remote only fills genuine gaps, and
@@ -27,8 +30,8 @@ class HybridRoutingProviderTest {
         id = id,
         legs = emptyList(),
         transfers = emptyList(),
-        departure = java.time.Instant.parse("2026-10-05T13:00:00Z"),
-        arrival = java.time.Instant.parse("2026-10-05T13:30:00Z"),
+        departure = Instant.parse("2026-10-05T13:00:00Z"),
+        arrival = Instant.parse("2026-10-05T13:30:00Z"),
     )
 
     private class Stub(private val result: com.intellitrip.contracts.ProviderResult<List<JourneyOption>>) :
@@ -44,8 +47,8 @@ class HybridRoutingProviderTest {
             com.intellitrip.contracts.ProviderResult.Success(
                 listOf(journey("local-1")),
                 com.intellitrip.contracts.FreshnessMetadata(
-                    java.time.Instant.now(), java.time.Instant.now(),
-                    java.time.Duration.ZERO, "stub",
+                    Clock.System.now(), Clock.System.now(),
+                    Duration.ZERO, "stub",
                 ),
             )
         )
@@ -53,8 +56,8 @@ class HybridRoutingProviderTest {
             com.intellitrip.contracts.ProviderResult.Success(
                 listOf(journey("remote-1")),
                 com.intellitrip.contracts.FreshnessMetadata(
-                    java.time.Instant.now(), java.time.Instant.now(),
-                    java.time.Duration.ZERO, "stub",
+                    Clock.System.now(), Clock.System.now(),
+                    Duration.ZERO, "stub",
                 ),
             )
         )
@@ -72,8 +75,8 @@ class HybridRoutingProviderTest {
                 data = emptyList(),
                 missing = listOf("cross-agency-unavailable"),
                 freshness = com.intellitrip.contracts.FreshnessMetadata(
-                    java.time.Instant.now(), java.time.Instant.now(),
-                    java.time.Duration.ZERO, "stub",
+                    Clock.System.now(), Clock.System.now(),
+                    Duration.ZERO, "stub",
                 ),
             )
         )
@@ -81,8 +84,8 @@ class HybridRoutingProviderTest {
             com.intellitrip.contracts.ProviderResult.Success(
                 listOf(journey("remote-1")),
                 com.intellitrip.contracts.FreshnessMetadata(
-                    java.time.Instant.now(), java.time.Instant.now(),
-                    java.time.Duration.ZERO, "otp",
+                    Clock.System.now(), Clock.System.now(),
+                    Duration.ZERO, "otp",
                 ),
             )
         )
@@ -94,8 +97,8 @@ class HybridRoutingProviderTest {
     @Test
     fun bothEmptyReportsBothGaps() = runBlocking {
         val fresh = com.intellitrip.contracts.FreshnessMetadata(
-            java.time.Instant.now(), java.time.Instant.now(),
-            java.time.Duration.ZERO, "stub",
+            Clock.System.now(), Clock.System.now(),
+            Duration.ZERO, "stub",
         )
         val local = Stub(
             com.intellitrip.contracts.ProviderResult.PartialResult(
@@ -116,8 +119,8 @@ class HybridRoutingProviderTest {
             com.intellitrip.contracts.ProviderResult.Success(
                 listOf(journey("local-1")),
                 com.intellitrip.contracts.FreshnessMetadata(
-                    java.time.Instant.now(), java.time.Instant.now(),
-                    java.time.Duration.ZERO, "stub",
+                    Clock.System.now(), Clock.System.now(),
+                    Duration.ZERO, "stub",
                 ),
             )
         )
@@ -137,8 +140,8 @@ class HybridRoutingProviderTest {
             com.intellitrip.contracts.ProviderResult.PartialResult(
                 emptyList(), listOf("no-local-result"),
                 com.intellitrip.contracts.FreshnessMetadata(
-                    java.time.Instant.now(), java.time.Instant.now(),
-                    java.time.Duration.ZERO, "stub",
+                    Clock.System.now(), Clock.System.now(),
+                    Duration.ZERO, "stub",
                 ),
             )
         )
@@ -159,8 +162,8 @@ class HybridRoutingProviderTest {
     @Test
     fun remoteFallbackCanBeDisabledForStrictOfflineMode() = runBlocking {
         val fresh = com.intellitrip.contracts.FreshnessMetadata(
-            java.time.Instant.now(), java.time.Instant.now(),
-            java.time.Duration.ZERO, "stub",
+            Clock.System.now(), Clock.System.now(),
+            Duration.ZERO, "stub",
         )
         val local = Stub(
             com.intellitrip.contracts.ProviderResult.PartialResult(

@@ -8,14 +8,23 @@ import com.intellitrip.domain.StopKey
 import com.intellitrip.domain.StopTimeUpdate
 import com.intellitrip.domain.TripKey
 import com.intellitrip.domain.TripUpdate
-import java.time.Duration
-import java.time.Instant
+import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
-import kotlinx.coroutines.runBlocking
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 
 class StaticNetworkPlannerTest {
 
@@ -45,14 +54,14 @@ class StaticNetworkPlannerTest {
         assertEquals(StopKey(RoutingFixtures.feedId, "S1"), transit.fromStopKey)
         assertEquals(StopKey(RoutingFixtures.feedId, "S2"), transit.toStopKey)
         assertNotNull(transit.scheduledDeparture)
-        assertEquals(Duration.ofMinutes(10), transit.duration)
+        assertEquals(10.minutes, transit.duration)
     }
 
     @Test
     fun journeyTimesAreConsistent() {
         val journey = success().first()
         assertTrue(journey.departure <= journey.arrival)
-        assertEquals(Duration.between(journey.departure, journey.arrival), journey.duration)
+        assertEquals(journey.arrival - journey.departure, journey.duration)
     }
 
     @Test
@@ -91,7 +100,7 @@ class StaticNetworkPlannerTest {
             directionId = 0,
             startDate = null,
             startTime = null,
-            timestamp = Instant.EPOCH,
+            timestamp = Instant.DISTANT_PAST,
             scheduleRelationship = com.intellitrip.domain.ScheduleRelationship.SCHEDULED,
             stopTimeUpdates = listOf(
                 StopTimeUpdate(StopKey(RoutingFixtures.feedId, "S1"), null, 600),
@@ -130,11 +139,11 @@ class StaticNetworkPlannerTest {
         val late = com.intellitrip.domain.GtfsServiceTime.parse("25:30:00")
         val instant = late.instantOn(RoutingFixtures.serviceDate, RoutingFixtures.zone)
         assertNotNull(instant)
-        val local = instant.atZone(RoutingFixtures.zone)
+        val local = instant.toLocalDateTime(RoutingFixtures.zone)
         // 25:30 service time lands on 01:30 the following calendar day
         assertEquals(1, local.hour)
         assertEquals(30, local.minute)
-        assertEquals(RoutingFixtures.serviceDate.plusDays(1), local.toLocalDate())
+        assertEquals(RoutingFixtures.serviceDate.plus(1, DateTimeUnit.DAY), local.date)
     }
 
     @Test
@@ -145,7 +154,7 @@ class StaticNetworkPlannerTest {
         // The origin walk must finish at boarding, not start there: a rider who
         // walks for 20 minutes cannot board the instant the walk begins.
         assertEquals(transit.departure, walkOut.end)
-        assertTrue(!walkOut.start.isAfter(transit.departure))
+        assertTrue(walkOut.start <= transit.departure)
         assertTrue(journey.departure == walkOut.start)
     }
 
@@ -161,7 +170,7 @@ class StaticNetworkPlannerTest {
         val transit = journey.legs.filterIsInstance<Leg.Transit>().first()
         assertTrue(walkOut.meters > 0)
         assertEquals(transit.departure, walkOut.end)
-        assertTrue(walkOut.start.isBefore(transit.departure))
+        assertTrue(walkOut.start < transit.departure)
     }
 
     @Test
@@ -216,26 +225,26 @@ class StaticNetworkPlannerTest {
         assertNotNull(journey, "expected a walking-transfer journey, got ${result.data.map { it.id }}")
         val walking = journey.transfers.single().walkingDuration
         assertNotNull(walking)
-        assertTrue(walking.seconds > 0, "walking transfer must carry walking time, got $walking")
+        assertTrue(walking.inWholeSeconds > 0, "walking transfer must carry walking time, got $walking")
     }
 
     @Test
     fun arriveByFiltersLateJourneys() {
         val req = RoutingFixtures.request().copy(
-            arriveBy = RoutingFixtures.serviceDate.atTime(8, 35, 0)
-                .toInstant(java.time.ZoneOffset.ofHours(-5)),
+            arriveBy = LocalDateTime(RoutingFixtures.serviceDate.year, RoutingFixtures.serviceDate.monthNumber, RoutingFixtures.serviceDate.dayOfMonth, 8, 35, 0)
+                .toInstant(RoutingFixtures.zone),
         )
         val result = kotlinx.coroutines.runBlocking { planner.plan(req) }
         assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(result)
         assertTrue(result.data.isNotEmpty())
-        assertTrue(result.data.all { !it.arrival.isAfter(req.arriveBy!!) })
+        assertTrue(result.data.all { it.arrival <= req.arriveBy!! })
     }
 
     @Test
     fun arriveByUnachievableReturnsPartialResult() {
         val req = RoutingFixtures.request().copy(
-            arriveBy = RoutingFixtures.serviceDate.atTime(7, 30, 0)
-                .toInstant(java.time.ZoneOffset.ofHours(-5)),
+            arriveBy = LocalDateTime(RoutingFixtures.serviceDate.year, RoutingFixtures.serviceDate.monthNumber, RoutingFixtures.serviceDate.dayOfMonth, 7, 30, 0)
+                .toInstant(RoutingFixtures.zone),
         )
         val result = kotlinx.coroutines.runBlocking { planner.plan(req) }
         assertIs<ProviderResult.PartialResult<List<com.intellitrip.domain.JourneyOption>>>(result)
@@ -304,8 +313,8 @@ class StaticNetworkPlannerTest {
             ),
         )
         val p = StaticNetworkPlanner(net, RoutingFixtures.zone)
-        val depart = RoutingFixtures.serviceDate.atTime(8, 7, 0)
-            .toInstant(java.time.ZoneOffset.ofHours(-5))
+        val depart = LocalDateTime(RoutingFixtures.serviceDate.year, RoutingFixtures.serviceDate.monthNumber, RoutingFixtures.serviceDate.dayOfMonth, 8, 7, 0)
+            .toInstant(RoutingFixtures.zone)
         val req = RoutingFixtures.request(departAt = depart)
         val result = kotlinx.coroutines.runBlocking { p.plan(req) }
         assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(result)
@@ -313,11 +322,11 @@ class StaticNetworkPlannerTest {
             j.legs.filterIsInstance<Leg.Transit>().any { it.tripKey == RoutingFixtures.tripC1.key }
         }
         val transit = journey.legs.filterIsInstance<Leg.Transit>().first { it.tripKey == RoutingFixtures.tripC1.key }
-        val dep = transit.departure.atZone(RoutingFixtures.zone)
+        val dep = transit.departure.toLocalDateTime(RoutingFixtures.zone)
         assertEquals(8, dep.hour)
         assertEquals(10, dep.minute)
         // Alighting must shift with the same run (28 min duration preserved).
-        assertEquals(38, transit.arrival.atZone(RoutingFixtures.zone).minute)
+        assertEquals(38, transit.arrival.toLocalDateTime(RoutingFixtures.zone).minute)
     }
 
     @Test
@@ -334,16 +343,16 @@ class StaticNetworkPlannerTest {
             calendars = listOf(
                 com.intellitrip.domain.Calendar(
                     serviceKey = weekdaySvc,
-                    daysOfWeek = setOf(java.time.DayOfWeek.MONDAY, java.time.DayOfWeek.TUESDAY, java.time.DayOfWeek.WEDNESDAY, java.time.DayOfWeek.THURSDAY, java.time.DayOfWeek.FRIDAY),
-                    startDate = RoutingFixtures.serviceDate.minusYears(1),
-                    endDate = RoutingFixtures.serviceDate.plusYears(1),
+                    daysOfWeek = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY),
+                    startDate = RoutingFixtures.serviceDate.minus(1, DateTimeUnit.YEAR),
+                    endDate = RoutingFixtures.serviceDate.plus(1, DateTimeUnit.YEAR),
                 ),
             ),
         )
         val plannerSat = StaticNetworkPlanner(net, RoutingFixtures.zone)
         // 2026-10-03 is a Saturday.
-        val saturday = java.time.LocalDate.of(2026, 10, 3)
-        val departSat = saturday.atTime(7, 0).atZone(RoutingFixtures.zone).toInstant()
+        val saturday = LocalDate(2026, 10, 3)
+        val departSat = LocalDateTime(saturday.year, saturday.monthNumber, saturday.dayOfMonth, 7, 0).toInstant(RoutingFixtures.zone)
         val result = kotlinx.coroutines.runBlocking {
             plannerSat.plan(RoutingFixtures.request(departAt = departSat))
         }
@@ -364,9 +373,9 @@ class StaticNetworkPlannerTest {
             calendars = listOf(
                 com.intellitrip.domain.Calendar(
                     serviceKey = weekdaySvc,
-                    daysOfWeek = setOf(java.time.DayOfWeek.MONDAY),
-                    startDate = RoutingFixtures.serviceDate.minusYears(1),
-                    endDate = RoutingFixtures.serviceDate.plusYears(1),
+                    daysOfWeek = setOf(DayOfWeek.MONDAY),
+                    startDate = RoutingFixtures.serviceDate.minus(1, DateTimeUnit.YEAR),
+                    endDate = RoutingFixtures.serviceDate.plus(1, DateTimeUnit.YEAR),
                 ),
             ),
             calendarDates = listOf(

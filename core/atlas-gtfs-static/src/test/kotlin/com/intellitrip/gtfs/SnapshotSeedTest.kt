@@ -3,7 +3,8 @@ package com.intellitrip.gtfs
 import com.intellitrip.domain.FeedId
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
@@ -33,7 +34,7 @@ class SnapshotSeedTest {
             sourceUrl = "https://svc.metrotransit.org/mtgtfs/gtfs.zip",
             acquirer = GtfsFeedAcquirer(transport = transport),
             store = store,
-            clock = { Instant.now() },
+            clock = { Clock.System.now() },
         )
         val outcome = runBlocking { refresher.refresh() }
         println("seed outcome: $outcome")

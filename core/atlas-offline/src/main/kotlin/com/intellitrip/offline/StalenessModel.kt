@@ -1,8 +1,12 @@
 package com.intellitrip.offline
 
 import com.intellitrip.domain.FeedId
-import java.time.Duration
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 
 /** How fresh a cached artifact is relative to policy. */
 enum class Freshness {
@@ -22,15 +26,15 @@ enum class Freshness {
 data class CacheEntry(
     val feedId: FeedId,
     val fetchedAt: Instant,
-    val validityStart: java.time.LocalDate? = null,
-    val validityEnd: java.time.LocalDate? = null,
+    val validityStart: LocalDate? = null,
+    val validityEnd: LocalDate? = null,
     val version: String? = null,
     val hash: String? = null,
 )
 
 data class FreshnessPolicy(
-    val freshWithin: Duration = Duration.ofHours(12),
-    val usableWithin: Duration = Duration.ofDays(7),
+    val freshWithin: Duration = 12.hours,
+    val usableWithin: Duration = 7.days,
 )
 
 /**
@@ -42,9 +46,9 @@ data class FreshnessPolicy(
  */
 class StalenessModel(private val policy: FreshnessPolicy = FreshnessPolicy()) {
 
-    fun classify(fetchedAt: Instant, now: Instant = Instant.now()): Freshness {
-        val age = Duration.between(fetchedAt, now)
-        if (age.isNegative) return Freshness.FRESH
+    fun classify(fetchedAt: Instant, now: Instant = Clock.System.now()): Freshness {
+        val age = now - fetchedAt
+        if (age.isNegative()) return Freshness.FRESH
         return when {
             age <= policy.freshWithin -> Freshness.FRESH
             age <= policy.usableWithin -> Freshness.STALE
@@ -52,20 +56,20 @@ class StalenessModel(private val policy: FreshnessPolicy = FreshnessPolicy()) {
         }
     }
 
-    fun classify(entry: CacheEntry?, now: Instant = Instant.now()): Freshness =
+    fun classify(entry: CacheEntry?, now: Instant = Clock.System.now()): Freshness =
         entry?.let { classify(it.fetchedAt, now) } ?: Freshness.ABSENT
 
     /** Realtime positions may only be presented as live while fresh. */
-    fun isPresentableAsLive(entry: CacheEntry?, now: Instant = Instant.now()): Boolean =
+    fun isPresentableAsLive(entry: CacheEntry?, now: Instant = Clock.System.now()): Boolean =
         classify(entry, now) == Freshness.FRESH
 
     /** Static network stays usable while it has not expired. */
-    fun isUsableStatic(entry: CacheEntry?, now: Instant = Instant.now()): Boolean =
+    fun isUsableStatic(entry: CacheEntry?, now: Instant = Clock.System.now()): Boolean =
         when (classify(entry, now)) {
             Freshness.FRESH, Freshness.STALE -> true
             else -> false
         }
 
-    fun age(fetchedAt: Instant, now: Instant = Instant.now()): Duration =
-        Duration.between(fetchedAt, now).let { if (it.isNegative) Duration.ZERO else it }
+    fun age(fetchedAt: Instant, now: Instant = Clock.System.now()): Duration =
+        (now - fetchedAt).let { if (it.isNegative()) Duration.ZERO else it }
 }

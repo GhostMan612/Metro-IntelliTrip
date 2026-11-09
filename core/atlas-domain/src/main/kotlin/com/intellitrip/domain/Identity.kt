@@ -1,12 +1,10 @@
 package com.intellitrip.domain
 
-@JvmInline
-value class AgencyId(val value: String) {
+data class AgencyId(val value: String) {
     init { require(value.isNotBlank()) { "AgencyId must not be blank" } }
 }
 
-@JvmInline
-value class FeedId(val value: String) {
+data class FeedId(val value: String) {
     init { require(value.isNotBlank()) { "FeedId must not be blank" } }
 }
 

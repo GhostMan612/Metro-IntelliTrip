@@ -23,7 +23,8 @@ import com.intellitrip.offline.OfflineRegistry
 import com.intellitrip.routing.TransferIntelligenceService
 import com.intellitrip.routing.TransferIntelligenceService.JourneyReport
 import com.intellitrip.scope.ScopeEngine
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 
 /**
  * Providers supplied by the host application. Every field is optional so a host
@@ -108,7 +109,7 @@ class AtlasEngine(
     fun offlineCapabilities(
         realtimeEntry: CacheEntry? = null,
         basemap: BasemapAvailability = BasemapAvailability.OnlineOnly,
-        now: Instant = Instant.now(),
+        now: Instant = Clock.System.now(),
     ) = offlineRegistry?.capabilities(feedId, realtimeEntry, basemap, now)
 
     private fun describe(result: ProviderResult<*>): String = when (result) {

@@ -16,7 +16,7 @@ From this repository:
 Artifacts land in `build/atlas-maven/`. Nothing is written to `~/.m2`, so an
 ordinary `build` can never publish by accident and the output is trivial to delete.
 
-Published coordinates — group `com.intellitrip.atlas`, version `0.1.0`:
+Published coordinates — group `com.intellitrip.atlas`, version `0.2.0`:
 
 | Artifact | What it gives you |
 | --- | --- |
@@ -69,14 +69,35 @@ In `C:\Recovery for All\android\app\build.gradle.kts`:
 dependencies {
     // The engine pulls the portable capabilities transitively. Depend on the
     // engine rather than individual modules so the wiring stays coherent.
-    implementation("com.intellitrip.atlas:atlas-engine:0.1.0")
+    implementation("com.intellitrip.atlas:atlas-engine:0.2.0")
 }
 ```
 
 Because every core module is pure Kotlin (ADR-004) and Recovery for All already
-sets `isCoreLibraryDesugaringEnabled = true`, `java.time` and the rest work without
+sets `isCoreLibraryDesugaringEnabled = true`, the JDK time surface works without
 extra configuration. Check `minSdk`: Atlas targets 26. If Recovery for All supports
 lower, raise it or the engine will not run on those devices.
+
+### Migrating from 0.1.0 (breaking, 2026-11-08)
+
+0.2.0 replaces `java.time` with `kotlinx.datetime` + `kotlin.time.Duration`
+throughout (the KMP seam, `docs/blueprints/KMP-01-migration.md` M2b):
+
+- `java.time.Instant` → `kotlinx.datetime.Instant` (`Instant.now()` →
+  `Clock.System.now()`, `Instant.EPOCH` → `Instant.DISTANT_PAST`)
+- `java.time.Duration` → `kotlin.time.Duration` (`Duration.ofSeconds(n)` →
+  `n.seconds`, `Duration.between(a,b)` → `b-a`, `.toMillis()` →
+  `.inWholeMilliseconds`)
+- `java.time.LocalDate` → `kotlinx.datetime.LocalDate` (`LocalDate.of(y,m,d)`
+  → `LocalDate(y,m,d)`, `plusDays` → `plus(n, DateTimeUnit.DAY)`)
+- `java.time.ZoneId` → `kotlinx.datetime.TimeZone` (`ZoneId.of` →
+  `TimeZone.of`, `systemDefault()` → `currentSystemDefault()`)
+- `AgencyId`/`FeedId` are now `data class` (were `@JvmInline value class`);
+  construction and `.value` are unchanged.
+- `atlas-domain` exports `kotlinx-datetime:0.6.2` +
+  `kotlinx-serialization-core:1.8.0` as `api`, so engine-only consumers get
+  them transitively. `kotlinx.datetime` needs no core-library desugaring
+  (it is pure Kotlin), though keeping desugaring enabled is harmless.
 
 ## 4. Call it from Flutter
 
@@ -98,7 +119,7 @@ capability at a time. It does not need to take the whole engine to start.
   Recovery for All finds itself importing `atlas-routing` directly rather than going
   through `AtlasEngine`, that is a signal the engine boundary needs widening — not a
   reason to depend on the module.
-- **Version in lockstep.** There is one version for the whole SDK (`0.1.0`), not per
+- **Version in lockstep.** There is one version for the whole SDK (`0.2.0`), not per
   module. Bump it in `build.gradle.kts` and republish.
 - **No secrets in this repository.** No API keys, no hosts. Configuration is the
   consumer's, at their end.

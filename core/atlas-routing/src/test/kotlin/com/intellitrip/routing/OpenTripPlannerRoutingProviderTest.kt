@@ -5,6 +5,7 @@ import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.JourneyOption
 import com.intellitrip.domain.Leg
 import com.intellitrip.domain.TripPlanRequest
+import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -102,8 +103,8 @@ class OpenTripPlannerRoutingProviderTest {
     @Test
     fun mapsEpochMillisToInstants() {
         val journey = successJourneys().single()
-        assertEquals(1797090000000L, journey.departure.toEpochMilli())
-        assertEquals(1797091800000L, journey.arrival.toEpochMilli())
+        assertEquals(1797090000000L, journey.departure.toEpochMilliseconds())
+        assertEquals(1797091800000L, journey.arrival.toEpochMilliseconds())
     }
 
     /** Narrows the sealed result so the test asserts on real data, not on types. */
@@ -124,7 +125,7 @@ class OpenTripPlannerRoutingProviderTest {
             transport = { "" },
         )
         val url = provider.planUrl(
-            otpRequest.copy(departAt = java.time.Instant.parse("2026-11-12T14:30:00Z")),
+            otpRequest.copy(departAt = Instant.parse("2026-11-12T14:30:00Z")),
         )
         // 14:30 UTC is 08:30 in America/Chicago (CST, UTC-6).
         assertTrue(url.contains("date=20261112"), url)
@@ -149,7 +150,7 @@ class OpenTripPlannerRoutingProviderTest {
         """.trimIndent()
         val journey = successJourneys(body).single()
         assertEquals(1, journey.transferCount)
-        assertEquals(300L, journey.transfers.single().scheduledBuffer.seconds)
+        assertEquals(300L, journey.transfers.single().scheduledBuffer.inWholeSeconds)
     }
 
     @Test
@@ -160,7 +161,7 @@ class OpenTripPlannerRoutingProviderTest {
             transport = { "" },
         )
         val url = provider.planUrl(
-            otpRequest.copy(departAt = java.time.Instant.parse("2026-11-12T14:30:00Z")),
+            otpRequest.copy(departAt = Instant.parse("2026-11-12T14:30:00Z")),
         )
         assertTrue(url.startsWith("https://otp.example.org/otp/routers/default/plan?"), url)
         assertTrue(url.contains("date="), url)

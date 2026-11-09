@@ -44,8 +44,7 @@ import com.intellitrip.map.MapSelection
 import com.intellitrip.ui.theme.Radii
 import com.intellitrip.ui.theme.Space
 import com.intellitrip.ui.theme.status
-import java.time.Duration
-import java.time.Instant
+import kotlinx.datetime.Instant
 
 /**
  * Detail for whatever the rider tapped on the map.
@@ -282,7 +281,7 @@ private fun VehicleDetailBody(
     }
 
     val updatedAt = vehicle?.updatedAt ?: fallback.updatedAt
-    val ageSeconds = Duration.between(updatedAt, now).seconds.coerceAtLeast(0)
+    val ageSeconds = (now - updatedAt).inWholeSeconds.coerceAtLeast(0)
     val (label, color) = when {
         ageSeconds > 300 -> "Last reported ${describeAge(ageSeconds)}" to MaterialTheme.status.warning
         ageSeconds > 120 -> "Updated ${describeAge(ageSeconds)}" to MaterialTheme.status.warning
@@ -318,7 +317,7 @@ private fun describeAge(seconds: Long): String = when {
  */
 private fun describeLeg(leg: com.intellitrip.domain.Leg): String = when (leg) {
     is com.intellitrip.domain.Leg.WalkLeg ->
-        "Walk ${leg.duration.toMinutes()} min (${leg.meters.toInt()} m)"
+        "Walk ${leg.duration.inWholeMinutes} min (${leg.meters.toInt()} m)"
 
     is com.intellitrip.domain.Leg.Transit -> {
         val route = leg.routeKey.routeId
@@ -342,7 +341,7 @@ private fun describeLeg(leg: com.intellitrip.domain.Leg): String = when (leg) {
 @Composable
 private fun JourneyDetailBody(journey: JourneyOption?, onShowOnMap: () -> Unit) {
     Text(
-        text = journey?.let { "${it.duration.toMinutes()} min trip" } ?: "Trip",
+        text = journey?.let { "${it.duration.inWholeMinutes} min trip" } ?: "Trip",
         style = MaterialTheme.typography.headlineMedium,
     )
     if (journey == null) {

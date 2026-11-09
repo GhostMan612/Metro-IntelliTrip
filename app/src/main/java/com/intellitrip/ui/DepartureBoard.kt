@@ -5,10 +5,14 @@ import com.intellitrip.domain.GtfsServiceTime
 import com.intellitrip.domain.Route
 import com.intellitrip.domain.Stop
 import com.intellitrip.domain.Trip
-import java.time.Duration
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
 import kotlin.math.abs
 
 /**
@@ -94,7 +98,7 @@ object DepartureBoard {
         perStop: Int = 3,
         // GTFS times are agency-local. Default to the feed's zone; callers with
         // a feed should pass the agency timezone explicitly.
-        zone: ZoneId = ZoneId.of("America/Chicago"),
+        zone: TimeZone = TimeZone.of("America/Chicago"),
         headwayMinutesByTrip: Map<String, Int> = emptyMap(),
     ): List<Departure> {
         val nearby = origin?.let { point ->
@@ -106,7 +110,7 @@ object DepartureBoard {
         return nearby.flatMap { stop ->
             departuresFor(stop).asSequence()
                 // Only what a rider could still board.
-                .filter { it.departure.isAfter(now.minusSeconds(60)) }
+                .filter { it.departure > now - 60.seconds }
                 .take(perStop)
                 .map { scheduled ->
                     val trip = tripsByKey[scheduled.tripId]
@@ -131,7 +135,7 @@ object DepartureBoard {
                         // supplies only a live-trip set, not vehicle reports, so the
                         // honest value is null until reportedTime is plumbed through.
                         vehicleUpdatedAt = scheduled.reportedTime,
-                        minutesUntil = (Duration.between(now, when_).seconds / 60).toInt(),
+                        minutesUntil = ((when_ - now).inWholeSeconds / 60).toInt(),
                         headwayMinutes = headwayMinutesByTrip[scheduled.tripId],
                         distanceMeters = dist,
                         walkMinutes = dist?.let { (it / 1.35 / 60).toInt().coerceAtLeast(1) },
@@ -160,10 +164,10 @@ object DepartureBoard {
     fun resolveServiceTime(
         serviceTime: GtfsServiceTime,
         now: Instant,
-        zone: ZoneId = ZoneId.of("America/Chicago"),
+        zone: TimeZone = TimeZone.of("America/Chicago"),
     ): Instant {
         val seconds = serviceTime.secondsSinceServiceDayStart
-        val today = LocalDate.ofInstant(now, zone)
+        val today = now.toLocalDateTime(zone).date
         // Service days can start on the previous date, so yesterday's service day is a
         // real candidate. Only future occurrences are considered, and the earliest of
         // those wins.
@@ -172,12 +176,12 @@ object DepartureBoard {
         // resolved 25:30 at 07:00 to 01:30 the same morning: five and a half hours in
         // the past, and eight and a half hours away from the occurrence the rider can
         // actually board. Distance is the wrong tiebreak when one side is unusable.
-        return (-1L..1L)
-            .map { offset -> today.plusDays(offset) }
-            .map { date -> date.atStartOfDay(zone).plusSeconds(seconds.toLong()).toInstant() }
-            .filter { it.isAfter(now) }
-            .minByOrNull { Duration.between(now, it).seconds }
-            ?: today.atStartOfDay(zone).plusSeconds(seconds.toLong()).toInstant()
+        return (-1..1)
+            .map { offset -> today.plus(offset, DateTimeUnit.DAY) }
+            .map { date -> date.atStartOfDayIn(zone) + seconds.toLong().seconds }
+            .filter { it > now }
+            .minByOrNull { (it - now).inWholeSeconds }
+            ?: today.atStartOfDayIn(zone) + seconds.toLong().seconds
     }
 
     /**

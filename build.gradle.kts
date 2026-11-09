@@ -15,7 +15,7 @@
 // Publishing is opt-in via `publishAtlasToLocalRepo`, never part of `build`, so an
 // ordinary clone cannot publish anything by accident.
 
-val atlasVersion = "0.1.0"
+val atlasVersion = "0.2.0"
 
 // `plugins {}` in the root applies the AGP/Kotlin plugins with `apply false`. Reading
 // that block eagerly is what makes them resolvable in subprojects; without it a
@@ -40,6 +40,9 @@ allprojects {
     //                        module and non-authoritative; publishing it would put
     //                        superseded code on a resolvable coordinate.
     val moduleName = name
+    // atlas-domain was briefly KMP in the M2b attempt; it is JVM-only again
+    // (kotlinx types, JVM build) because KMP publishing needs a Kotlin 2.1+
+    // upgrade (M3). The `atlas-web-spike` (wasmJs) is the web proof meanwhile.
     val excluded = setOf("atlas-map-android", "atlas-transit", "atlas-web-spike")
     if (moduleName.startsWith("atlas-") && moduleName !in excluded) {
         apply(plugin = "maven-publish")

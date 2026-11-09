@@ -9,14 +9,15 @@ import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.LatLngBounds
 import com.intellitrip.domain.RenderScope
 import com.intellitrip.domain.ZoomBucket
-import java.time.Duration
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Tunable scope behavior. Phase 03 already consumes the scope primitives; this
  * policy supplies the continuous values the resolver derives from a [Focus].
  */
 data class ScopePolicy(
-    val defaultMaxAge: Duration = Duration.ofSeconds(45),
+    val defaultMaxAge: Duration = 45.seconds,
     val followZoom: Double = 15.0,
     val routeZoom: Double = 13.0,
     val regionZoom: Double = 11.0,
@@ -77,7 +78,7 @@ class DefaultScopeResolver(private val policy: ScopePolicy = ScopePolicy()) : Sc
 
             is Focus.Vehicle -> resolution(
                 camera = CameraScope(policy.systemBounds, policy.followZoom),
-                data = dataScope(vehicles = setOf(focus.key), maxAge = Duration.ofSeconds(20)),
+                data = dataScope(vehicles = setOf(focus.key), maxAge = 20.seconds),
                 render = render,
             )
 

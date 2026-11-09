@@ -1,6 +1,8 @@
 package com.intellitrip.domain
 
-import java.time.LocalDate
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
 
 data class Route(
     val key: RouteKey,
@@ -52,7 +54,7 @@ data class StopTime(
 
 data class Calendar(
     val serviceKey: ServiceKey,
-    val daysOfWeek: Set<java.time.DayOfWeek>,
+    val daysOfWeek: Set<DayOfWeek>,
     val startDate: LocalDate,
     val endDate: LocalDate,
 )
@@ -94,7 +96,7 @@ data class FeedMetadata(
     val lang: String?,
     val version: String?,
     val hash: String?,
-    val fetchedAt: java.time.Instant,
+    val fetchedAt: Instant,
     val validFrom: LocalDate?,
     val validTo: LocalDate?,
     val sourceUrl: String?,

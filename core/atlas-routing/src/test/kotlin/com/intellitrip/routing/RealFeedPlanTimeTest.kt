@@ -11,7 +11,12 @@ import com.intellitrip.gtfs.StopTimeIndexReader
 import com.intellitrip.gtfs.StopTimeIndexWriter
 import com.intellitrip.gtfs.StopTimeSink
 import java.nio.file.Files
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -39,7 +44,7 @@ class RealFeedPlanTimeTest {
         val feedId = FeedId("metro-transit-regional")
         val payload = file.readBytes()
         val files = GtfsArchive.read(payload).toMutableMap()
-        val metadata = FeedMetadata(feedId, null, null, null, null, null, Instant.now(), null, null, null)
+        val metadata = FeedMetadata(feedId, null, null, null, null, null, Clock.System.now(), null, null, null)
         return GtfsStaticParser.parse(feedId, files, metadata, stopTimeSink)
     }
 
@@ -101,10 +106,10 @@ class RealFeedPlanTimeTest {
             // and AppState.destination), so this fails if the app itself stops planning.
             // Midday rather than "now": late at night there is no service left in the
             // window, which would make the test pass or fail by time of day.
-            val zone = java.time.ZoneId.of("America/Chicago")
-            val midday = java.time.ZonedDateTime
-                .of(java.time.LocalDate.now(zone), java.time.LocalTime.of(12, 0), zone)
-                .toInstant()
+            val zone = TimeZone.of("America/Chicago")
+            val today = Clock.System.now().toLocalDateTime(zone).date
+            val midday = LocalDateTime(today.year, today.monthNumber, today.dayOfMonth, 12, 0)
+                .toInstant(zone)
             // The app's own default pair, so this covers what the user actually sees.
             val request = TripPlanRequest(
                 origin = GeoPoint(44.9765, -93.2650),
@@ -121,7 +126,7 @@ class RealFeedPlanTimeTest {
                     as? com.intellitrip.contracts.ProviderResult.Success)?.data?.size ?: 0
 
             val middayJourneys = planJourneys(midday)
-            val nowJourneys = planJourneys(Instant.now())
+            val nowJourneys = planJourneys(Clock.System.now())
             println("midday=$middayJourneys journeys, now=$nowJourneys")
             // At 23:00 "no journeys" is the correct answer, so only the midday figure is
             // load-bearing. Asserting on "now" would make this test clock-dependent.

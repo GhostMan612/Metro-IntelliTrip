@@ -1,6 +1,7 @@
 package com.intellitrip.map
 
 import com.intellitrip.domain.GeoPoint
+import kotlinx.datetime.Instant
 
 /**
  * A feature under a tap on the map.
@@ -39,7 +40,7 @@ sealed interface MapFeature {
         val routeShortName: String?,
         val headsign: String?,
         val position: GeoPoint,
-        val updatedAt: java.time.Instant,
+        val updatedAt: Instant,
     ) : MapFeature {
         override val id: String get() = "vehicle:$vehicleId"
     }
@@ -182,7 +183,7 @@ object MapSelectionResolver {
         is MapFeature.VehicleCluster -> MapFeatureKind.CLUSTER
     }
 
-    private fun parseTimestamp(value: Any?): java.time.Instant =
-        runCatching { java.time.Instant.parse(value?.toString()) }
-            .getOrElse { java.time.Instant.EPOCH }
+    private fun parseTimestamp(value: Any?): Instant =
+        value?.let { runCatching { Instant.parse(it.toString()) }.getOrNull() }
+            ?: Instant.DISTANT_PAST
 }

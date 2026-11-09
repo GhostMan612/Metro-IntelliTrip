@@ -9,12 +9,17 @@ import com.intellitrip.domain.TransferConfidence
 import com.intellitrip.domain.TransferConnection
 import com.intellitrip.domain.TransferType
 import com.intellitrip.domain.TripUpdate
-import java.time.Instant
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.toInstant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 class TransferConfidenceScorerTest {
 
@@ -22,19 +27,19 @@ class TransferConfidenceScorerTest {
     private val now = Instant.parse("2026-10-05T13:00:00Z")
 
     private fun connection(
-        buffer: java.time.Duration,
-        predicted: java.time.Duration? = null,
+        buffer: Duration,
+        predicted: Duration? = null,
         departingStatus: RealtimeStatus = RealtimeStatus.ON_TIME,
     ): TransferConnection {
         val arriving = transitLeg("T1", Depart = 0)
-        val departing = transitLeg("T2", Depart = buffer.seconds, status = departingStatus)
+        val departing = transitLeg("T2", Depart = buffer.inWholeSeconds, status = departingStatus)
         return TransferConnection(
             arrivingLeg = arriving,
             departingLeg = departing,
             transferStop = RoutingFixtures.stops[1].key,
             scheduledBuffer = buffer,
             predictedBuffer = predicted,
-            walkingDuration = java.time.Duration.ZERO,
+            walkingDuration = Duration.ZERO,
             confidence = TransferConfidence.SCHEDULED_UNKNOWN,
             rationale = null,
         )
@@ -45,7 +50,7 @@ class TransferConfidenceScorerTest {
         Depart: Long,
         status: RealtimeStatus = RealtimeStatus.ON_TIME,
     ): Leg.Transit {
-        val departure = RoutingFixtures.serviceDate.atTime(8, 0).toInstant(java.time.ZoneOffset.ofHours(-5)).plusSeconds(Depart)
+        val departure = LocalDateTime(RoutingFixtures.serviceDate.year, RoutingFixtures.serviceDate.monthNumber, RoutingFixtures.serviceDate.dayOfMonth, 8, 0).toInstant(RoutingFixtures.zone) + Depart.seconds
         return Leg.Transit(
             agencyId = RoutingFixtures.agency.id,
             routeKey = RoutingFixtures.routeA.key,
@@ -54,13 +59,13 @@ class TransferConfidenceScorerTest {
             fromStopKey = RoutingFixtures.stops[1].key,
             toStopKey = RoutingFixtures.stops[2].key,
             departure = departure,
-            arrival = departure.plusSeconds(300),
+            arrival = departure + 300.seconds,
             vehicleKey = null,
             realtimeStatus = status,
             delaySeconds = 0,
             scheduledDeparture = departure,
-            scheduledArrival = departure.plusSeconds(300),
-            duration = java.time.Duration.ofSeconds(300),
+            scheduledArrival = departure + 300.seconds,
+            duration = 300.seconds,
         ).let { leg -> leg.copy(tripKey = com.intellitrip.domain.TripKey(leg.tripKey.feedId, tripId)) }
     }
 
@@ -79,7 +84,7 @@ class TransferConfidenceScorerTest {
     @Test
     fun withoutRealtimeInformationConfidenceIsUnknown() {
         val scored = scorer.score(
-            TransferConfidenceScorer.Inputs(connection(java.time.Duration.ofMinutes(6)), now = now)
+            TransferConfidenceScorer.Inputs(connection(6.minutes), now = now)
         )
         assertEquals(TransferConfidence.SCHEDULED_UNKNOWN, scored.confidence)
         assertNotNull(scored.rationale)
@@ -89,9 +94,9 @@ class TransferConfidenceScorerTest {
     fun staleRealtimeInformationDoesNotClaimCertainty() {
         val scored = scorer.score(
             TransferConfidenceScorer.Inputs(
-                connection = connection(java.time.Duration.ofMinutes(6)),
-                arrivingUpdate = update("T1", now.minusSeconds(3_600)),
-                departingUpdate = update("T2", now.minusSeconds(3_600)),
+                connection = connection(6.minutes),
+                arrivingUpdate = update("T1", now - 3_600.seconds),
+                departingUpdate = update("T2", now - 3_600.seconds),
                 now = now,
             )
         )
@@ -103,7 +108,7 @@ class TransferConfidenceScorerTest {
     fun generousBufferIsHighConfidence() {
         val scored = scorer.score(
             TransferConfidenceScorer.Inputs(
-                connection = connection(java.time.Duration.ofMinutes(8)),
+                connection = connection(8.minutes),
                 arrivingUpdate = update("T1"),
                 departingUpdate = update("T2"),
                 now = now,
@@ -116,7 +121,7 @@ class TransferConfidenceScorerTest {
     fun tightBufferIsMediumConfidence() {
         val scored = scorer.score(
             TransferConfidenceScorer.Inputs(
-                connection = connection(java.time.Duration.ofMinutes(3)),
+                connection = connection(3.minutes),
                 arrivingUpdate = update("T1"),
                 departingUpdate = update("T2"),
                 now = now,
@@ -129,7 +134,7 @@ class TransferConfidenceScorerTest {
     fun bufferBelowMinimumTransferTimeIsLowConfidence() {
         val scored = scorer.score(
             TransferConfidenceScorer.Inputs(
-                connection = connection(java.time.Duration.ofMinutes(3)),
+                connection = connection(3.minutes),
                 arrivingUpdate = update("T1"),
                 departingUpdate = update("T2"),
                 transfer = Transfer(
@@ -150,8 +155,8 @@ class TransferConfidenceScorerTest {
         val scored = scorer.score(
             TransferConfidenceScorer.Inputs(
                 connection = connection(
-                    buffer = java.time.Duration.ofMinutes(6),
-                    predicted = java.time.Duration.ofSeconds(-30),
+                    buffer = 6.minutes,
+                    predicted = (-30).seconds,
                 ),
                 arrivingUpdate = update("T1"),
                 departingUpdate = update("T2"),
@@ -165,7 +170,7 @@ class TransferConfidenceScorerTest {
     fun canceledDepartureIsLowConfidence() {
         val scored = scorer.score(
             TransferConfidenceScorer.Inputs(
-                connection = connection(java.time.Duration.ofMinutes(6), departingStatus = RealtimeStatus.CANCELED),
+                connection = connection(6.minutes, departingStatus = RealtimeStatus.CANCELED),
                 arrivingUpdate = update("T1"),
                 departingUpdate = update("T2"),
                 now = now,
@@ -178,9 +183,9 @@ class TransferConfidenceScorerTest {
     @Test
     fun everyOutcomeCarriesRationale() {
         val results = listOf(
-            TransferConfidenceScorer.Inputs(connection(java.time.Duration.ofMinutes(6))),
+            TransferConfidenceScorer.Inputs(connection(6.minutes)),
             TransferConfidenceScorer.Inputs(
-                connection = connection(java.time.Duration.ofMinutes(8)),
+                connection = connection(8.minutes),
                 arrivingUpdate = update("T1"),
                 departingUpdate = update("T2"),
             ),

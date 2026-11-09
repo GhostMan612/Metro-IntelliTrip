@@ -1,7 +1,5 @@
 package com.intellitrip.domain
 
-import java.util.Locale
-
 /**
  * GTFS schedule time expressed as a nonnegative offset in seconds from the
  * start of the transit service day. GTFS permits hours above 24, so values
@@ -19,7 +17,10 @@ data class GtfsServiceTime(val secondsSinceServiceDayStart: Int) {
     val minutes: Int get() = (secondsSinceServiceDayStart % 3600) / 60
     val seconds: Int get() = secondsSinceServiceDayStart % 60
 
-    fun format(): String = String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, seconds)
+    fun format(): String {
+        fun pad(n: Int) = n.toString().padStart(2, '0')
+        return "$hours:${pad(minutes)}:${pad(seconds)}"
+    }
 
     override fun toString(): String = format()
 

@@ -9,10 +9,9 @@ import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.LatLngBounds
 import com.intellitrip.domain.WeatherAlert
 import java.io.IOException
-import java.time.Duration
-import java.time.Instant
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
+import kotlinx.datetime.Instant
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -43,7 +42,7 @@ class NwsWeatherAlertProvider(
     private val http: WeatherHttpClient,
     private val context: WeatherRequestContext,
     private val apiBase: String = "https://api.weather.gov",
-    private val pollInterval: Duration = Duration.ofMinutes(5),
+    private val pollInterval: Duration = 5.minutes,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     override val providerId: String = "nws",
 ) : WeatherAlertProvider {
@@ -61,7 +60,7 @@ class NwsWeatherAlertProvider(
         while (currentCoroutineContext().isActive) {
             val result = withContext(ioDispatcher) { fetchAlerts(bounds, userAgent) }
             emit(result)
-            delay(pollInterval.toMillis())
+            delay(pollInterval.inWholeMilliseconds)
         }
     }
 
@@ -184,7 +183,7 @@ class NwsWeatherAlertProvider(
 
         internal fun parseUpdated(payload: String): Instant? =
             Json.parse(payload).asObject()["updated"].asStringOrNull()?.let { raw ->
-                runCatching { ZonedDateTime.parse(raw, DATE_FORMAT).toInstant() }.getOrNull()
+                runCatching { Instant.parse(raw) }.getOrNull()
             }
 
         internal fun parseAlerts(payload: String): List<WeatherAlert> {
@@ -264,7 +263,7 @@ class NwsWeatherAlertProvider(
         }
 
         private fun parseInstant(value: String?): Instant? = value?.let {
-            runCatching { ZonedDateTime.parse(it, DATE_FORMAT).toInstant() }.getOrNull()
+            runCatching { Instant.parse(it) }.getOrNull()
         }
 
         private fun severity(value: String?): AlertSeverity = when (value?.uppercase()) {
@@ -282,6 +281,5 @@ class NwsWeatherAlertProvider(
         }
 
         private const val apiBase = "https://api.weather.gov"
-        private val DATE_FORMAT: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
     }
 }

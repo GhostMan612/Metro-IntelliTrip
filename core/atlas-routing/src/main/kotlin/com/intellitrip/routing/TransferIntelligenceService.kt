@@ -4,7 +4,8 @@ import com.intellitrip.domain.JourneyOption
 import com.intellitrip.domain.Transfer
 import com.intellitrip.domain.TransferConnection
 import com.intellitrip.domain.TripUpdate
-import java.time.Instant
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 
 /**
  * Applies transfer intelligence to journeys.
@@ -27,14 +28,14 @@ class TransferIntelligenceService(
         journeys: List<JourneyOption>,
         updates: List<TripUpdate>,
         transfers: List<Transfer> = emptyList(),
-        now: Instant = Instant.now(),
+        now: Instant = Clock.System.now(),
     ): List<JourneyReport> = journeys.map { journey -> evaluate(journey, updates, transfers, now) }
 
     fun evaluate(
         journey: JourneyOption,
         updates: List<TripUpdate>,
         transfers: List<Transfer> = emptyList(),
-        now: Instant = Instant.now(),
+        now: Instant = Clock.System.now(),
     ): JourneyReport {
         val scoredConnections = journey.transfers.map { connection ->
             scorer.score(

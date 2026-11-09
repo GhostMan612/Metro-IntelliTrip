@@ -2,10 +2,10 @@ package com.intellitrip.map
 
 import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.ZoomBucket
-import java.time.Duration
-import java.time.Instant
+import kotlinx.datetime.Instant
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Provider-neutral rendering policy.
@@ -68,7 +68,7 @@ class TransitRenderPipeline(
             .takeIf { bucket == ZoomBucket.INDIVIDUAL }
             ?: visibleVehicles.map { it to false }
 
-        val staleAfter = input.snapshotAt.minusSeconds(staleThresholdSeconds)
+        val staleAfter = input.snapshotAt - staleThresholdSeconds.seconds
         val vehicles = if (bucket == ZoomBucket.CLUSTER) emptyList() else interpolated
             .take(maxRenderedVehicles)
             .map { (vehicle, moved) ->
@@ -119,11 +119,11 @@ class TransitRenderPipeline(
         val previousById = previous.associateBy { it.key }
         return current.map { vehicle ->
             val prior = previousById[vehicle.key]
-            val delta = if (prior == null) 0 else Duration.between(prior.updatedAt, vehicle.updatedAt).seconds
+            val delta = if (prior == null) 0 else (vehicle.updatedAt - prior.updatedAt).inWholeSeconds
             if (prior == null || delta <= 0 || delta > maxDeltaSeconds) {
                 vehicle to false
             } else {
-                val fraction = (Duration.between(vehicle.updatedAt, now).seconds.toDouble() / delta)
+                val fraction = ((now - vehicle.updatedAt).inWholeSeconds.toDouble() / delta)
                     .coerceIn(0.0, 1.0)
                 vehicle.copy(
                     position = GeoPoint(
