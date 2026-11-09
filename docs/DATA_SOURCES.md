@@ -16,7 +16,7 @@
 
 ## Routing
 - OpenTripPlanner: https://www.opentripplanner.org/ · https://github.com/opentripplanner/OpenTripPlanner
-- Topology unresolved: Android app → `RoutingProvider` → self-hosted OTP service / trusted public service / local offline engine / hybrid. Affects privacy, sovereignty, network dependency, hosting cost, offline, latency, reliability. Research gate before routing implementation (ADR-007). Routing remains core.
+- Topology decided (ADR-007, `docs/OTP_DEPLOYMENT.md`): hybrid — local `StaticNetworkPlanner` answers first, OTP adapter covers the rest. Remote mode stays local-only by default (privacy/sovereignty/cost unchanged); live OTP verification is a carried item.
 
 ## Static GTFS refresh
 - Daily lightweight conditional check with `If-Modified-Since` / `Last-Modified`.

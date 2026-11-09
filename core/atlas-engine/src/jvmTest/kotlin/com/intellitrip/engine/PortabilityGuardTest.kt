@@ -69,6 +69,33 @@ class PortabilityGuardTest {
     }
 
     @Test
+    fun moduleDependenciesAreAcyclic() {
+        // Production + test project edges across the core modules must not
+        // form a cycle (e.g. routing -> offline). Parse from build files so
+        // the check stays independent of Gradle resolution.
+        val root = repositoryRoot()
+        val graph = portableModules.associateWith { module ->
+            val text = File(root, "$module/build.gradle.kts").readText()
+            Regex("""project\(":core:([a-z0-9-]*)"\)""")
+                .findAll(text)
+                .map { "core/atlas-" + it.groupValues[1] }
+                .filter { it in portableModules }
+                .toList()
+        }
+        val visiting = mutableSetOf<String>()
+        val visited = mutableSetOf<String>()
+        fun visit(node: String): Unit {
+            if (node in visited) return
+            check(node !in visiting) { "module dependency cycle at $node" }
+            visiting += node
+            graph[node].orEmpty().forEach { visit(it) }
+            visiting -= node
+            visited += node
+        }
+        portableModules.forEach { visit(it) }
+    }
+
+    @Test
     fun reusableModulesDoNotDeclareAndroidPlugins() {
         val root = repositoryRoot()
         val offenders = portableModules.filter { module ->

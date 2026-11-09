@@ -21,10 +21,11 @@ import com.intellitrip.routing.TransferIntelligenceService
 import com.intellitrip.routing.TransferIntelligenceService.JourneyReport
 import com.intellitrip.scope.ScopeEngine
 // NOTE: the engine deliberately does NOT depend on `atlas-offline`
-// (JVM-only until its Files seam lands). Offline capability is a portable
-// Boolean; detail (staleness, basemap) is queried from the host's
-// `OfflineRegistry` directly — see OfflineRegistry.capabilities() and
-// app `IntelliTripViewModel.offlineCapabilities()`. M3a KMP split.
+// (facade boundary, not platform: the offline module is KMP since M3c).
+// Offline capability is a portable Boolean; detail (staleness, basemap) is
+// queried from the host's `OfflineRegistry` directly — see
+// OfflineRegistry.capabilities() and app
+// `IntelliTripViewModel.offlineCapabilities()`.
 
 /**
  * Providers supplied by the host application. Every field is optional so a host
@@ -57,9 +58,9 @@ data class AtlasCapabilities(
  * server-side component, a browser app or another product (Sovereign Atlas,
  * Recovery for All) can host it. All platform concerns live in the host.
  *
- * Offline detail is NOT queried here (the registry is JVM-only until its
- * Files seam lands); [AtlasEngine.offlineAvailable] reports only whether the
- * host has offline data, and the host queries its own registry for details.
+ * Offline detail is NOT queried here; [AtlasEngine.offlineAvailable] reports
+ * only whether the host has offline data, and the host queries its own
+ * registry for details.
  */
 class AtlasEngine(
     val feedId: FeedId,

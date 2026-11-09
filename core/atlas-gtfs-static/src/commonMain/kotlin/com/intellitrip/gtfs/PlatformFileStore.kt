@@ -12,6 +12,13 @@ package com.intellitrip.gtfs
  *
  * Methods throw on I/O failure as platform exceptions; common callers
  * catch broadly (see [StaticFeedSnapshotStore]).
+ *
+ * A second file seam (`OfflineFileStore` in atlas-offline) exists on purpose:
+ * it adds path-containment/security for untrusted basemap packages, which
+ * snapshots don't need. Merging the two would widen both APIs; both are
+ * documented instead. Freshness semantics: `StalenessModel` classifies
+ * cached artifacts while `FreshnessMetadata` classifies provider results —
+ * related, not identical, so this seam stays bytes-only.
  */
 expect class PlatformFileStore(rootPath: String) {
     val rootPath: String

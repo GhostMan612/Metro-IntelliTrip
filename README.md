@@ -27,7 +27,7 @@ offline basemap packages, and Play publishing.
 - `core/atlas-gtfs-static/`, `atlas-gtfs-realtime/` — GTFS static (streaming CSV, disk stop-time index) and GTFS-RT adapters.
 - `core/atlas-routing/`, `atlas-scope/`, `atlas-map/`, `atlas-weather/`, `atlas-offline/` — planner, scope, render pipeline, weather, offline staleness.
 - `core/atlas-engine/` — `AtlasEngine` SDK facade. `sample/host/` proves JVM hosting.
-- `core/atlas-transit/` — quarantined legacy prototype (ADR-014), not published, not authoritative.
+- `core/atlas-transit/` — retired prototype (ADR-014), not published; delete when convenient.
 - `core/atlas-map-android/` — MapLibre renderer adapter (bulk GeoJSON only).
 
 Publish the SDK to `build/atlas-maven` (`com.intellitrip.atlas:0.2.0`) with

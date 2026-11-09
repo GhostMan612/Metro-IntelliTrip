@@ -56,7 +56,7 @@ gradlew.bat :sample:host:run
 - `core/atlas-engine/` public SDK facade + composition root (`AtlasEngine`)
 - `sample/host/` plain JVM host proving the engine runs without Android
 - `core/atlas-weather/` pure Kotlin weather adapters (radar, NWS alerts, layer composer)
-- `core/atlas-transit/` protected prototype adapter; not authoritative until migrated
+- `core/atlas-transit/` retired prototype (ADR-014); delete when convenient
 
 ## Optional setup
 `HUMAN_ACTIONS.md` covers signups, costs and optional configuration. Nothing there

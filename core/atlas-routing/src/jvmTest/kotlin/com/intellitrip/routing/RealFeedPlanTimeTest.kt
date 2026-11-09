@@ -55,20 +55,16 @@ class RealFeedPlanTimeTest {
             return
         }
 
-        val dir = Files.createTempDirectory("atlas-plan")
-        val data = dir.resolve("stop-times.dat")
-        val index = dir.resolve("stop-times.idx")
-
-        StopTimeIndexWriter(Files.newOutputStream(data)).use { w ->
-            val feed = parseFeed(file, StopTimeSink { w.write(it) })
-            w.finish(index)
-            // The feed parsed through the sink carries no in-memory stop times, which
-            // is exactly the app's situation.
-            check(feed.stopTimes.isEmpty()) { "sink path should not retain stop times in memory" }
-        }
+        // Bytes-based index API (KMP): writer finishes to a pair of byte
+        // images; the reader parses from bytes without a platform channel.
+        val writer = StopTimeIndexWriter()
+        val feedThroughSink = parseFeed(file, StopTimeSink { writer.write(it) })
+        check(feedThroughSink.stopTimes.isEmpty()) { "sink path should not retain stop times in memory" }
+        val (dataBytes, indexBytes) = writer.finish()
 
         val feed = parseFeed(file, StopTimeSink { })
-        StopTimeIndexReader(index, data).use { reader ->
+        run {
+            val reader = StopTimeIndexReader(indexBytes, dataBytes)
             assertTrue(reader.tripCount() > 1_000, "index holds ${reader.tripCount()} trips")
             assertTrue(reader.rowCount() > 10_000, "index holds ${reader.rowCount()} rows")
 

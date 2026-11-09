@@ -6,9 +6,9 @@ import com.intellitrip.domain.TripPlanRequest
 /**
  * Provider-neutral routing contract.
  *
- * Topology is RESEARCH-GATED (ADR-007): the provider may be a self-hosted
- * OpenTripPlanner service, a trusted public service, a local engine or a hybrid
- * strategy. The contract is unchanged by that decision.
+ * Topology is decided (ADR-007, docs/OTP_DEPLOYMENT.md): hybrid — the local
+ * `StaticNetworkPlanner` answers first and an OpenTripPlanner adapter covers
+ * what it cannot. The contract is unchanged by that decision.
  */
 interface RoutingProvider {
     val providerId: String

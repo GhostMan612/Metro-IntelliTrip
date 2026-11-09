@@ -55,7 +55,7 @@ Scope is resolved as `Focus -> ScopePolicy/ScopeResolver -> CameraScope/DataScop
 `Leg.Transit` carries agency/feed, route key, trip key, from/to stop keys, scheduled/predicted departure/arrival, realtime delay/status, assigned/live vehicle key, and service date/trip instance. Transfer confidence lives on `TransferConnection` (arrivingLeg, departingLeg, transferStop, scheduledBuffer, predictedBuffer, walkingDuration, confidence, rationale); a `JourneyOption` has 0..n `TransferConnection`s. Phase 07 scores transfers via connection objects.
 
 ## Routing as core
-Routing is a core capability. Initial implementation may use a provider such as OpenTripPlanner, but the domain contract must support multimodal journeys: walking, transit legs, transfers, realtime updates, and later transfer-confidence intelligence. Topology is unresolved (see ADR-007): app → `RoutingProvider` → self-hosted OTP service / trusted public service / local offline engine / hybrid. Research gate before implementation.
+Routing is a core capability. The domain contract supports multimodal journeys: walking, transit legs, transfers, realtime updates, and transfer-confidence intelligence. Topology is decided (ADR-007, `docs/OTP_DEPLOYMENT.md`): hybrid — the in-process `StaticNetworkPlanner` answers first and the OTP adapter covers what it cannot. Live OTP end-to-end remains unverified (Phase-09 carried item); remote mode stays local-only by default.
 
 ## SDK portability
 `core/` modules are pure Kotlin with no Android framework imports; `app/`, `platform/`, and provider adapters are isolated. Prototype code that violates this architecture must be audited, quarantined, or refactored before it is treated as authoritative. See ADR-004 and Phase 09.

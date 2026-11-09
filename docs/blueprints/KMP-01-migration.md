@@ -262,3 +262,20 @@ From the repo audit (architecture/quality/production):
   change.
 
 Gate (all green): `test` + `lint` + `assembleDebug` + `assembleRelease`.
+
+## R2 delivered (2026-11-09) — docs + guards
+
+- Doc drift sweep: ADR-007 topology closed in `ARCHITECTURE.md` /
+  `DATA_SOURCES.md` / `RoutingProvider.kt`; `AtlasEngine` offline comments
+  corrected (facade boundary, not platform); `atlas-transit` phrasing
+  updated to ADR-014 (retired) in `AGENTS.md`/`README.md`.
+- File-seam decision recorded in KDoc on both separators (`PlatformFileStore`
+  vs `OfflineFileStore`): containment/security vs snapshot/index needs —
+  keep both. Freshness contracts documented as related-not-identical.
+- Guards: `PortabilityGuardTest.moduleDependenciesAreAcyclic` (build-file
+  graph, catches routing↔offline-style cycles); new unit tests for
+  `backoffMs`, `formatterTime`/`journeyHeadline`/`legSummary`; plus a fix to
+  the stale `RealFeedPlanTimeTest` (bytes-based index API from M3c), which
+  the audit's fresh compile surfaced.
+
+Gate (all green): `test` + `lint` + `assembleDebug` + `assembleRelease`.

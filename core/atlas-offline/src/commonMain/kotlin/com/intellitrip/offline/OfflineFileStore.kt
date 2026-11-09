@@ -10,6 +10,12 @@ package com.intellitrip.offline
  * never by string concatenation, so platform separators cannot leak through.
  *
  * Text is always UTF-8.
+ *
+ * Why two file seams (this vs `PlatformFileStore` in atlas-gtfs-static):
+ * the basemap seam needs path-containment/security (`isContained`,
+ * `normalizePath`, `copy`) for untrusted package ids, while the gtfs seam
+ * needs atomic snapshot moves + byte-range indexing. Merging them would
+ * widen both APIs for no win; keep both, each with its own tests.
  */
 expect class OfflineFileStore(rootDir: String) {
 
