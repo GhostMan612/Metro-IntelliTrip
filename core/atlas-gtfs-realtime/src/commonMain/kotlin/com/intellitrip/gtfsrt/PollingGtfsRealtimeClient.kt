@@ -41,6 +41,15 @@ class GtfsRealtimeException(message: String, cause: Throwable? = null) : Excepti
 /** Fetches a GTFS-Realtime payload. Acquisition is always explicit. */
 fun interface GtfsRealtimeFetcher {
     fun fetch(url: String): ByteArray
+
+    /**
+     * Async variant on the browser `fetch` bridge (M4c). The default keeps
+     * JVM behavior (sync read on the caller's pool); wasmJs overrides it.
+     */
+    suspend fun fetchAsync(url: String): ByteArray =
+        kotlinx.coroutines.withContext(ioDispatcherForFetch()) { fetch(url) }
+
+    private fun ioDispatcherForFetch(): kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Default
 }
 
 /**
@@ -205,7 +214,7 @@ class PollingGtfsRealtimeClient(
                     // may collect from the main dispatcher without blocking it.
                     withContext(ioDispatcher) {
                         val bytes = try {
-                            fetcher.fetch(url)
+                            fetcher.fetchAsync(url)
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {

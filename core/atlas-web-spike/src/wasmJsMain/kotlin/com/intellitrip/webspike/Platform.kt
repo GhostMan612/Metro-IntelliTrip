@@ -32,17 +32,70 @@ private fun createShell(): kotlin.js.JsAny =
         """(() => {
         const body = document.body;
         body.textContent = 'Metro IntelliTrip — web shell (spike)';
+        const bar = document.createElement('div');
+        bar.setAttribute('style', 'display:flex;gap:8px;margin:8px 0;font-family:system-ui');
+        const origins = ['S1', 'S2', 'S3'];
+        const mkSelect = (id, first) => {
+            const sel = document.createElement('select');
+            sel.setAttribute('id', id);
+            for (const o of origins) {
+                const opt = document.createElement('option');
+                opt.value = o; opt.textContent = o;
+                if (o === first) opt.selected = true;
+                sel.appendChild(opt);
+            }
+            return sel;
+        };
+        const originSel = mkSelect('atlas-origin', 'S1');
+        const destSel = mkSelect('atlas-dest', 'S3');
+        const btn = document.createElement('button');
+        btn.textContent = 'Plan';
+        const results = document.createElement('div');
+        results.setAttribute('id', 'atlas-results');
+        results.setAttribute('style', 'font-family:system-ui;max-height:20vh;overflow:auto');
+        bar.appendChild(originSel);
+        bar.appendChild(destSel);
+        bar.appendChild(btn);
         const mapDiv = document.createElement('div');
         mapDiv.setAttribute('id', 'atlas-map');
-        mapDiv.setAttribute('style', 'width:100%;height:70vh;border:1px solid #999;');
+        mapDiv.setAttribute('style', 'width:100%;height:60vh;border:1px solid #999;');
         const caption = document.createElement('div');
         caption.setAttribute('id', 'atlas-caption');
         caption.setAttribute('style', 'margin-top:8px;font-family:system-ui');
+        body.appendChild(bar);
+        body.appendChild(results);
         body.appendChild(mapDiv);
         body.appendChild(caption);
+        window.atlasPlanClicked = () => {
+            const origin = document.getElementById('atlas-origin').value;
+            const dest = document.getElementById('atlas-dest').value;
+            document.getElementById('atlas-results').textContent =
+                'Planning ' + origin + ' -> ' + dest + ' (demo network)…';
+            atlasPlan(origin, dest);
+        };
+        btn.onclick = window.atlasPlanClicked;
         return caption;
     })()"""
     )
+
+private fun setResults(text: String): kotlin.js.JsAny =
+    js("""(() => {
+        const box = document.getElementById('atlas-results');
+        box.textContent = '';
+        const li = document.createElement('div');
+        li.textContent = text;
+        box.appendChild(li);
+        return box;
+    })()""")
+
+@OptIn(kotlin.js.ExperimentalJsExport::class)
+@kotlin.js.JsExport
+fun atlasPlan(origin: String, destination: String) {
+    MainScope().launch {
+        val verdict = WebDemo.demoPlanBetween(WebDemo.stopPoint(origin), WebDemo.stopPoint(destination))
+        setResults(origin + " -> " + destination + ": " + verdict)
+    }
+}
 
 private fun setCaption(caption: kotlin.js.JsAny, text: String): kotlin.js.JsAny =
     js("""(caption.textContent = text, caption)""")

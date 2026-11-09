@@ -33,7 +33,73 @@ class StaticFeedRefresher(
      * dispatcher: callers may invoke this from the main thread without
      * blocking it.
      */
-    suspend fun refresh(): RefreshOutcome = kotlinx.coroutines.withContext(ioDispatcher) { refreshBlocking() }
+    suspend fun refresh(): RefreshOutcome = kotlinx.coroutines.withContext(ioDispatcher) { refreshBlockingAsync() }
+
+    /**
+     * Same semantics as [refreshBlocking] over [IngestedFeedAcquirer]. The acquire
+     * step on wasmJs goes over the browser fetch bridge; file/parse work stays
+     * in-memory/byte-based, so the whole refresh is portable.
+     */
+    private suspend fun refreshBlockingAsync(): RefreshOutcome {
+        val validators = store.validators(feedId)
+        val acquisition = if (validators.usable) {
+            acquirer.acquireAsync(
+                feedId = feedId,
+                url = sourceUrl,
+                currentEtag = validators.etag,
+                currentLastModified = validators.lastModified,
+            )
+        } else {
+            acquirer.acquireAsync(feedId, sourceUrl)
+        }
+        return when (acquisition) {
+            is GtfsFeedAcquirer.AcquisitionResult.NotModified -> {
+                val refreshed = FeedValidators(acquisition.etag, acquisition.lastModified)
+                if (refreshed.usable) store.recordValidators(feedId, refreshed)
+                RefreshOutcome.NotModified(feedId)
+            }
+            is GtfsFeedAcquirer.AcquisitionResult.Failure -> RefreshOutcome.Rejected(feedId, acquisition.message)
+            is GtfsFeedAcquirer.AcquisitionResult.Updated -> activate(acquisition)
+        }
+    }
+
+    private suspend fun activate(acquisition: GtfsFeedAcquirer.AcquisitionResult.Updated): RefreshOutcome {
+        val active = store.activeSnapshot(feedId)
+        val stagedPayload = try {
+            store.writeStagedPayload(acquisition.payload)
+        } catch (e: Exception) {
+            return RefreshOutcome.Rejected(feedId, e.message ?: "Storage failed")
+        }
+        val metadata = FeedMetadata(
+            feedId = feedId,
+            publisherName = null,
+            publisherUrl = null,
+            lang = null,
+            version = active?.metadata?.version,
+            hash = GtfsFeedAcquirer.sha256(acquisition.payload),
+            fetchedAt = clock(),
+            validFrom = active?.metadata?.validFrom,
+            validTo = active?.metadata?.validTo,
+            sourceUrl = sourceUrl,
+        )
+        val feed = try {
+            // Parse from the payload bytes, streaming each entry row-by-row
+            // to the stop-time sink (same as refreshBlocking).
+            val stopTimeSink = store.newStopTimeSink()
+            try {
+                GtfsStaticParser.parseFromZip(feedId, acquisition.payload, metadata, stopTimeSink)
+            } finally {
+                stopTimeSink.close()
+            }
+        } catch (e: Exception) {
+            runCatching { store.deleteStagedPayload(stagedPayload) }
+            return RefreshOutcome.Rejected(feedId, e.message ?: "Validation failed")
+        }
+        store.activateStaged(feedId, stagedPayload, metadata)
+        runCatching { store.writeCache(feedId, feed) }
+        store.recordValidators(feedId, FeedValidators(acquisition.etag, acquisition.lastModified))
+        return RefreshOutcome.Activated(feed)
+    }
 
     /** Blocking refresh for hosts that already run on a background thread. */
     fun refreshBlocking(): RefreshOutcome {

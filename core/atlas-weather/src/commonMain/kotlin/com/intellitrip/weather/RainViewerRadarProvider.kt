@@ -40,8 +40,8 @@ class RainViewerRadarProvider(
         return ProviderResult.Success(selected, context.freshness(index.generatedAt))
     }
 
-    private fun fetchIndex(): RadarIndex? = try {
-        parseIndex(http.get("$apiBase/public/weather-maps.json", context.headers()).decodeToString())
+    private suspend fun fetchIndex(): RadarIndex? = try {
+        parseIndex(http.getAsync("$apiBase/public/weather-maps.json", context.headers()).decodeToString())
     } catch (e: Exception) {
         // Preserve the cause so callers can distinguish a network outage from an
         // unreadable index document.

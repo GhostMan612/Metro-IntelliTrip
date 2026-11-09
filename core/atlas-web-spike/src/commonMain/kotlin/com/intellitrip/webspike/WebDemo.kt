@@ -29,6 +29,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * First real screen, shared by JVM (tests) and browser (shell): a tiny
@@ -86,6 +87,36 @@ object WebDemo {
             "https://tilecache.rainviewer.com/v2/radar/$time/256/{z}/{x}/{y}/2/1_1.png",
         )
     }
+
+    /** Plan between two demo stops (shell origin/destination controls). */
+    suspend fun demoPlanBetween(
+        origin: GeoPoint,
+        destination: GeoPoint,
+        network: RoutingNetwork = demoNetwork(),
+    ): String {
+        val engine = demoEngine(network)
+        val outcome = engine.planJourney(
+            TripPlanRequest(
+                origin = origin,
+                destination = destination,
+                departAt = departAt,
+                arriveBy = null,
+                maxTransfers = 1,
+            )
+        )
+        return when (outcome) {
+            is com.intellitrip.engine.JourneyOutcome.Planned ->
+                "${outcome.journeys.size} journeys · ${outcome.journeys.firstOrNull()?.legs?.size ?: 0} legs · " +
+                    "ETA ${outcome.journeys.firstOrNull()?.arrival?.toLocalDateTime(zone)?.hour}:${
+                        outcome.journeys.firstOrNull()?.arrival?.toLocalDateTime(zone)?.minute?.toString()?.padStart(2, '0') ?: "?"
+                    }"
+            is com.intellitrip.engine.JourneyOutcome.Unavailable ->
+                "no route: ${outcome.reason}"
+        }
+    }
+
+    /** Stop coordinates for shell controls. */
+    fun stopPoint(id: String): GeoPoint = demoNetwork().stops.first { it.key.stopId == id }.location
 
     /** One-line verdict for the shell caption + tests. */
     suspend fun demoPlanText(network: RoutingNetwork = demoNetwork()): String {

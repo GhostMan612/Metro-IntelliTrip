@@ -30,6 +30,14 @@ class GtfsFeedAcquirer(
 
     fun interface HttpTransport {
         fun open(request: HttpRequest): HttpResponse
+
+        /**
+         * Async variant (M4c): the default runs [open] on the caller's pool;
+         * wasmJs injections override it with the browser fetch bridge.
+         * Callers (the refresher) go through [acquireAsync].
+         */
+        suspend fun openAsync(request: HttpRequest): HttpResponse =
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { open(request) }
     }
 
     data class HttpRequest(
@@ -85,26 +93,57 @@ class GtfsFeedAcquirer(
             return AcquisitionResult.Failure("Network failure acquiring feed: ${e.message}")
         }
 
-        return when (response.status) {
-            304 -> AcquisitionResult.NotModified(response.headers["ETag"], response.headers["Last-Modified"])
-            401, 403 -> AcquisitionResult.Failure("Authentication required for feed $feedId")
-            429 -> AcquisitionResult.Failure("Rate limited while acquiring feed $feedId")
-            in 200..299 -> {
-                if (response.body.isEmpty()) {
-                    AcquisitionResult.Failure("Empty GTFS payload for feed $feedId")
-                } else if (!GtfsArchive.isZip(response.body)) {
-                    AcquisitionResult.Failure("GTFS payload for feed $feedId is not a ZIP archive")
-                } else {
-                    AcquisitionResult.Updated(
-                        feedId = feedId,
-                        payload = response.body,
-                        etag = response.headers["ETag"],
-                        lastModified = response.headers["Last-Modified"],
-                    )
-                }
-            }
-            else -> AcquisitionResult.Failure("Unexpected HTTP ${response.status} for feed $feedId")
+        return summarize(feedId, response)
+    }
+
+    /**
+     * Async acquisition: identical conditional-refresh semantics over
+     * [HttpTransport.openAsync]. The refresher calls this so wasmJs hosts
+     * get the browser fetch transport. The sync [acquire] stays for JVM
+     * hosts that already invoke it off the main thread.
+     */
+    suspend fun acquireAsync(
+        feedId: FeedId,
+        url: String,
+        currentEtag: String? = null,
+        currentLastModified: String? = null,
+    ): AcquisitionResult {
+        val request = HttpRequest(
+            url = url,
+            userAgent = userAgent,
+            ifModifiedSince = currentLastModified,
+            ifNoneMatch = currentEtag,
+            authHeader = authHeaderProvider(),
+            connectTimeoutMillis = connectTimeoutMillis,
+            readTimeoutMillis = readTimeoutMillis,
+        )
+        val response = try {
+            transport.openAsync(request)
+        } catch (e: Exception) {
+            return AcquisitionResult.Failure("Network failure acquiring feed: ${e.message}")
         }
+        return summarize(feedId, response)
+    }
+
+    private fun summarize(feedId: FeedId, response: HttpResponse): AcquisitionResult = when (response.status) {
+        304 -> AcquisitionResult.NotModified(response.headers["ETag"], response.headers["Last-Modified"])
+        401, 403 -> AcquisitionResult.Failure("Authentication required for feed $feedId")
+        429 -> AcquisitionResult.Failure("Rate limited while acquiring feed $feedId")
+        in 200..299 -> {
+            if (response.body.isEmpty()) {
+                AcquisitionResult.Failure("Empty GTFS payload for feed $feedId")
+            } else if (!GtfsArchive.isZip(response.body)) {
+                AcquisitionResult.Failure("GTFS payload for feed $feedId is not a ZIP archive")
+            } else {
+                AcquisitionResult.Updated(
+                    feedId = feedId,
+                    payload = response.body,
+                    etag = response.headers["ETag"],
+                    lastModified = response.headers["Last-Modified"],
+                )
+            }
+        }
+        else -> AcquisitionResult.Failure("Unexpected HTTP ${response.status} for feed $feedId")
     }
 
     companion object {

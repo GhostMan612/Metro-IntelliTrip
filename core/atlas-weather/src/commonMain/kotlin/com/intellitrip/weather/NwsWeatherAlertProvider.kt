@@ -57,7 +57,7 @@ class NwsWeatherAlertProvider(
             return@flow
         }
         while (currentCoroutineContext().isActive) {
-            val result = withContext(ioDispatcher) { fetchAlerts(bounds, userAgent) }
+            val result = withContext(ioDispatcher) { fetchAlertsAsync(bounds, userAgent) }
             emit(result)
             delay(pollInterval.inWholeMilliseconds)
         }
@@ -69,13 +69,13 @@ class NwsWeatherAlertProvider(
      * Each sample point is fetched independently so one failure cannot discard the rest;
      * the national path keeps a single request and a single failure mode.
      */
-    private fun fetchAlerts(
+    private suspend fun fetchAlertsAsync(
         bounds: LatLngBounds?,
         userAgent: String,
     ): ProviderResult<List<WeatherAlert>> {
         if (bounds == null) {
             return try {
-                val payload = http.get(alertUrl(null), context.headers()).decodeToString()
+                val payload = http.getAsync(alertUrl(null), context.headers()).decodeToString()
                 ProviderResult.Success(parseAlerts(payload), context.freshness(parseUpdated(payload)))
             } catch (e: WeatherNetworkException) {
                 ProviderResult.NetworkFailure(ProviderError("NWS alerts unavailable", e))
@@ -92,7 +92,7 @@ class NwsWeatherAlertProvider(
         var failures = 0
         samples.forEach { (lat, lon) ->
             try {
-                val payload = http.get(pointUrl(lat, lon), context.headers()).decodeToString()
+                val payload = http.getAsync(pointUrl(lat, lon), context.headers()).decodeToString()
                 if (updated == null) updated = parseUpdated(payload)
                 parseAlerts(payload).forEach { alert -> byId.getOrPut(alert.id) { alert } }
             } catch (e: Exception) {

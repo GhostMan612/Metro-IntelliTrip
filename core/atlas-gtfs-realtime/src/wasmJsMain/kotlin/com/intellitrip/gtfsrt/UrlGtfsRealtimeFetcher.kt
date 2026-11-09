@@ -25,8 +25,20 @@ actual class UrlGtfsRealtimeFetcher actual constructor(
 
     actual override fun fetch(url: String): ByteArray {
         throw GtfsRealtimeException(
-            "Synchronous HTTP fetching is not available on wasmJs yet; " +
-                "the fetcher seam must become suspend or use a browser bridge",
+            "Synchronous HTTP fetching is not available on wasmJs; " +
+                "the polling client now calls fetchAsync (browser fetch bridge).",
         )
+    }
+
+    override suspend fun fetchAsync(url: String): ByteArray {
+        val headers = buildList {
+            add("User-Agent" to userAgent)
+            authHeaderProvider()?.let { add("Authorization" to it) }
+        }.toMap()
+        return try {
+            com.intellitrip.contracts.platformFetch(url, headers)
+        } catch (e: Exception) {
+            throw GtfsRealtimeException("fetch failed: ${e.message}", e)
+        }
     }
 }

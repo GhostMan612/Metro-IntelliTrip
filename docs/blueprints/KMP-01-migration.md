@@ -312,6 +312,24 @@ Gate (all green): `atlas-map-web` + spike `jvmTest` + `compileKotlinWasmJs`
 
 Gate (all green): `atlas-map-web` + spike `jvmTest` + `compileKotlinWasmJs`
 + full `test` + `lint` + `assembleDebug` + `assembleRelease` +
-`publishAtlasToLocalRepo` + `:sample:host:run`. Remaining stubs: wasm
-HTTP fetch (async seam) + IndexedDB persistence + vendored MapLibre —
-all follow-ups with the app UI parity track.
+`publishAtlasToLocalRepo` + `:sample:host:run`.
+
+## M4c delivered (2026-11-09) — async fetch seam (browser fetch bridge)
+
+- Shared seam in `atlas-contracts`: `expect suspend fun platformFetch`
+  (JVM `HttpURLConnection` on the IO pool; wasmJs `fetch` + `arrayBuffer()`
+  via `@JsExport`d completion bridged into coroutines).
+- Weather `getAsync`, realtime `fetchAsync`, and static-GTFS
+  `openAsync`/`acquireAsync` (refresher now fetches async end-to-end);
+  legacy sync fetchers stay for tests/JVM hosts. Providers call the async
+  variants, so wasm has a real transport (`WeatherNetworkException` only on
+  genuinely failed requests).
+- Web shell gains origin/destination selects + Plan button (re-plan between
+  demo stops through the production engine).
+
+Remaining: IndexedDB persistence (in-memory wasm stores today), vendored
+MapLibre (CDN pinned 5.0.4 today), and UI parity with Android.
+
+Gate (all green): affected `jvmTest` + `compileKotlinWasmJs` + full
+`test` + `lint` + `assembleDebug` + `assembleRelease` +
+`publishAtlasToLocalRepo` + `:sample:host:run`.

@@ -16,6 +16,9 @@ actual class WeatherHttpClient actual constructor(
     actual fun get(url: String, headers: Map<String, String>): ByteArray =
         storedHandler(url, headers)
 
+    actual suspend fun getAsync(url: String, headers: Map<String, String>): ByteArray =
+        storedHandler(url, headers)
+
     actual companion object {
         actual fun urlConnection(
             connectTimeoutMillis: Int,

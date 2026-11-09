@@ -29,12 +29,17 @@ expect class WeatherHttpClient {
 
     fun get(url: String, headers: Map<String, String>): ByteArray
 
+    /**
+     * Async variant backed by the platform fetch (M4c): browser `fetch` on
+     * wasmJs, IO-pool blocking read on JVM. Providers call this so web
+     * hosts get a real transport instead of the sync stub.
+     */
+    suspend fun getAsync(url: String, headers: Map<String, String>): ByteArray
+
     companion object {
         /**
          * Platform-default transport. JVM: `HttpURLConnection` with the
-         * given timeouts. wasmJs: stub that fails with
-         * [WeatherNetworkException] (TODO: async `fetch` + IndexedDB-backed
-         * cache, see the wasmJs actual).
+         * given timeouts. wasmJs: browser `fetch` bridge (see wasmJs actual).
          */
         fun urlConnection(
             connectTimeoutMillis: Int = 15_000,
