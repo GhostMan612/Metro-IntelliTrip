@@ -7,6 +7,15 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
+
+// Auto-provisions the JDK 17 toolchain (`jvmToolchain(17)`) when the machine
+// has no Java 17 installation — e.g. a fresh Android Studio checkout that
+// ships only JBR 21. Without this, Android Studio fails with
+// `NoToolchainAvailableException` and "Project source sets cannot be resolved".
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "0.8.0"
+}
+
 rootProject.name = "IntelliTrip"
 
 

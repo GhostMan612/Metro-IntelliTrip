@@ -5,6 +5,7 @@
 gradlew.bat assembleDebug
 ```
 (First run requires Android SDK + `local.properties` pointing to it; install Android Studio or command-line tools.)
+Requires a JDK 17 toolchain (`jvmToolchain(17)`): the Foojay resolver in `settings.gradle.kts` auto-downloads one on first sync if the machine has none (e.g. Android Studio's bundled JBR 21 alone is not enough — without it, Studio fails with `NoToolchainAvailableException`).
 
 ## Publish the SDK for another app
 The portable `core/atlas-*` modules publish to `build/atlas-maven` (group
