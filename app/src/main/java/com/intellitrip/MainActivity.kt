@@ -388,7 +388,7 @@ private fun SavedScreenSurface(
     onRemoveStop: (com.intellitrip.ui.SavedStop) -> Unit,
     onCloseToExplore: () -> Unit,
 ) {
-    SurfaceScaffold(title = "Saved", onClose = {}) {
+    SurfaceScaffold(title = "Saved", onClose = onCloseToExplore) {
         com.intellitrip.ui.SavedScreen(
             saved = saved,
             onOpenStop = onOpenStop,
