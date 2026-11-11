@@ -27,7 +27,7 @@ offline basemap packages, and Play publishing.
 - `core/atlas-gtfs-static/`, `atlas-gtfs-realtime/` — GTFS static (streaming CSV, disk stop-time index) and GTFS-RT adapters.
 - `core/atlas-routing/`, `atlas-scope/`, `atlas-map/`, `atlas-weather/`, `atlas-offline/` — planner, scope, render pipeline, weather, offline staleness.
 - `core/atlas-engine/` — `AtlasEngine` SDK facade. `sample/host/` proves JVM hosting.
-- `core/atlas-transit/` — retired prototype (ADR-014), not published; delete when convenient.
+- `core/atlas-transit/` — retired and deleted (ADR-014); Git history preserves the prototype.
 - `core/atlas-map-android/` — MapLibre renderer adapter (bulk GeoJSON only).
 
 Publish the SDK to `build/atlas-maven` (`com.intellitrip.atlas:0.2.0`) with
@@ -35,9 +35,12 @@ Publish the SDK to `build/atlas-maven` (`com.intellitrip.atlas:0.2.0`) with
 
 ## Status
 
-Phases 00-09 are closed. Open and explicitly not claimed as done: live OTP
-verification, offline basemap package, RainViewer licensing, `atlas-transit`
-migration, and Play signing/listing. See `docs/blueprints/PHASE-09-sdk-extraction.md`.
+Phases 00-09 are closed. Recent KMP/browser work has unresolved release gates:
+real-feed CI, browser realtime decoding/durable restore, complete rider controls,
+and external OTP, RainViewer and Play verification. `atlas-transit` is deleted.
+See `docs/audits/2026-11-10-closure-audit.md` and `docs/workchains/README.md`.
+The active development branch is `master`; GitHub's older default `main` still
+contains only the original README. Do not target `main` for application PRs.
 
 ## License
 
