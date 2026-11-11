@@ -32,7 +32,10 @@ class RealFeedSmokeTest {
     @Test
     fun parsesRealMetroTransitFeed() {
         val file = fixturePath() ?: run {
-            println("SKIPPED real-feed verification: no gtfs-metro-transit.zip fixture present")
+            if (System.getenv("CI") == "true" || System.getProperty("intellitrip.gtfs.fixture") != null) {
+                fail("Real-feed CI gate requires an accessible GTFS fixture; none was found")
+            }
+            println("SKIPPED optional local real-feed verification: no gtfs-metro-transit.zip fixture present")
             return
         }
         println("Verifying real feed from ${file.absolutePath} (${file.length()} bytes)")
