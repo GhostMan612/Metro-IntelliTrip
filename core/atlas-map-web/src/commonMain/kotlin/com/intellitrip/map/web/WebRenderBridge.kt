@@ -36,17 +36,16 @@ enum class WebLayer {
 }
 
 /**
- * Converts a snapshot to source payloads. Empty layers are omitted so the
- * widget never sets empty data (MapLibre would otherwise flash).
+ * Converts a snapshot to source payloads. Every layer is emitted, including an
+ * empty FeatureCollection, so MapLibre clears features when a feed becomes empty
+ * or the rider changes the scope. Omitting a layer leaves stale source data.
  */
-fun snapshotToSources(snapshot: RenderSnapshot): List<SourcePayload> {
-    val out = mutableListOf<SourcePayload>()
-    if (snapshot.vehicles.isNotEmpty()) out += SourcePayload(WebLayer.VEHICLES, GeoJsonWriter.vehicles(snapshot))
-    if (snapshot.clusters.isNotEmpty()) out += SourcePayload(WebLayer.CLUSTERS, GeoJsonWriter.clusters(snapshot))
-    if (snapshot.stops.isNotEmpty()) out += SourcePayload(WebLayer.STOPS, GeoJsonWriter.stops(snapshot))
-    if (snapshot.shapeLines.isNotEmpty()) out += SourcePayload(WebLayer.SHAPES, GeoJsonWriter.shapes(snapshot))
-    return out
-}
+fun snapshotToSources(snapshot: RenderSnapshot): List<SourcePayload> = listOf(
+    SourcePayload(WebLayer.VEHICLES, GeoJsonWriter.vehicles(snapshot)),
+    SourcePayload(WebLayer.CLUSTERS, GeoJsonWriter.clusters(snapshot)),
+    SourcePayload(WebLayer.STOPS, GeoJsonWriter.stops(snapshot)),
+    SourcePayload(WebLayer.SHAPES, GeoJsonWriter.shapes(snapshot)),
+)
 
 /** Style URL to hand the widget (null = bundled asset, unsupported on web). */
 fun webStyleUrl(style: BasemapStyle): String? = style.styleUrl
