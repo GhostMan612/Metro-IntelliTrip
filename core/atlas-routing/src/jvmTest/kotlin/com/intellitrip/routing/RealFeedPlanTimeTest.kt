@@ -51,7 +51,10 @@ class RealFeedPlanTimeTest {
     @Test
     fun plansOnRealFeedWithinLatencyBudget() {
         val file = fixturePath() ?: run {
-            println("SKIPPED real-feed plan timing: no gtfs-metro-transit.zip fixture present")
+            if (System.getenv("CI") == "true" || System.getProperty("intellitrip.gtfs.fixture") != null) {
+                kotlin.test.fail("Real-feed CI gate requires an accessible GTFS fixture; none was found")
+            }
+            println("SKIPPED optional local real-feed plan timing: no gtfs-metro-transit.zip fixture present")
             return
         }
 
