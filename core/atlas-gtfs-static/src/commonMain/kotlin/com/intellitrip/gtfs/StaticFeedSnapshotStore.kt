@@ -360,8 +360,15 @@ class StaticFeedSnapshotStore(
     private fun feedDir(feedId: FeedId, child: String): String = joinPath(feedDir(feedId), child)
 
     private fun feedDir(feedId: FeedId): String {
-        val dir = joinPath(root, feedId.value)
-        return dir
+        val id = feedId.value
+        // Feed IDs may be supplied by SDK consumers. A raw '../' or platform
+        // separator must never escape the app-private snapshot root.
+        // Preserve all already-valid single-component feed directory names.
+        require(
+            id != "." && id != ".." &&
+                id.none { it == '/' || it == '\\' || it.code < 0x20 || it.code == 0x7f }
+        ) { "FeedId must be a safe single path component" }
+        return joinPath(root, id)
     }
 
     private fun createDirectories(path: String): String {

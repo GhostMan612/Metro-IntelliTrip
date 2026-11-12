@@ -15,6 +15,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 import kotlinx.coroutines.runBlocking
 
 class StaticFeedRefreshTest {
@@ -114,6 +115,26 @@ class StaticFeedRefreshTest {
         assertEquals(metadata.validFrom, read.validFrom)
         assertEquals(metadata.sourceUrl, read.sourceUrl)
         assertTrue(Files.exists(root))
+    }
+
+    @Test
+    fun hostileFeedIdsCannotEscapeSnapshotStorageRoot() {
+        val root = createTempDirectory("gtfs-containment")
+        val store = storeAt(root)
+        val hostile = listOf("../escape", "..", ".", "nested/escape", "..\\escape", "bad\u0000name")
+        hostile.forEach { value ->
+            val id = FeedId(value)
+            assertFailsWith<IllegalArgumentException>("accepted unsafe feed id: $value") {
+                store.recordValidators(id, FeedValidators(etag = "attacker"))
+            }
+            assertFailsWith<IllegalArgumentException>("read escaped root: $value") {
+                store.activeSnapshot(id)
+            }
+        }
+        // A normal feed remains fully usable and receives its validators.
+        store.recordValidators(feedId, FeedValidators(etag = "safe"))
+        assertEquals("safe", store.validators(feedId).etag)
+        assertFalse(Files.exists(root.parent.resolve("escape").resolve("validators.properties")))
     }
 
     @Test
