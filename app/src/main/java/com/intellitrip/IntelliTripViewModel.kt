@@ -649,7 +649,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                         }
                         if (dest != null) {
                             val dist = com.intellitrip.ui.DepartureBoard.metersBetween(fix.position, dest)
-                            if (dist < 100 && fix.isPrecise() && arrivalCuedJourneyId != journey.id) {
+                            if (dist < 100 && fix.isHighAccuracy() && arrivalCuedJourneyId != journey.id) {
                                 arrivalCuedJourneyId = journey.id
                                 com.intellitrip.ui.ArrivalCue.playIfAllowed(host.context, true)
                             }
