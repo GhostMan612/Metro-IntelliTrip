@@ -224,7 +224,9 @@ class AtlasHostInstrumentedTest {
         // stop-time sink that writes the disk index, then activate the snapshot.
         val payload = GtfsFixture(withShapes = true).zip()
         val files = com.intellitrip.gtfs.GtfsArchive.read(payload).toMutableMap()
-        val sink = store.newStopTimeSink()
+        val stage = store.beginRefresh()
+        store.writeStagedPayload(payload, stage)
+        val sink = store.newStopTimeSink(stage)
         val feed = com.intellitrip.gtfs.GtfsStaticParser.parse(
             feedId,
             files,
@@ -234,7 +236,7 @@ class AtlasHostInstrumentedTest {
             sink,
         )
         sink.close()
-        store.activate(feedId, payload, feed.metadata)
+        store.activateStaged(feedId, stage, feed.metadata)
         assertNotNull("static feed should parse on device", feed)
 
         // 2. Choose endpoints at the two served stops.

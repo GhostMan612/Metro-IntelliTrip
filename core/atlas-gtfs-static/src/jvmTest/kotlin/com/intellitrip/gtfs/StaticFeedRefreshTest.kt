@@ -48,7 +48,7 @@ class StaticFeedRefreshTest {
     }
 
     @Test
-    fun conditionalRefreshReturnsNotModified() {
+    fun notModifiedWithoutSnapshotIsRejected() {
         val root = createTempDirectory("gtfs-store")
         val transport = GtfsFeedAcquirer.HttpTransport { GtfsFeedAcquirer.HttpResponse(304, ByteArray(0), emptyMap()) }
         val outcome = runBlocking {
@@ -59,7 +59,7 @@ class StaticFeedRefreshTest {
                 storeAt(root),
             ).refresh()
         }
-        assertIs<RefreshOutcome.NotModified>(outcome)
+        assertIs<RefreshOutcome.Rejected>(outcome)
         assertNull(storeAt(root).activeSnapshot(feedId))
     }
 
@@ -155,5 +155,68 @@ class StaticFeedRefreshTest {
         val rows = reader.stopTimesFor(TripKey(feedId, "1001")) { id -> StopKey(feedId, id) }
         assertEquals(listOf(1, 2), rows.map { it.stopSequence })
         assertEquals(listOf("34", "39"), rows.map { it.stopKey.stopId })
+    }
+
+    @Test
+    fun overlappingRefreshStagesKeepPayloadAndStopTimeIndexPaired() {
+        val root = createTempDirectory("gtfs-overlapping-stages")
+        val firstStore = storeAt(root)
+        val secondStore = storeAt(root)
+        val firstPayload = GtfsFixtures.zipOf(GtfsFixtures.minimalFeed)
+        val secondFeed = GtfsFixtures.minimalFeed.toMutableMap().apply {
+            this["stop_times.txt"] = """
+                trip_id,arrival_time,departure_time,stop_id,stop_sequence
+                1001,23:45:00,23:50:00,39,1
+                1001,25:10:00,25:15:00,34,2
+            """.trimIndent() + "\n"
+        }
+        val secondPayload = GtfsFixtures.zipOf(secondFeed)
+        val firstStage = firstStore.beginRefresh()
+        val secondStage = secondStore.beginRefresh()
+        val firstMetadata = FeedMetadata(
+            feedId, null, null, null, "first", "first-hash",
+            Instant.parse("2026-10-07T00:00:00Z"), null, null, "src",
+        )
+        val secondMetadata = firstMetadata.copy(
+            version = "second",
+            hash = "second-hash",
+            fetchedAt = Instant.parse("2026-10-07T00:00:01Z"),
+        )
+
+        fun stage(
+            store: StaticFeedSnapshotStore,
+            refreshStage: StaticFeedSnapshotStore.RefreshStage,
+            payload: ByteArray,
+            metadata: FeedMetadata,
+        ) {
+            store.writeStagedPayload(payload, refreshStage)
+            val sink = store.newStopTimeSink(refreshStage)
+            try {
+                GtfsStaticParser.parseFromZip(feedId, payload, metadata, sink)
+            } finally {
+                sink.close()
+            }
+        }
+
+        stage(firstStore, firstStage, firstPayload, firstMetadata)
+        stage(secondStore, secondStage, secondPayload, secondMetadata)
+
+        secondStore.activateStaged(feedId, secondStage, secondMetadata)
+        assertTrue(secondPayload.contentEquals(secondStore.readPayload(feedId)))
+        assertEquals(
+            listOf("39", "34"),
+            secondStore.stopTimeReader(feedId)!!.stopTimesFor(TripKey(feedId, "1001")) { id ->
+                StopKey(feedId, id)
+            }.map { it.stopKey.stopId },
+        )
+
+        firstStore.activateStaged(feedId, firstStage, firstMetadata)
+        assertTrue(firstPayload.contentEquals(firstStore.readPayload(feedId)))
+        assertEquals(
+            listOf("34", "39"),
+            firstStore.stopTimeReader(feedId)!!.stopTimesFor(TripKey(feedId, "1001")) { id ->
+                StopKey(feedId, id)
+            }.map { it.stopKey.stopId },
+        )
     }
 }
