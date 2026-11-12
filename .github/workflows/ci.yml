@@ -73,6 +73,32 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # GitHub-hosted SDK downloads occasionally yield a corrupt emulator ZIP.
+      # Preinstall with a bounded retry so the action does not fail during
+      # setup and then mask the real cause by killing a nonexistent emulator.
+      - name: Preflight Android Emulator package (bounded ZIP retry)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_HOME:?ANDROID_HOME is required}"
+          for attempt in 1 2 3; do
+            echo "Checking Android Emulator package, attempt ${attempt}/3"
+            if sdkmanager --install "emulator" --channel=0 \
+                && test -x "$sdk/emulator/emulator" \
+                && "$sdk/emulator/emulator" -version >/dev/null 2>&1; then
+              echo "Android Emulator is installed and runnable."
+              exit 0
+            fi
+            echo "::warning::Android Emulator package install failed or binary unusable (${attempt}/3)."
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::Android Emulator unavailable after three install attempts."
+              exit 1
+            fi
+            # Only CI's temporary download staging is removed; no app or SDK data.
+            rm -rf -- "$sdk/.temp"
+            sleep $((attempt * 10))
+          done
+
       - name: Run instrumented tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
