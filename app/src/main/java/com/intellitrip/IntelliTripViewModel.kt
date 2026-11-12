@@ -29,6 +29,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.Dispatchers
@@ -94,6 +95,8 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     private val savedPlaces = com.intellitrip.ui.SavedPlacesStore(host.filesRoot())
 
     private var locationJob: Job? = null
+    /** One audible arrival cue per selected journey, not per GPS callback. */
+    private var arrivalCuedJourneyId: String? = null
 
     private var refreshJob: Job? = null
 
@@ -540,27 +543,30 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                 departuresFor = { stop ->
                     index.tripsServing(stop.key).flatMap { tripKey ->
                         index.stopTimesFor(tripKey) { stopId -> com.intellitrip.domain.StopKey(feed.feedId, stopId) }
-                    }.filter { stopTime ->
-                        // Only trips actually running on a candidate service day.
-                        val trip = tripsByKey[stopTime.tripKey.tripId] ?: return@filter false
-                        candidateDates.any { d ->
-                            com.intellitrip.ui.DepartureBoard.isServiceActive(
-                                feed.calendars, feed.calendarDates, trip.serviceKey, d,
-                            )
-                        }
                     }.flatMap { stopTime ->
+                        val trip = tripsByKey[stopTime.tripKey.tripId] ?: return@flatMap emptyList()
                         val scheduled = stopTime.departureTime ?: stopTime.arrivalTime
                             ?: return@flatMap emptyList()
+                        // An occurrence is valid only when its *own* originating service
+                        // date is active. Do not test one date and resolve a different one.
+                        val activeDates = candidateDates.filter { date ->
+                            com.intellitrip.ui.DepartureBoard.isServiceActive(
+                                feed.calendars, feed.calendarDates, trip.serviceKey, date,
+                            )
+                        }
+                        if (activeDates.isEmpty()) return@flatMap emptyList()
                         val freqs = frequenciesByTrip[stopTime.tripKey.tripId]
                         if (freqs.isNullOrEmpty()) {
-                            listOf(
-                                com.intellitrip.ui.DepartureBoard.ScheduledDeparture(
+                            activeDates.mapNotNull { date ->
+                                val instant = date.atStartOfDayIn(agencyZone) +
+                                    scheduled.secondsSinceServiceDayStart.toLong().seconds
+                                if (instant <= now - 60.seconds || instant > now + 7200.seconds) null
+                                else com.intellitrip.ui.DepartureBoard.ScheduledDeparture(
                                     tripId = stopTime.tripKey.tripId,
-                                    departure = com.intellitrip.ui.DepartureBoard.resolveServiceTime(scheduled, now, agencyZone),
-                                ),
-                            )
+                                    departure = instant,
+                                )
+                            }
                         } else {
-                            // Expand headway runs like the planner does.
                             val firstSec = firstDepartureSec.getOrPut(stopTime.tripKey.tripId) {
                                 index.stopTimesFor(stopTime.tripKey) { stopId ->
                                     com.intellitrip.domain.StopKey(feed.feedId, stopId)
@@ -568,38 +574,31 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                                     ?: scheduled.secondsSinceServiceDayStart
                             }
                             val out = mutableListOf<com.intellitrip.ui.DepartureBoard.ScheduledDeparture>()
-                            for (freq in freqs) {
-                                if (freq.headwaySeconds <= 0) continue
-                                var runStart = freq.startTime.secondsSinceServiceDayStart
-                                var count = 0
-                                // Top 20 per frequency run, inside the 7200 s horizon
-                                // below: the planner expands up to 300 runs for
-                                // search completeness (StaticNetworkPlanner); the
-                                // board lists only upcoming departures, so the
-                                // tighter cap is deliberate, not a mismatch.
-                                while (runStart <= freq.endTime.secondsSinceServiceDayStart && count < 20) {
-                                    val delta = runStart - firstSec
-                                    val shifted = com.intellitrip.domain.GtfsServiceTime.ofSeconds(
-                                        scheduled.secondsSinceServiceDayStart + delta,
-                                    )
-                                    val instant = com.intellitrip.ui.DepartureBoard.resolveServiceTime(shifted, now, agencyZone)
-                                    if (instant > now + 7200.seconds) break
-                                    out += com.intellitrip.ui.DepartureBoard.ScheduledDeparture(
-                                        tripId = stopTime.tripKey.tripId,
-                                        departure = instant,
-                                    )
-                                    runStart += freq.headwaySeconds
-                                    count++
+                            for (date in activeDates) {
+                                for (freq in freqs) {
+                                    if (freq.headwaySeconds <= 0) continue
+                                    var runStart = freq.startTime.secondsSinceServiceDayStart
+                                    var count = 0
+                                    while (runStart <= freq.endTime.secondsSinceServiceDayStart && count < 300) {
+                                        val secondsFromMidnight = scheduled.secondsSinceServiceDayStart +
+                                            runStart - firstSec
+                                        if (secondsFromMidnight >= 0) {
+                                            val instant = date.atStartOfDayIn(agencyZone) +
+                                                secondsFromMidnight.toLong().seconds
+                                            if (instant > now - 60.seconds && instant <= now + 7200.seconds) {
+                                                out += com.intellitrip.ui.DepartureBoard.ScheduledDeparture(
+                                                    tripId = stopTime.tripKey.tripId,
+                                                    departure = instant,
+                                                )
+                                            }
+                                            if (instant > now + 7200.seconds) break
+                                        }
+                                        runStart += freq.headwaySeconds
+                                        count++
+                                    }
                                 }
                             }
-                            out.ifEmpty {
-                                listOf(
-                                    com.intellitrip.ui.DepartureBoard.ScheduledDeparture(
-                                        tripId = stopTime.tripKey.tripId,
-                                        departure = com.intellitrip.ui.DepartureBoard.resolveServiceTime(scheduled, now, agencyZone),
-                                    ),
-                                )
-                            }
+                            out.distinctBy { it.tripId to it.departure }
                         }
                     }.sortedBy { it.departure }
                 },
@@ -650,7 +649,10 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                         }
                         if (dest != null) {
                             val dist = com.intellitrip.ui.DepartureBoard.metersBetween(fix.position, dest)
-                            if (dist < 100) com.intellitrip.ui.ArrivalCue.playIfAllowed(host.context, true)
+                            if (dist < 100 && fix.isHighAccuracy() && arrivalCuedJourneyId != journey.id) {
+                                arrivalCuedJourneyId = journey.id
+                                com.intellitrip.ui.ArrivalCue.playIfAllowed(host.context, true)
+                            }
                         }
                     }
                 }

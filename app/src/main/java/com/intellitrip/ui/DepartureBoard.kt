@@ -71,9 +71,8 @@ data class Departure(
  * - Times come from the feed's stop_times via the disk index, interpreted against the
  *   feed's service day. GTFS allows hours above 24, so a trip at 25:30 belongs to the
  *   following morning and is not wrapped into "01:30 tonight".
- * - A time is only labeled live when a realtime vehicle is actually reporting that
- *   trip. Everything else is "Schedule". Where the feed sends a real prediction delay
- *   this is the place it would be applied; until then the scheduled time stands.
+ * - A time is only labeled live when a matching trip is reporting AND a stop-specific
+ *   reported departure time exists. A vehicle position alone is not an ETA.
  */
 object DepartureBoard {
 
@@ -115,7 +114,7 @@ object DepartureBoard {
                 .map { scheduled ->
                     val trip = tripsByKey[scheduled.tripId]
                     val route = trip?.let { routesByKey[it.routeKey.routeId] }
-                    val live = liveTrips.contains(scheduled.tripId)
+                    val live = liveTrips.contains(scheduled.tripId) && scheduled.reportedTime != null
                     // A live vehicle replaces the timetable with what it reported.
                     val when_ = if (live && scheduled.reportedTime != null) {
                         scheduled.reportedTime
