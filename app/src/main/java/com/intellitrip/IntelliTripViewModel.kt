@@ -29,6 +29,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.Dispatchers
@@ -94,6 +95,8 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     private val savedPlaces = com.intellitrip.ui.SavedPlacesStore(host.filesRoot())
 
     private var locationJob: Job? = null
+    /** One audible arrival cue per selected journey, not per GPS callback. */
+    private var arrivalCuedJourneyId: String? = null
 
     private var refreshJob: Job? = null
 
@@ -646,7 +649,10 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                         }
                         if (dest != null) {
                             val dist = com.intellitrip.ui.DepartureBoard.metersBetween(fix.position, dest)
-                            if (dist < 100) com.intellitrip.ui.ArrivalCue.playIfAllowed(host.context, true)
+                            if (dist < 100 && fix.isPrecise() && arrivalCuedJourneyId != journey.id) {
+                                arrivalCuedJourneyId = journey.id
+                                com.intellitrip.ui.ArrivalCue.playIfAllowed(host.context, true)
+                            }
                         }
                     }
                 }
