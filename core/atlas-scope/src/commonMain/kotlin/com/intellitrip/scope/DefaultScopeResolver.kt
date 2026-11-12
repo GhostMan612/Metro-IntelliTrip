@@ -206,7 +206,7 @@ class DefaultScopeResolver(private val policy: ScopePolicy = ScopePolicy()) : Sc
         val lonDelta = meters / (111_320.0 * cos(center.lat * PI / 180.0).coerceAtLeast(0.01))
         return LatLngBounds(
             southWest = GeoPoint((center.lat - latDelta).coerceAtLeast(-90.0), center.lon - lonDelta),
-            northEast = GeoPoint((center.lat + latDelta).coerceAtLeast(0.0), center.lon + lonDelta),
+            northEast = GeoPoint((center.lat + latDelta).coerceAtMost(90.0), center.lon + lonDelta),
         )
     }
 }

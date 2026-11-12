@@ -13,8 +13,8 @@ The portable `core/atlas-*` modules publish to `build/atlas-maven` (group
 ```
 gradlew.bat publishAtlasToLocalRepo
 ```
-`atlas-map-android` (renderer) and `atlas-transit` (quarantined) are deliberately not
-published. Integration steps: docs/SDK_INTEGRATION.md.
+`atlas-map-android` (renderer) and the deleted legacy `atlas-transit` module are
+not published. Integration steps: docs/SDK_INTEGRATION.md.
 
 ## Test / lint
 ```
@@ -27,15 +27,14 @@ gradlew.bat :app:connectedDebugAndroidTest   # requires a connected device/emula
 The static GTFS parser can be verified against the live Metro Transit feed:
 ```
 curl -o gtfs-metro-transit.zip https://svc.metrotransit.org/mtgtfs/gtfs.zip
-gradlew.bat :core:atlas-gtfs-static:test --tests "*RealFeedSmokeTest" --rerun-tasks ^
-  -Dintellitrip.gtfs.fixture=gtfs-metro-transit.zip
+gradlew.bat -Dintellitrip.gtfs.fixture=%CD%\gtfs-metro-transit.zip :core:atlas-gtfs-static:jvmTest --tests "*RealFeedSmokeTest" --rerun-tasks
 ```
 Planner latency against the same feed, through the disk-index path the app uses:
 ```
-gradlew.bat :core:atlas-routing:test --tests "*RealFeedPlanTimeTest" --rerun-tasks ^
-  -Dintellitrip.gtfs.fixture=gtfs-metro-transit.zip
+gradlew.bat -Dintellitrip.gtfs.fixture=%CD%\gtfs-metro-transit.zip :core:atlas-routing:jvmTest --tests "*RealFeedPlanTimeTest" --rerun-tasks
 ```
-Both skip when the fixture is absent rather than passing silently.
+The tests may skip in optional local runs when no fixture is configured. In CI
+(or with an explicit fixture property), missing feed data fails the gate.
 
 ## JVM sample host
 ```
@@ -66,7 +65,9 @@ is required to build or run the app: no API keys, no accounts.
 Phases 00-09 are closed; `docs/blueprints/PHASE-09-sdk-extraction.md` records the
 post-freeze app completion work and the open items carried forward (live OTP
 verification, offline basemap package, RainViewer licensing,
-`core/atlas-transit` migration). Nothing in that list is claimed as done.
+`core/atlas-transit` migration, now superseded by ADR-014). See
+`docs/audits/2026-11-10-closure-audit.md` for the current release blockers and
+`docs/workchains/README.md` for deferred execution artifacts.
 
 ## Docs
 - Architecture: docs/ARCHITECTURE.md

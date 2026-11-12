@@ -40,17 +40,21 @@ class WebRenderBridgeTest {
     )
 
     @Test
-    fun emptyLayersAreOmitted() {
+    fun emptyLayersClearExistingSourceData() {
         val snap = snapshot().copy(vehicles = emptyList(), stops = emptyList(), shapeLines = emptyList())
         val payloads = snapshotToSources(snap)
-        assertTrue(payloads.isEmpty(), "empty snapshot must produce no source payloads, got $payloads")
+        assertEquals(WebLayer.entries.toList(), payloads.map { it.layer })
+        payloads.forEach {
+            assertTrue(it.geoJson.contains("\"FeatureCollection\""), "${it.layer} must remain a GeoJSON collection")
+            assertTrue(it.geoJson.contains("\"features\""), "${it.layer} must provide the empty features collection")
+        }
     }
 
     @Test
     fun payloadsCarryGeoJsonPerLayer() {
         val payloads = snapshotToSources(snapshot())
         val layers = payloads.map { it.layer }
-        assertEquals(listOf(WebLayer.VEHICLES, WebLayer.STOPS, WebLayer.SHAPES), layers)
+        assertEquals(WebLayer.entries.toList(), layers)
         payloads.forEach { assertTrue(it.geoJson.contains("\"FeatureCollection\""), "${it.layer} not GeoJSON") }
     }
 

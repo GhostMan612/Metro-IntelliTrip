@@ -90,7 +90,10 @@ shipping a tile extract would mean committing hundreds of megabytes.
    tilemaker --input minnesota-latest.osm.pbf --output metro.mbtiles \
              --config metro.config.json
    ```
-   Then install the package in-app (Data sheet → Offline basemap).
+   The package-management engine exists, but **there is not yet an in-app
+   basemap import/install control**. This is deferred to the offline basemap
+   workchain; do not treat a downloaded file as installed until the Android
+   picker, validator, style and renderer binding are implemented.
 3. **Download a free pack.** [Protomaps](https://docs.protomaps.com) publishes
    free `.pmtiles` basemaps built from OSM. No key required.
 

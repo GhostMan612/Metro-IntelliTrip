@@ -102,6 +102,10 @@ class AtlasHost(val context: Context) {
      * download the full bundle. Returns true if seeded.
      */
     fun seedDebugFeedIfNeeded(): Boolean {
+        // Bundled synthetic schedules are only acceptable in an installed debug app.
+        // Never put a miniature test feed into production snapshot storage.
+        val debug = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (!debug) return false
         if (snapshotStore.activeSnapshot(feedId) != null) return false
         val payload = runCatching {
             context.assets.open("offline/debug-gtfs.zip").use { it.readBytes() }

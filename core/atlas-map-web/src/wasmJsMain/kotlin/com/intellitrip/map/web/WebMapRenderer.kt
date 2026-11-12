@@ -79,12 +79,10 @@ private fun applyRadarLayer(map: JsAny, tileUrl: String, opacity: Double): JsAny
     js("""(() => {
         const m = map;
         const existing = m.getSource('radar');
-        if (existing) {
-            m.removeLayer('radar-layer');
-        } else {
-            m.addSource('radar', { type: 'raster', tiles: [tileUrl], tileSize: 256 });
-            m.addLayer({ id: 'radar-layer', type: 'raster', source: 'radar', paint: { 'raster-opacity': opacity } });
-        }
+        if (m.getLayer('radar-layer')) m.removeLayer('radar-layer');
+        if (existing) m.removeSource('radar');
+        m.addSource('radar', { type: 'raster', tiles: [tileUrl], tileSize: 256 });
+        m.addLayer({ id: 'radar-layer', type: 'raster', source: 'radar', paint: { 'raster-opacity': opacity } });
         return m;
     })()""")
 

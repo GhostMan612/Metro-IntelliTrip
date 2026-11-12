@@ -37,9 +37,10 @@ jobs:
       - name: Real-feed verification (Metro Transit GTFS)
         run: |
           curl -sSf -o gtfs-metro-transit.zip https://svc.metrotransit.org/mtgtfs/gtfs.zip
+          test -s gtfs-metro-transit.zip  # a missing/empty fixture must fail the gate
           ls -lh gtfs-metro-transit.zip
-          bash ./gradlew :core:atlas-gtfs-static:test --tests "*RealFeedSmokeTest" --rerun-tasks -Dintellitrip.gtfs.fixture=gtfs-metro-transit.zip --console=plain
-          bash ./gradlew :core:atlas-routing:test --tests "*RealFeedPlanTimeTest" --rerun-tasks -Dintellitrip.gtfs.fixture=gtfs-metro-transit.zip --console=plain
+          bash ./gradlew -Dintellitrip.gtfs.fixture="$GITHUB_WORKSPACE/gtfs-metro-transit.zip" :core:atlas-gtfs-static:jvmTest --tests "*RealFeedSmokeTest" --rerun-tasks --console=plain
+          bash ./gradlew -Dintellitrip.gtfs.fixture="$GITHUB_WORKSPACE/gtfs-metro-transit.zip" :core:atlas-routing:jvmTest --tests "*RealFeedPlanTimeTest" --rerun-tasks --console=plain
 
       - name: Android lint
         run: bash ./gradlew lint --console=plain
@@ -52,7 +53,9 @@ jobs:
 
   android-tests:
     name: Instrumented tests
-    runs-on: ubuntu-latest
+    # ubuntu-latest resolved to Ubuntu 26.04 during the emulator ZIP failures.
+    # Keep instrumented tests on the proven 24.04 image until SDK compatibility is verified.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 

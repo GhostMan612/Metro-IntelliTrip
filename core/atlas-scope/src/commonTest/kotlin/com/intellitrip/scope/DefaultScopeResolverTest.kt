@@ -84,6 +84,15 @@ class DefaultScopeResolverTest {
     }
 
     @Test
+    fun boundsAroundWorksSouthOfEquator() {
+        val center = GeoPoint(-33.86, 151.21)
+        val bounds = resolver.boundsAround(center, 1200.0)
+        assertTrue(bounds.southWest.lat < center.lat)
+        assertTrue(bounds.northEast.lat > center.lat)
+        assertTrue(bounds.northEast.lat < 0.0)
+    }
+
+    @Test
     fun viewportFocusUsesViewportForCameraAndData() {
         val bounds = LatLngBounds(GeoPoint(44.90, -93.40), GeoPoint(45.05, -93.10))
         val resolution = resolver.resolve(Focus.Viewport(bounds))
