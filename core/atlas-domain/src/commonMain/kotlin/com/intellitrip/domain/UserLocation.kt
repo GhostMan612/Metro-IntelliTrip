@@ -31,8 +31,12 @@ data class UserLocation(
      * This is the only question that may block camera movement. An approximate
      * fix that is one second old is still the rider's best current position.
      */
-    fun isFresh(now: Instant = Clock.System.now()): Boolean =
-        (now - timestamp).inWholeSeconds <= FRESH_SECONDS
+    fun isFresh(now: Instant = Clock.System.now()): Boolean {
+        val age = now - timestamp
+        // A future clock or corrupted provider timestamp is not a fresh fix.
+        // Allow a small device/provider clock skew, but never an unbounded one.
+        return age >= (-MAX_FUTURE_SKEW_SECONDS).seconds && age <= FRESH_SECONDS.seconds
+    }
 
     /**
      * Whether the fix is tight enough to describe as "you are here".
@@ -42,7 +46,8 @@ data class UserLocation(
      * approximate.
      */
     fun isHighAccuracy(now: Instant = Clock.System.now()): Boolean =
-        isFresh(now) && accuracyMeters <= HIGH_ACCURACY_METERS
+        isFresh(now) && accuracyMeters.isFinite() &&
+            accuracyMeters >= 0.0 && accuracyMeters <= HIGH_ACCURACY_METERS
 
     /**
      * Whether the camera may move to this fix.
@@ -54,7 +59,9 @@ data class UserLocation(
 
     /** Text describing the fix honestly, distinguishing age from accuracy. */
     fun describe(now: Instant = Clock.System.now()): String = when {
+        timestamp > now + MAX_FUTURE_SKEW_SECONDS.seconds -> "Location timestamp invalid"
         !isFresh(now) -> "Last known location, ${describeAge(now)}"
+        !accuracyMeters.isFinite() || accuracyMeters < 0.0 -> "Location accuracy unavailable"
         accuracyMeters <= HIGH_ACCURACY_METERS -> "Location +/-${accuracyMeters.toInt()} m"
         else -> "Approximate location, +/-${describeAccuracy()} m"
     }
@@ -78,5 +85,8 @@ data class UserLocation(
 
         /** Beyond a minute the user has plausibly moved. */
         const val FRESH_SECONDS = 60L
+
+        /** Tolerated GPS/provider clock difference; anything later is invalid. */
+        const val MAX_FUTURE_SKEW_SECONDS = 5L
     }
 }
