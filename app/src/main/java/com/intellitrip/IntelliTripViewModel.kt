@@ -258,6 +258,12 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                 is ProviderResult.Success -> update {
                     it.copy(weatherAlerts = result.data, status = "Weather alerts: ${result.data.size}")
                 }
+                is ProviderResult.PartialResult -> update {
+                    it.copy(
+                        weatherAlerts = result.data,
+                        status = "Weather alerts: ${result.data.size} (partial coverage: ${result.missing.joinToString("; ")})",
+                    )
+                }
 
                 else -> update { it.copy(status = "Weather alerts unavailable: ${describe(result)}") }
             }

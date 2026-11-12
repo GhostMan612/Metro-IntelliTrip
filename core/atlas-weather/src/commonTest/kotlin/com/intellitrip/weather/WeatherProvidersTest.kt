@@ -207,6 +207,43 @@ class WeatherProvidersTest {
     }
 
     @Test
+    fun regionalNwsPartialCoverageIsNotReportedAsClearOrFullySuccessful() {
+        runTest {
+            var requests = 0
+            val provider = NwsWeatherAlertProvider(
+                http = WeatherHttpClient { _, _ ->
+                    requests++
+                    if (requests <= 2) throw WeatherNetworkException("one cell unavailable")
+                    alertsPayload.toByteArray()
+                },
+                context = context("nws", "IntelliTrip/0.1"),
+            )
+            val area = com.intellitrip.domain.LatLngBounds(
+                GeoPoint(44.94, -93.30), GeoPoint(45.06, -93.16),
+            )
+            val result = provider.alerts(area).first()
+            assertIs<com.intellitrip.contracts.ProviderResult.PartialResult<List<com.intellitrip.domain.WeatherAlert>>>(result)
+            assertEquals(9, requests)
+            assertEquals(1, result.data.size)
+            assertTrue(result.missing.single().contains("2 of 9"))
+        }
+    }
+
+    @Test
+    fun regionalNwsAllFailedIsUnavailableNotAFalseEmptySuccess() {
+        runTest {
+            val provider = NwsWeatherAlertProvider(
+                http = WeatherHttpClient { _, _ -> throw WeatherNetworkException("offline") },
+                context = context("nws", "IntelliTrip/0.1"),
+            )
+            val area = com.intellitrip.domain.LatLngBounds(
+                GeoPoint(44.94, -93.30), GeoPoint(45.06, -93.16),
+            )
+            assertIs<com.intellitrip.contracts.ProviderResult.NetworkFailure>(provider.alerts(area).first())
+        }
+    }
+
+    @Test
     fun weatherLayersComposeBelowTransit() {
         val frame = RadarFrameAlias(
             providerId = "rainviewer",
