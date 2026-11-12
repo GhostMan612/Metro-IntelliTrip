@@ -76,18 +76,6 @@ object WebDemo {
         return AtlasEngine(feedId, AtlasProviders(routing = planner), offlineAvailable = false)
     }
 
-    /**
-     * Demo radar overlay (RainViewer tilecache, latest PAST frame). Mirrors
-     * `RadarFrame.tileUrlTemplate`; providers on the shell would convert a
-     * live `RadarFrame` directly.
-     */
-    fun demoRadarOverlay(): com.intellitrip.map.web.RadarOverlay {
-        val time = departAt.toEpochMilliseconds() / 1000L
-        return com.intellitrip.map.web.RadarOverlay(
-            "https://tilecache.rainviewer.com/v2/radar/$time/256/{z}/{x}/{y}/2/1_1.png",
-        )
-    }
-
     /** Plan between two demo stops (shell origin/destination controls). */
     suspend fun demoPlanBetween(
         origin: GeoPoint,

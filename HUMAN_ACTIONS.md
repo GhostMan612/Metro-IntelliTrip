@@ -76,29 +76,42 @@ routing will serve stale schedules. Set a monthly reminder.
 
 ## Optional 2: Offline basemap package
 
-The app is offline-capable for **data** today (transit network, planning) but the
-**basemap** still needs the network, because no offline tile package is installed.
-`OfflineBasemapStore` exists to manage packages; nothing is bundled because
-shipping a tile extract would mean committing hundreds of megabytes.
+The app is offline-capable for **data** (transit network, planning) and can now
+render an **offline basemap** from an imported PMTiles v3 archive. Nothing is
+bundled because shipping a tile extract would mean committing hundreds of
+megabytes.
+
+### Import
+
+In the app, open **More -> Offline maps -> Import offline basemap** and select
+**both** files:
+
+1. A `.pmtiles` archive (PMTiles v3). MBTiles is not accepted; convert it first:
+   ```
+   pmtiles convert metro.mbtiles metro.pmtiles
+   ```
+2. A MapLibre style JSON (version 8) with at least one `pmtiles://` source. The
+   imported style's labels, colours and attribution are what the app renders.
+
+Limits: archive up to 2 GiB, style up to 2 MiB. The importer validates the
+archive header, zoom range and bounds, hashes the archive, installs it
+atomically, and removes the previous package only after the new manifest commits.
+An archive that fails validation is rejected without replacing the current map.
 
 ### Free routes
 
-1. **Do nothing.** Offline shows transit data over a blank/gray map. Legitimate.
-2. **Generate your own.** Download a Geofabrik metro extract and build vector tiles
-   with [tilemaker](https://github.com/systemed/tilemaker), then:
-   ```
-   tilemaker --input minnesota-latest.osm.pbf --output metro.mbtiles \
-             --config metro.config.json
-   ```
-   The package-management engine exists, but **there is not yet an in-app
-   basemap import/install control**. This is deferred to the offline basemap
-   workchain; do not treat a downloaded file as installed until the Android
-   picker, validator, style and renderer binding are implemented.
+1. **Do nothing.** The online CARTO basemap remains in use.
+2. **Generate your own.** Download a Geofabrik metro extract, build vector tiles
+   with [tilemaker](https://github.com/systemed/tilemaker), convert with
+   `pmtiles convert`, and write a style JSON whose source URL is
+   `pmtiles://metro.pmtiles`.
 3. **Download a free pack.** [Protomaps](https://docs.protomaps.com) publishes
-   free `.pmtiles` basemaps built from OSM. No key required.
+   free `.pmtiles` basemaps and styles built from OSM. No key required.
 
 There is deliberately no step 4: every commercial tile vendor (MapTiler, Mapbox,
 Stadia) requires a signup and a billing card, which the free constraint rules out.
+You are responsible for the licence and attribution of any archive/style you
+import; the app does not bundle or redistribute them.
 
 ---
 

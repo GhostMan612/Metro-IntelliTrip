@@ -7,6 +7,7 @@ import com.intellitrip.domain.AlertSeverity
 import com.intellitrip.domain.DataScope
 import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.GeoPoint
+import com.intellitrip.domain.GeoMath
 import com.intellitrip.domain.GtfsServiceTime
 import com.intellitrip.domain.RouteKey
 import com.intellitrip.domain.ScheduleRelationship
@@ -153,14 +154,16 @@ class GtfsRealtimeMapper(
     }
 
     private fun alertSeverity(value: Int?): AlertSeverity = when (value) {
-        SEVERITY_HIGH -> AlertSeverity.SEVERE
-        null, SEVERITY_UNSET -> AlertSeverity.INFO
-        else -> AlertSeverity.WARNING
+        SEVERITY_SEVERE -> AlertSeverity.SEVERE
+        SEVERITY_WARNING -> AlertSeverity.WARNING
+        else -> AlertSeverity.INFO
     }
 
     private companion object {
-        const val SEVERITY_HIGH = 1
-        const val SEVERITY_UNSET = 0
+        // GTFS-Realtime Alert.SeverityLevel: UNKNOWN_SEVERITY=1, INFO=2,
+        // WARNING=3, SEVERE=4. The generated bindings use this numbering.
+        const val SEVERITY_SEVERE = 4
+        const val SEVERITY_WARNING = 3
     }
 }
 
@@ -266,16 +269,7 @@ object RealtimeScopeFilter {
             routeOk && tripOk && vehicleOk && boundsOk && radiusOk
         }
 
-    private fun haversineMeters(a: GeoPoint, b: GeoPoint): Double {
-        fun toRadians(deg: Double) = deg * PI / 180.0
-        val earthRadius = 6_371_000.0
-        val dLat = toRadians(b.lat - a.lat)
-        val dLon = toRadians(b.lon - a.lon)
-        val h = sin(dLat / 2) * sin(dLat / 2) +
-            cos(toRadians(a.lat)) * cos(toRadians(b.lat)) *
-            sin(dLon / 2) * sin(dLon / 2)
-        return 2 * earthRadius * asin(sqrt(h))
-    }
+    private fun haversineMeters(a: GeoPoint, b: GeoPoint): Double = GeoMath.distanceMeters(a, b)
 }
 
 

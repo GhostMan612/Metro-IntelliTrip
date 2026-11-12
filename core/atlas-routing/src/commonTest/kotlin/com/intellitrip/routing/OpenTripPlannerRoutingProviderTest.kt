@@ -4,6 +4,9 @@ import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.JourneyOption
 import com.intellitrip.domain.Leg
+import com.intellitrip.domain.RouteKey
+import com.intellitrip.domain.StopKey
+import com.intellitrip.domain.TripKey
 import com.intellitrip.domain.TripPlanRequest
 import kotlinx.datetime.Instant
 import kotlin.test.Test
@@ -208,6 +211,64 @@ class OpenTripPlannerRoutingProviderTest {
         // The transit leg has no `to` lon, so it cannot be represented; the
         // itinerary is dropped rather than emitted with fabricated coordinates.
         assertTrue(successJourneys(body).isEmpty())
+    }
+
+    @Test
+    fun networkResolverMapsOtpIdsToLocalRouteStopAndTripKeys() {
+        val body = """
+            {"plan":{"itineraries":[{
+              "id":"it-local","startTime":1797090000000,"endTime":1797091800000,
+              "legs":[
+                {"startTime":1797090000000,"endTime":1797090060000,"distance":{"value":220.5},
+                 "transitLeg":false,"mode":"WALK",
+                 "from":{"stopId":"S1","name":"First","lat":44.9778,"lon":-93.2650},
+                 "to":{"stopId":"S2","name":"Second","lat":44.9860,"lon":-93.2650}},
+                {"startTime":1797090120000,"endTime":1797091500000,"transitLeg":true,"mode":"BUS",
+                 "tripId":"T1",
+                 "from":{"stopId":"S2","name":"Second","lat":44.9860,"lon":-93.2650},
+                 "to":{"stopId":"S3","name":"Third","lat":44.9950,"lon":-93.2650},
+                 "route":{"id":"901","shortName":"A","longName":"Blue Line"}}
+              ]}]}}
+        """.trimIndent()
+        val result = OpenTripPlannerRoutingProvider.parsePlan(
+            body = body,
+            request = otpRequest,
+            feedId = otpFeedId,
+            resolver = OtpIdentityResolver(RoutingFixtures.network),
+        )
+        assertTrue(result is com.intellitrip.contracts.ProviderResult.Success, "${result::class.simpleName}")
+        val transit = result.data.single().legs.filterIsInstance<Leg.Transit>().single()
+        assertEquals(RouteKey(otpFeedId, "901"), transit.routeKey)
+        assertEquals(TripKey(otpFeedId, "T1"), transit.tripKey)
+        assertEquals(StopKey(otpFeedId, "S2"), transit.fromStopKey)
+        assertEquals(StopKey(otpFeedId, "S3"), transit.toStopKey)
+    }
+
+    @Test
+    fun unresolvedOtpIdsStayFeedScopedRatherThanUsingDisplayNames() {
+        val body = """
+            {"plan":{"itineraries":[{
+              "id":"it-remote","startTime":1797090000000,"endTime":1797091800000,
+              "legs":[
+                {"startTime":1797090120000,"endTime":1797091500000,"transitLeg":true,"mode":"BUS",
+                 "tripId":"remote-trip",
+                 "from":{"stopId":"remote-a","name":"Remote A","lat":44.9,"lon":-93.2},
+                 "to":{"stopId":"remote-b","name":"Remote B","lat":44.99,"lon":-93.2},
+                 "route":{"id":"remote-route","shortName":"ZZ","longName":"Unknown"}}
+              ]}]}}
+        """.trimIndent()
+        val result = OpenTripPlannerRoutingProvider.parsePlan(
+            body = body,
+            request = otpRequest,
+            feedId = otpFeedId,
+            resolver = OtpIdentityResolver(RoutingFixtures.network),
+        )
+        assertTrue(result is com.intellitrip.contracts.ProviderResult.Success, "${result::class.simpleName}")
+        val transit = result.data.single().legs.filterIsInstance<Leg.Transit>().single()
+        assertEquals(RouteKey(otpFeedId, "ZZ"), transit.routeKey)
+        assertEquals(TripKey(otpFeedId, "remote-trip"), transit.tripKey)
+        assertEquals(StopKey(otpFeedId, "remote-a"), transit.fromStopKey)
+        assertEquals(StopKey(otpFeedId, "remote-b"), transit.toStopKey)
     }
 
     @Test

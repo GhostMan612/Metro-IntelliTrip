@@ -11,6 +11,7 @@ import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.FeedMetadata
 import com.intellitrip.domain.Frequency
 import com.intellitrip.domain.GeoPoint
+import com.intellitrip.domain.GeoMath
 import com.intellitrip.domain.GtfsServiceTime
 import com.intellitrip.domain.JourneyOption
 import com.intellitrip.domain.Leg
@@ -677,14 +678,7 @@ fun GtfsServiceTime.instantOn(date: LocalDate, zone: TimeZone = TimeZone.of("Ame
     return startOfDay + seconds.seconds
 }
 
-fun haversineMeters(a: GeoPoint, b: GeoPoint): Double {
-    val earthRadius = 6_371_000.0
-    val dLat = (b.lat - a.lat) * PI / 180.0
-    val dLon = (b.lon - a.lon) * PI / 180.0
-    val h = sin(dLat / 2) * sin(dLat / 2) +
-        cos(a.lat * PI / 180.0) * cos(b.lat * PI / 180.0) * sin(dLon / 2) * sin(dLon / 2)
-    return 2 * earthRadius * asin(sqrt(h))
-}
+fun haversineMeters(a: GeoPoint, b: GeoPoint): Double = GeoMath.distanceMeters(a, b)
 
 internal fun near(a: Double, b: Double, tolerance: Double = 1e-6): Boolean = abs(a - b) < tolerance
 

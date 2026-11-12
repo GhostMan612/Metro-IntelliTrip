@@ -17,7 +17,15 @@ data class WeatherLayerState(
 sealed interface WeatherLayer {
     data class RadarTiles(val frame: RadarFrame, val opacity: Double) : WeatherLayer
 
-    data class AlertMarkers(val alerts: List<WeatherAlert>) : WeatherLayer
+    /**
+     * Alerts for the summary surface.
+     *
+     * Deliberately not "markers": an NWS alert is a polygon or a county area, and
+     * this provider does not retain that geometry. The map therefore draws
+     * nothing for alerts; the list is the complete representation until a
+     * geometry contract and render layer land.
+     */
+    data class AlertSummary(val alerts: List<WeatherAlert>) : WeatherLayer
 }
 
 /** Layer order mirrors the documented composition: basemap -> weather -> transit. */
@@ -42,7 +50,7 @@ object WeatherLayerComposer {
             layers += LayerSlot.RADAR to WeatherLayer.RadarTiles(radarFrame, state.radarOpacity)
         }
         if (state.alertsEnabled && alerts.isNotEmpty()) {
-            layers += LayerSlot.ALERTS to WeatherLayer.AlertMarkers(alerts)
+            layers += LayerSlot.ALERTS to WeatherLayer.AlertSummary(alerts)
         }
         return ComposedLayers(layers.sortedBy { it.first.order })
     }

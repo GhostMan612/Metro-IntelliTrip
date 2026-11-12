@@ -14,6 +14,9 @@ jobs:
   build:
     name: Build and verify
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -51,11 +54,22 @@ jobs:
       - name: Portable JVM sample host
         run: bash ./gradlew :sample:host:run --console=plain
 
+      # The consumer is a separate Gradle build that can only see the published
+      # Maven artifacts, not the source modules. It is the check that catches an
+      # incomplete POM or an accidental Android/build-time dependency leak.
+      - name: Published SDK external consumer
+        run: |
+          bash ./gradlew publishAtlasToLocalRepo --console=plain
+          bash ./gradlew -p sample/sdk-consumer run --console=plain
+
   android-tests:
     name: Instrumented tests
     # ubuntu-latest resolved to Ubuntu 26.04 during the emulator ZIP failures.
     # Keep instrumented tests on the proven 24.04 image until SDK compatibility is verified.
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -75,11 +89,31 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # The runner action downloads the emulator itself, and a truncated package
+      # previously surfaced as "Error reading Zip content from a SeekableByteChannel"
+      # with the emulator never launching. Install the current stable emulator first
+      # with retries; the action's install step then sees a complete local package
+      # and skips the download.
+      - name: Install emulator with retry
+        run: |
+          SDKMANAGER="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          "$SDKMANAGER" --version
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          for attempt in 1 2 3; do
+            if "$SDKMANAGER" --install "emulator" "platform-tools" "system-images;android-34;default;x86_64"; then
+              exit 0
+            fi
+            echo "emulator install attempt $attempt failed; retrying"
+            sleep 15
+          done
+          exit 1
+
       - name: Run instrumented tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
           arch: x86_64
           profile: pixel_6
+          emulator-boot-timeout: 900
           script: bash ./gradlew :app:connectedDebugAndroidTest --console=plain
           disable-animations: true

@@ -5,6 +5,7 @@ import com.intellitrip.domain.FeedMetadata
 import com.intellitrip.domain.Vehicle
 import com.intellitrip.domain.VehicleKey
 import com.intellitrip.domain.VehicleType
+import com.intellitrip.gtfs.PlatformFileStore
 import com.intellitrip.gtfs.StaticFeedSnapshotStore
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
@@ -24,7 +25,9 @@ class OfflineRegistryTest {
     private val now = Instant.parse("2026-10-09T12:00:00Z")
 
     private val payload: ByteArray = GtfsFixtureBytes.validFeed()
-    private val store = StaticFeedSnapshotStore(createTempDirectory("offline-store"))
+    private val store = StaticFeedSnapshotStore(
+        PlatformFileStore(createTempDirectory("offline-store").toString()),
+    )
 
     private fun registry(): OfflineRegistry = OfflineRegistry(JvmOfflineSnapshotPort(store))
 

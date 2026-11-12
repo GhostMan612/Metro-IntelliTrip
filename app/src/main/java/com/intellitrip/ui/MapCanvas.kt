@@ -47,11 +47,21 @@ fun MapCanvas(
         { _, _ -> com.intellitrip.map.MapSelection.None },
     /** Publishes the renderer so the host can hit-test against it. */
     onRendererCreated: (MapLibreMapRenderer?) -> Unit = {},
+    /**
+     * Basemap to draw. Null keeps the CARTO default. An installed offline
+     * package supplies a style whose sources point at a local archive.
+     */
+    basemapStyle: com.intellitrip.map.BasemapStyle? = null,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val isDark = com.intellitrip.ui.theme.LocalIsDark.current
     var renderer by remember { mutableStateOf<MapLibreMapRenderer?>(null) }
     var ready by remember { mutableStateOf(false) }
+    // setStyle replaces the whole style, dropping every source and layer. Bumping
+    // this after each style load makes the effects below reinstall data instead of
+    // assuming the previous style survived.
+    var styleGeneration by remember { mutableStateOf(0) }
+    val effectiveBasemap = basemapStyle ?: CartoBasemapProvider.style(isDark)
 
     val mapView = remember {
         MapView(context).apply {
@@ -70,17 +80,27 @@ fun MapCanvas(
     val rendererCreated = remember(isDark) {
         MapLibreMapRenderer(
             mapView = mapView,
-            onReady = { ready = true },
+            onReady = {
+                ready = true
+                styleGeneration++
+            },
             onCameraMoved = onViewportChanged,
             onMapTapped = { lat, lon -> onMapTap(lat, lon) },
         ).also { created ->
-            created.applyBasemap(CartoBasemapProvider.style(isDark))
             created.moveCamera(
                 com.intellitrip.DEFAULT_LAT,
                 com.intellitrip.DEFAULT_LON,
                 11.0,
             )
         }
+    }
+
+    // One effect so the first composition and a later basemap change follow the
+    // same path. Clearing `ready` before setStyle keeps render effects from
+    // touching a style whose layers are gone; onReady raises it again.
+    LaunchedEffect(rendererCreated, effectiveBasemap) {
+        ready = false
+        rendererCreated.applyBasemap(effectiveBasemap)
     }
 
     AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
@@ -142,7 +162,7 @@ fun MapCanvas(
     // Previous snapshot is retained so the pipeline can interpolate between polls
     // at frame cadence (V2 glide) instead of teleporting every 15s.
     var previousVehicles by remember { mutableStateOf<List<com.intellitrip.domain.Vehicle>>(emptyList()) }
-    LaunchedEffect(renderer, ready, state.vehicles, state.staticFeed, state.scope) {
+    LaunchedEffect(renderer, ready, styleGeneration, state.vehicles, state.staticFeed, state.scope) {
         val active = renderer ?: return@LaunchedEffect
         if (!ready) return@LaunchedEffect
         val feed = state.staticFeed
@@ -170,7 +190,7 @@ fun MapCanvas(
         previousVehicles = state.vehicles
     }
     // 60fps glide between polls (V2): re-render interpolation without refetch.
-    LaunchedEffect(renderer, ready, state.vehicles, state.scope) {
+    LaunchedEffect(renderer, ready, styleGeneration, state.vehicles, state.scope) {
         val active = renderer ?: return@LaunchedEffect
         if (!ready || state.vehicles.isEmpty()) return@LaunchedEffect
         val feed = state.staticFeed ?: return@LaunchedEffect
@@ -204,9 +224,13 @@ fun MapCanvas(
     // initial composition would snap the view to the System extent on every cold
     // start, when the app already opens on a sensible default framing.
     var cameraFramed by remember { mutableStateOf(false) }
-    LaunchedEffect(renderer, ready, state.scope) {
+    LaunchedEffect(renderer, ready, styleGeneration, state.scope, state.focus) {
         val active = renderer ?: return@LaunchedEffect
         if (!ready) return@LaunchedEffect
+        // A followed vehicle is framed by followTarget below. Running the scope
+        // camera too would start two animations to the same place and let the
+        // slower one win after the vehicle has already moved on.
+        if (state.focus is com.intellitrip.domain.Focus.Vehicle) return@LaunchedEffect
         val camera = state.scope?.cameraScope ?: return@LaunchedEffect
         if (!cameraFramed) {
             cameraFramed = true
@@ -220,7 +244,17 @@ fun MapCanvas(
         )
     }
 
-    LaunchedEffect(renderer, ready, state.userLocation) {
+    // The followed vehicle owns the camera while a fresh fix exists. A null
+    // target (missing or stale report) deliberately leaves the camera where it
+    // is; VehicleFollow has already explained the pause in the UI.
+    LaunchedEffect(renderer, ready, styleGeneration, state.followTarget) {
+        val active = renderer ?: return@LaunchedEffect
+        if (!ready) return@LaunchedEffect
+        val target = state.followTarget ?: return@LaunchedEffect
+        active.moveCamera(target.lat, target.lon, FOLLOW_VEHICLE_ZOOM)
+    }
+
+    LaunchedEffect(renderer, ready, styleGeneration, state.userLocation) {
         val active = renderer ?: return@LaunchedEffect
         if (!ready) return@LaunchedEffect
         // A null location clears the layer; the renderer takes an empty collection
@@ -230,7 +264,7 @@ fun MapCanvas(
         )
     }
 
-    LaunchedEffect(renderer, ready, routeGeometry) {
+    LaunchedEffect(renderer, ready, styleGeneration, routeGeometry) {
         val active = renderer ?: return@LaunchedEffect
         if (!ready) return@LaunchedEffect
         if (routeGeometry.isEmpty()) {
@@ -242,7 +276,7 @@ fun MapCanvas(
         }
     }
 
-    LaunchedEffect(renderer, ready, state.radarFrame, state.radarEnabled, state.weatherAlerts) {
+    LaunchedEffect(renderer, ready, styleGeneration, state.radarFrame, state.radarEnabled, state.weatherAlerts) {
         val active = renderer ?: return@LaunchedEffect
         if (!ready) return@LaunchedEffect
         val composed = WeatherLayerComposer.compose(
@@ -277,13 +311,15 @@ fun MapCanvas(
             when (layer) {
                 is WeatherLayer.RadarTiles ->
                     active.applyRadar(layer.frame.tileUrlTemplate, layer.opacity.toFloat())
-                // NWS alerts are areas, not points; they surface in the status panel
-                // rather than as fabricated markers.
-                is WeatherLayer.AlertMarkers -> Unit
+                // NWS alerts are areas, not points; they surface in the list and
+                // status panel rather than as fabricated markers.
+                is WeatherLayer.AlertSummary -> Unit
             }
         }
     }
 }
+
+private const val FOLLOW_VEHICLE_ZOOM = 15.0
 
 private fun fallbackBounds(): LatLngBounds = LatLngBounds(
     GeoPoint(com.intellitrip.DEFAULT_LAT - 0.25, com.intellitrip.DEFAULT_LON - 0.35),

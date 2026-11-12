@@ -29,6 +29,15 @@ actual class OfflineFileStore actual constructor(rootDir: String) {
     actual fun readBytes(path: String): ByteArray =
         files[normalizePath(path)] ?: throw IllegalArgumentException("no such file: $path")
 
+    actual fun readRange(path: String, offset: Long, length: Int): ByteArray {
+        require(offset >= 0L) { "offset must be non-negative" }
+        require(length >= 0) { "length must be non-negative" }
+        val bytes = readBytes(path)
+        if (offset >= bytes.size || length == 0) return ByteArray(0)
+        val end = minOf(bytes.size.toLong(), offset + length.toLong()).toInt()
+        return bytes.copyOfRange(offset.toInt(), end)
+    }
+
     actual fun writeText(path: String, text: String) {
         files[normalizePath(path)] = text.encodeToByteArray()
     }
@@ -46,6 +55,16 @@ actual class OfflineFileStore actual constructor(rootDir: String) {
             ?: throw IllegalArgumentException("no such file: $source")
         files[normalizePath(dest)] = bytes
     }
+
+    actual fun move(source: String, dest: String) {
+        val from = normalizePath(source)
+        val to = normalizePath(dest)
+        val bytes = files.remove(from) ?: throw IllegalArgumentException("no such file: $source")
+        files[to] = bytes
+    }
+
+    /** The wasm store is in-memory; there is no browser-addressable file URI. */
+    actual fun fileUri(path: String): String? = null
 
     actual fun size(path: String): Long =
         (files[normalizePath(path)] ?: throw IllegalArgumentException("no such file: $path")).size.toLong()

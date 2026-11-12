@@ -16,6 +16,7 @@ import com.intellitrip.domain.StopKey
 import com.intellitrip.domain.TripKey
 import com.intellitrip.domain.TripPlanRequest
 import com.intellitrip.domain.TripUpdate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -45,24 +46,47 @@ class OpenTripPlannerRoutingProvider(
     private val transport: RoutingTransport,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val agencyZone: TimeZone = TimeZone.of("America/Chicago"),
+    /**
+     * Static network used to translate OTP entity ids back to local keys.
+     * Null keeps the adapter usable as a standalone remote provider; callers then
+     * receive raw OTP ids wrapped in feed-scoped keys.
+     */
+    network: RoutingNetwork? = null,
     override val providerId: String = "open-trip-planner",
 ) : RoutingProvider {
+
+    private val identityResolver: OtpIdentityResolver? =
+        network?.let { OtpIdentityResolver(it) }
 
     override suspend fun plan(request: TripPlanRequest): ProviderResult<List<JourneyOption>> {
         val url = planUrl(request)
         val body = try {
             withContext(ioDispatcher) { transport.get(url) }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             return ProviderResult.NetworkFailure(ProviderError("Routing service unreachable", e))
         }
-        return parsePlan(body, request, feedId)
+        return parsePlan(body, request, feedId, resolver = identityResolver)
     }
 
     internal fun planUrl(request: TripPlanRequest): String {
         val from = "${request.origin.lat},${request.origin.lon}"
         val to = "${request.destination.lat},${request.destination.lon}"
-        val builder = StringBuilder(baseUrl.trimEnd('/'))
-            .append("/otp/routers/default/plan?from=")
+        // Accept the deployment root, `/otp`, the router root, or a complete plan
+        // endpoint. The documented deployment value is `https://host/otp`, while
+        // OTP's own default path is `/otp/routers/default/plan`; supporting both
+        // avoids a silent `.../otp/otp/...` 404.
+        val trimmed = baseUrl.trimEnd('/')
+        val planPath = when {
+            trimmed.endsWith("/plan") -> ""
+            trimmed.endsWith("/otp/routers/default") -> "/plan"
+            trimmed.endsWith("/otp") -> "/routers/default/plan"
+            else -> "/otp/routers/default/plan"
+        }
+        val builder = StringBuilder(trimmed)
+            .append(planPath)
+            .append("?from=")
             .append(urlEncode(from))
             .append("&to=")
             .append(urlEncode(to))
@@ -106,6 +130,7 @@ class OpenTripPlannerRoutingProvider(
             request: TripPlanRequest,
             feedId: FeedId = FeedId("metro-transit-regional"),
             now: Instant = Clock.System.now(),
+            resolver: OtpIdentityResolver? = null,
         ): ProviderResult<List<JourneyOption>> {
             val root = try {
                 JsonValue.parse(body)
@@ -117,7 +142,7 @@ class OpenTripPlannerRoutingProvider(
                     ProviderError("Routing response had no plan envelope"),
                 )
             val journeys: List<JourneyOption> = envelope.array("itineraries")
-                .mapNotNull { mapItinerary(it, feedId, now) }
+                .mapNotNull { mapItinerary(it, feedId, now, resolver) }
             return ProviderResult.Success(journeys, FreshnessMetadata(now, now, Duration.ZERO, "open-trip-planner"))
         }
 
@@ -126,8 +151,9 @@ class OpenTripPlannerRoutingProvider(
             itinerary: JsonValue,
             feedId: FeedId,
             now: Instant,
+            resolver: OtpIdentityResolver?,
         ): JourneyOption? {
-            val legs = itinerary.array("legs").mapNotNull { mapLeg(it, feedId, now) }
+            val legs = itinerary.array("legs").mapNotNull { mapLeg(it, feedId, now, resolver) }
             if (legs.isEmpty()) return null
             val start = itinerary.long("startTime")?.let { Instant.fromEpochMilliseconds(it) }
                 ?: (legs.firstOrNull() as? Leg.WalkLeg)?.start
@@ -144,7 +170,12 @@ class OpenTripPlannerRoutingProvider(
             )
         }
 
-        private fun mapLeg(leg: JsonValue, feedId: FeedId, now: Instant): Leg? {
+        private fun mapLeg(
+            leg: JsonValue,
+            feedId: FeedId,
+            now: Instant,
+            resolver: OtpIdentityResolver?,
+        ): Leg? {
             val from = leg.obj("from") ?: return null
             val to = leg.obj("to") ?: return null
             val fromPoint = point(from) ?: return null
@@ -154,10 +185,10 @@ class OpenTripPlannerRoutingProvider(
             val duration = arrival - departure
 
             // OTP marks walking legs with mode WALK and no route; anything carrying a
-            // route is a transit leg.
+            // route object or transitLeg=true is a transit leg. Route identity may
+            // only have an id, so do not require a short/long name to classify it.
             val route = leg.obj("route")
-            val isTransit = route != null && route.string("shortName") != null ||
-                route?.string("longName") != null || leg.bool("transitLeg") == true
+            val isTransit = route != null || leg.bool("transitLeg") == true
 
             if (!isTransit) {
                 val meters = leg.obj("distance")?.number("value")?.toDouble() ?: 0.0
@@ -170,22 +201,35 @@ class OpenTripPlannerRoutingProvider(
                 )
             }
 
-            // Route identity is the OTP short/long name, NOT a GTFS route_id:
-            // OTP does not return the feed's route ids, so `RouteKey(feedId,
-            // shortName)` will not collide with local GTFS keys but also will
-            // not resolve to them. Remote journeys therefore cannot be replayed
-            // against the local network (live OTP stays disabled until a
-            // name->key mapping lands — Phase-09 item). Do not remove the
-            // fallback silently: returning null drops the leg and the journey.
-            val routeId = route?.string("shortName") ?: route?.string("longName") ?: return null
-            val tripId = leg.string("tripId")?.takeIf { it.isNotBlank() } ?: return null
+            // Route identity: prefer the local route the OTP id/name resolves to.
+            // The fallbacks are still feed-scoped and truthful, but a route that is
+            // not in the loaded static feed cannot be replayed against local shapes
+            // or live vehicles. Never replace a missing id with a display name alone
+            // when no local match exists: the raw OTP id is more informative.
+            val routeShortName = route?.string("shortName")?.takeIf { it.isNotBlank() }
+            val routeLongName = route?.string("longName")?.takeIf { it.isNotBlank() }
+            val otpRouteId = route?.string("id")?.takeIf { it.isNotBlank() }
+                ?: route?.string("routeId")?.takeIf { it.isNotBlank() }
+            val resolvedRoute = resolver?.resolveRoute(
+                otpRouteId = otpRouteId,
+                shortName = routeShortName,
+                longName = routeLongName,
+                feedId = feedId,
+            )
+            val routeKey = resolvedRoute ?: RouteKey(
+                feedId,
+                routeShortName ?: routeLongName ?: otpRouteId ?: return null,
+            )
+            val rawTripId = leg.string("tripId")?.takeIf { it.isNotBlank() } ?: return null
+            val resolvedTrip = resolver?.resolveTrip(rawTripId, routeKey, feedId)
+            val tripKey = resolvedTrip ?: TripKey(feedId, rawTripId)
             return Leg.Transit(
                 agencyId = AgencyId(feedId.value),
-                routeKey = RouteKey(feedId, routeId),
-                tripKey = TripKey(feedId, tripId),
+                routeKey = routeKey,
+                tripKey = tripKey,
                 serviceDate = null,
-                fromStopKey = stopKeyOf(from, feedId),
-                toStopKey = stopKeyOf(to, feedId),
+                fromStopKey = stopKeyOf(from, feedId, resolver),
+                toStopKey = stopKeyOf(to, feedId, resolver),
                 departure = departure,
                 arrival = arrival,
                 vehicleKey = null,
@@ -198,14 +242,23 @@ class OpenTripPlannerRoutingProvider(
         }
 
         /**
-         * OTP may omit stop ids for synthesized walk-to-transit points; falling back to
-         * the stop name keeps the leg usable rather than dropping it.
+         * Resolves an OTP stop back to a local key when possible. OTP may omit stop
+         * ids for synthesized walk-to-transit points, so the name/point are used as
+         * a strict fallback. If nothing resolves, the raw OTP id or name is wrapped
+         * in a feed-scoped key: still honest about what the remote service said, but
+         * not claimed to be a local stop.
          */
-        private fun stopKeyOf(node: JsonValue, feedId: FeedId): StopKey {
-            val id = node.string("stopId")?.takeIf { it.isNotBlank() }
-                ?: node.string("name")?.takeIf { it.isNotBlank() }
-                ?: "unknown"
-            return StopKey(feedId, id)
+        private fun stopKeyOf(
+            node: JsonValue,
+            feedId: FeedId,
+            resolver: OtpIdentityResolver?,
+        ): StopKey {
+            val otpStopId = node.string("stopId")?.takeIf { it.isNotBlank() }
+            val name = node.string("name")?.takeIf { it.isNotBlank() }
+            val point = point(node)
+            val resolved = resolver?.resolveStop(otpStopId, name, point, feedId)
+            if (resolved != null) return resolved
+            return StopKey(feedId, otpStopId ?: name ?: "unknown")
         }
 
         /**

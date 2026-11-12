@@ -22,15 +22,15 @@ actual fun defaultHttpTransport(): GtfsFeedAcquirer.HttpTransport =
         }
         request.authHeader?.let { connection.setRequestProperty("Authorization", it) }
         val status = connection.responseCode
-        val body = if (status == HttpURLConnection.HTTP_OK) {
+        val body = if (status in 200..299) {
             connection.inputStream.use { it.readBytes() }
         } else {
             ByteArray(0)
         }
-        val headers = mapOf(
-            "ETag" to connection.getHeaderField("ETag"),
-            "Last-Modified" to connection.getHeaderField("Last-Modified"),
-        )
+        val headers = buildMap {
+            connection.getHeaderField("ETag")?.let { put("ETag", it) }
+            connection.getHeaderField("Last-Modified")?.let { put("Last-Modified", it) }
+        }
         connection.disconnect()
         GtfsFeedAcquirer.HttpResponse(status, body, headers)
     }

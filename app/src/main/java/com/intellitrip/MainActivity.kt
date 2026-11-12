@@ -109,6 +109,15 @@ private fun IntelliTripContent(host: AtlasHost, model: IntelliTripViewModel) {
         )
     }
 
+    // PMTiles archives are opaque binaries, so the picker accepts any MIME type and
+    // the importer identifies the archive/style pair by magic bytes. OpenMultipleDocuments
+    // lets the rider choose the archive and its style together, which is the unit the
+    // store validates and installs.
+    val basemapPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris -> model.importBasemap(uris) }
+    val importBasemap = { basemapPicker.launch(arrayOf("*/*")) }
+
     val useRail = LocalConfiguration.current.screenWidthDp >= RailWidthDp.value
     val hasFeed = state.staticFeed != null
     val snackbarHost = remember { androidx.compose.material3.SnackbarHostState() }
@@ -143,6 +152,9 @@ private fun IntelliTripContent(host: AtlasHost, model: IntelliTripViewModel) {
                     onCloseToExplore = { destination = Destination.Explore },
                     requestLocation = requestLocation,
                     permissionGranted = permissionGranted,
+                    onImportBasemap = importBasemap,
+                    onSelectBasemap = model::selectBasemap,
+                    onRemoveBasemap = model::removeBasemap,
                 )
             }
         } else {
@@ -171,6 +183,9 @@ private fun IntelliTripContent(host: AtlasHost, model: IntelliTripViewModel) {
                         onCloseToExplore = { destination = Destination.Explore },
                         requestLocation = requestLocation,
                         permissionGranted = permissionGranted,
+                        onImportBasemap = importBasemap,
+                        onSelectBasemap = model::selectBasemap,
+                        onRemoveBasemap = model::removeBasemap,
                     )
                 }
             }
@@ -200,6 +215,9 @@ private fun MapPane(
     onCloseToExplore: () -> Unit,
     requestLocation: () -> Unit,
     permissionGranted: Boolean,
+    onImportBasemap: () -> Unit,
+    onSelectBasemap: (String) -> Unit,
+    onRemoveBasemap: (String) -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         // A sheet requested from More is consumed on arrival, so returning to Explore
@@ -208,11 +226,27 @@ private fun MapPane(
             if (advancedSheet != null) onAdvancedSheetConsumed()
         }
 
+        val activeBasemap = state.basemapPackages.firstOrNull { it.id == state.activeBasemapId }
+        val activeStyle = state.activeBasemapStyle
+        val offlineBasemap = if (activeBasemap != null && activeStyle != null) {
+            com.intellitrip.map.BasemapStyle(
+                styleUrl = null,
+                styleAssetPath = null,
+                attribution = activeBasemap.displayName,
+                minZoom = activeBasemap.minZoom.toDouble(),
+                maxZoom = activeBasemap.maxZoom.toDouble(),
+                styleJson = activeStyle,
+            )
+        } else {
+            null
+        }
+
         MapCanvas(
             state = state,
             throttle = host.throttle,
             pipeline = host.pipeline,
             routeGeometry = model.routeGeometry(),
+            basemapStyle = offlineBasemap,
             onViewportChanged = model::onViewportChanged,
             // A tap is resolved against what is actually drawn, so tapping the drawn
             // route selects that route rather than whatever shares its pixels.
@@ -251,12 +285,17 @@ private fun MapPane(
             onLoadRadar = model::loadRadar,
             onLoadAlerts = model::loadWeatherAlerts,
             onToggleAutoRefresh = model::toggleAutoRefresh,
+            onImportBasemap = onImportBasemap,
+            onSelectBasemap = onSelectBasemap,
+            onRemoveBasemap = onRemoveBasemap,
             onLocateMe = requestLocation,
             locationPermissionGranted = permissionGranted,
             onSetOrigin = model::setOrigin,
             onSetDestination = model::setDestination,
             onSwapEndpoints = model::swapEndpoints,
             onPlan = model::planJourney,
+            onSetTravelMode = model::setTravelMode,
+            onStopTracking = model::stopTrackingVehicle,
             onSelectJourney = model::selectJourney,
             onToggleDepartures = { onDeparturesOpenChange(!departuresOpen) },
             // Clears the Explore search entry so the two top surfaces do not overlap.
@@ -317,6 +356,9 @@ private fun MapPane(
                 },
                 userLocation = state.userLocation?.position,
                 onTrackVehicle = { model.trackVehicle(it) },
+                trackedVehicleKey = state.trackedVehicleKey,
+                trackingStatus = state.trackingStatus,
+                onStopTrackingVehicle = model::stopTrackingVehicle,
             )
         }
 
@@ -342,6 +384,9 @@ private fun MapPane(
                 onLoadAlerts = model::loadWeatherAlerts,
                 onLoadStatic = model::loadStaticNetwork,
                 onLocateMe = requestLocation,
+                onImportBasemap = onImportBasemap,
+                onSelectBasemap = onSelectBasemap,
+                onRemoveBasemap = onRemoveBasemap,
                 onOpenAdvancedSheet = onOpenAdvancedSheet,
                 onCloseToExplore = onCloseToExplore,
             )
@@ -406,6 +451,9 @@ private fun MoreScreenSurface(
     onLoadAlerts: () -> Unit,
     onLoadStatic: () -> Unit,
     onLocateMe: () -> Unit,
+    onImportBasemap: () -> Unit,
+    onSelectBasemap: (String) -> Unit,
+    onRemoveBasemap: (String) -> Unit,
     onOpenAdvancedSheet: (com.intellitrip.ui.Sheet) -> Unit,
     onCloseToExplore: () -> Unit,
 ) {
@@ -416,6 +464,9 @@ private fun MoreScreenSurface(
             onToggleAutoRefresh = onToggleAutoRefresh,
             onLoadAlerts = onLoadAlerts,
             onLoadStatic = onLoadStatic,
+            onImportBasemap = onImportBasemap,
+            onSelectBasemap = onSelectBasemap,
+            onRemoveBasemap = onRemoveBasemap,
             onOpenScope = { onOpenAdvancedSheet(com.intellitrip.ui.Sheet.Scope) },
             onOpenData = { onOpenAdvancedSheet(com.intellitrip.ui.Sheet.Data) },
             onLocateMe = onLocateMe,

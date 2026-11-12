@@ -10,7 +10,7 @@
 - Static GTFS zip and parsed indexes.
 - Latest successful vehicle/trip-update snapshots with timestamps.
 - Recent radar frames metadata/tiles where permitted.
-- Basemap tiles/style assets when offline map strategy is implemented.
+- Imported PMTiles v3 basemap archives and their MapLibre style JSON.
 
 ## Requires connectivity
 - Fresh realtime vehicle positions.
@@ -54,6 +54,10 @@
 - `core/atlas-offline`: `StalenessModel` (FRESH/STALE/EXPIRED/ABSENT), `OfflineRegistry` (capability report + offline feed loading + live-vehicle gating), `BasemapPolicy` (online / offline package / missing).
 - Cached realtime data is retained with its fetch time and is only rendered as live while fresh; otherwise the engine reports realtime unavailable instead of drawing stale positions.
 - A cold start discards stop times while reloading a snapshot (`OfflineRegistry.loadStaticFeed` passes a no-op sink). They are already on disk in the snapshot's stop-time index and are read back on demand, so offline reload no longer rebuilds the whole table in memory.
-- `OfflineBasemapStore` (new): installs and tracks offline basemap packages, validating that a package is large enough to be real and carries a style, since tiles without a style render as nothing and a style without tiles has nothing to draw. A package whose tile file has vanished is reported uninstalled regardless of what the manifest claims.
-- No package is **bundled**: shipping a tile extract would mean committing hundreds of megabytes. Packages are produced by the user from OpenStreetMap data via tilemaker, or taken from a free Protomaps build. `HUMAN_ACTIONS.md` documents the routes.
-- Offline is therefore data-only by default: transit network and planning work with no network, but the basemap does not. `BasemapPolicy.OfflineOnlyMissing` reports this rather than showing a blank canvas.
+- `OfflineBasemapStore`: installs and tracks PMTiles v3 basemap packages. It validates the 127-byte PMTiles header (magic/version, in-range u64 offsets/counts, non-empty root/tile data, compression, tile type, zoom range, ordered bounds), rejects MBTiles/SQLite and unknown formats with an explicit `pmtiles convert` message, and rejects truncated archives. The zoom range and coverage come from the archive header, not from user input or guesswork.
+- A package is the archive plus a MapLibre style JSON. The style must be a JSON object at version 8 with `sources` and `layers`, contain at least one `pmtiles://` source, and stay under 2 MiB. `styleFor(pkg)` binds every `pmtiles://` URL to the installed `file://` archive, so a style cannot silently fetch a remote archive after an offline install.
+- Installation is generation-based and atomic at the manifest commit point: the validated archive and style are written under fresh names, both are moved into place, then the manifest is atomically replaced. The previous generation is deleted only after the manifest commits. A crash cannot leave a manifest pointing at a half-written archive.
+- No package is **bundled**: shipping a tile extract would mean committing hundreds of megabytes. Packages are produced by the user from OpenStreetMap data via tilemaker, or taken from a free Protomaps build. `HUMAN_ACTIONS.md` documents the routes, and `docs/OFFLINE_BASEMAP_LICENSING.md` covers attribution/licence responsibility.
+- The Android host imports a package through the Storage Access Framework (archive + style selected together), stages it in the app cache, hashes it, enforces the 2 GiB archive / 2 MiB style limits, and then calls the store. Import failure leaves the current package active.
+- MapLibre Android is pinned to `11.13.5`. PMTiles sources were added in 11.7.0; 13.x requires Vulkan and would change device compatibility. The renderer receives the bound style JSON and calls `setStyle`; the style generation counter forces transit sources/layers to be reinstalled after the load.
+- Offline is therefore data-and-basemap capable once a package is imported; without one, `BasemapPolicy.OfflineOnlyMissing` reports the gap rather than showing a blank canvas.

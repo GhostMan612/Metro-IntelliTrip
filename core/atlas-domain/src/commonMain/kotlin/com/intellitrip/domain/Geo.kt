@@ -14,4 +14,15 @@ data class LatLngBounds(val southWest: GeoPoint, val northEast: GeoPoint) {
 
     fun contains(point: GeoPoint): Boolean =
         point.lat in southWest.lat..northEast.lat && point.lon in southWest.lon..northEast.lon
+
+    /**
+     * Geometric centre.
+     *
+     * This is a naive box midpoint, not a spherical centroid: the bounds used by
+     * the app span a city, where the difference is far below a pixel.
+     */
+    fun center(): GeoPoint = GeoPoint(
+        lat = (southWest.lat + northEast.lat) / 2.0,
+        lon = (southWest.lon + northEast.lon) / 2.0,
+    )
 }

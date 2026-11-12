@@ -30,6 +30,14 @@ expect class OfflineFileStore(rootDir: String) {
 
     fun readBytes(path: String): ByteArray
 
+    /**
+     * Reads at most [length] bytes starting at [offset]. Returns fewer bytes when
+     * the range reaches EOF; returns an empty array when [offset] is at or past
+     * EOF. Used for PMTiles header validation without loading a multi-hundred-
+     * megabyte archive into memory.
+     */
+    fun readRange(path: String, offset: Long, length: Int): ByteArray
+
     fun writeText(path: String, text: String)
 
     fun writeLines(path: String, lines: List<String>)
@@ -38,6 +46,24 @@ expect class OfflineFileStore(rootDir: String) {
 
     /** Copies [source] to [dest], replacing [dest] if it exists. */
     fun copy(source: String, dest: String)
+
+    /**
+     * Moves [source] to [dest], replacing [dest] when possible.
+     *
+     * The JVM actual requests an atomic move and falls back to a normal
+     * replacement only when the filesystem cannot provide one. The store uses
+     * this to publish a package generation and the manifest: a crash either
+     * leaves the previous generation active or the new one fully present, never
+     * a half-written manifest.
+     */
+    fun move(source: String, dest: String)
+
+    /**
+     * A `file://` URI for [path], or null when the platform has no addressable
+     * local files (the wasmJs in-memory store). MapLibre Native needs the full
+     * URI inside a `pmtiles://` source.
+     */
+    fun fileUri(path: String): String?
 
     fun size(path: String): Long
 

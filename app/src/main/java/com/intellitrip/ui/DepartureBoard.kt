@@ -1,6 +1,7 @@
 package com.intellitrip.ui
 
 import com.intellitrip.domain.GeoPoint
+import com.intellitrip.domain.GeoMath
 import com.intellitrip.domain.GtfsServiceTime
 import com.intellitrip.domain.Route
 import com.intellitrip.domain.Stop
@@ -138,7 +139,7 @@ object DepartureBoard {
                         minutesUntil = ((when_ - now).inWholeSeconds / 60).toInt(),
                         headwayMinutes = headwayMinutesByTrip[scheduled.tripId],
                         distanceMeters = dist,
-                        walkMinutes = dist?.let { (it / 1.35 / 60).toInt().coerceAtLeast(1) },
+                        walkMinutes = dist?.let { com.intellitrip.domain.GeoMath.walkMinutes(it) },
                     )
                 }
                 .toList()
@@ -197,14 +198,5 @@ object DepartureBoard {
         .isActive(serviceKey, date)
 
     /** Great-circle meters between two points. */
-    fun metersBetween(a: GeoPoint, b: GeoPoint): Double {
-        val r = 6_371_000.0
-        val dLat = Math.toRadians(b.lat - a.lat)
-        val dLon = Math.toRadians(b.lon - a.lon)
-        val lat1 = Math.toRadians(a.lat)
-        val lat2 = Math.toRadians(b.lat)
-        val h = kotlin.math.sin(dLat / 2) * kotlin.math.sin(dLat / 2) +
-            kotlin.math.sin(dLon / 2) * kotlin.math.sin(dLon / 2) * kotlin.math.cos(lat1) * kotlin.math.cos(lat2)
-        return 2 * r * kotlin.math.asin(kotlin.math.sqrt(h.coerceIn(0.0, 1.0)))
-    }
+    fun metersBetween(a: GeoPoint, b: GeoPoint): Double = GeoMath.distanceMeters(a, b)
 }

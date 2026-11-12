@@ -5,8 +5,9 @@ import com.google.protobuf.InvalidProtocolBufferException
 
 /**
  * JVM feed decoder: Java protobuf (Android-compatible GTFS-Realtime bindings)
- * converted into the portable model. This is the only file in the module
- * that touches the protobuf wire format.
+ * converted into the portable model. Android and JVM keep the generated
+ * bindings; wasmJs uses the common [PortableFeedDecoder]. A parity test
+ * decodes identical official bytes with both.
  */
 actual fun platformFeedDecoder(): FeedDecoder = FeedDecoder { bytes ->
     val feed = try {

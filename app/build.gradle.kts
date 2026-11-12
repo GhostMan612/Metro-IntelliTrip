@@ -4,6 +4,18 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Remote routing is opt-in. The default empty endpoint keeps the app local-only:
+// no origin/destination ever leaves the device unless an operator builds with
+// -Pintellitrip.otpEndpoint=https://their-otp.example.org. This is deliberately a
+// build-time property, not a user-facing toggle: a rider should not be able to
+// accidentally send their location to an unconfigured third party.
+val otpEndpoint: String = (project.findProperty("intellitrip.otpEndpoint") as String?)
+    ?.trim()
+    .orEmpty()
+require(otpEndpoint.isEmpty() || otpEndpoint.startsWith("http://") || otpEndpoint.startsWith("https://")) {
+    "intellitrip.otpEndpoint must be an http(s) URL, got '$otpEndpoint'"
+}
+
 android {
     namespace = "com.intellitrip"
     compileSdk = 35
@@ -14,8 +26,16 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField(
+            "String",
+            "OTP_ENDPOINT",
+            "\"${otpEndpoint.replace("\\", "\\\\").replace("\"", "\\\"")}\"",
+        )
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     // Shrinking is on only for release. The rules live in proguard-rules.pro and are
     // deliberately conservative: the Atlas modules use no reflection, so every entry

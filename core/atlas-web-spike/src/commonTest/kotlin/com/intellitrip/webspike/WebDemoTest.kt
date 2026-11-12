@@ -26,11 +26,4 @@ class WebDemoTest {
         assertTrue(start.lon != end.lon || start.lat != end.lat)
         assertTrue(start.lat < end.lat)
     }
-
-    @Test
-    fun radarOverlayIsRainViewerTileTemplate() {
-        val overlay = WebDemo.demoRadarOverlay()
-        assertTrue(overlay.tileUrlTemplate.contains("tilecache.rainviewer.com"))
-        assertTrue(overlay.tileUrlTemplate.contains("{z}/{x}/{y}"))
-    }
 }

@@ -3,6 +3,7 @@ package com.intellitrip
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
 import com.intellitrip.contracts.ProviderResult
 import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.Focus
@@ -21,6 +22,7 @@ import com.intellitrip.gtfs.RefreshOutcome
 import com.intellitrip.gtfs.StaticFeed
 import com.intellitrip.offline.BasemapAvailability
 import com.intellitrip.offline.CacheEntry
+import com.intellitrip.offline.InstallResult
 import com.intellitrip.offline.loadStaticFeed
 import com.intellitrip.routing.RoutingNetwork
 import com.intellitrip.routing.TransferIntelligenceService
@@ -65,6 +67,18 @@ data class AppState(
     val selectedJourneyId: String? = null,
     val journeyWarnings: List<String> = emptyList(),
     val planning: Boolean = false,
+    /** Transit is the default; walking is an explicit choice, never inferred. */
+    val travelMode: TravelMode = TravelMode.TRANSIT,
+    /** Present only in walk mode; a straight-line estimate, not a routed journey. */
+    val walkEstimate: WalkEstimate? = null,
+    /** Non-null while the rider is following one vehicle on the map. */
+    val trackedVehicleKey: com.intellitrip.domain.VehicleKey? = null,
+    /** Latest fresh position of [trackedVehicleKey]; null when paused or missing. */
+    val followTarget: GeoPoint? = null,
+    /** Why tracking is paused, or that it is active. Shown next to the toggle. */
+    val trackingStatus: String? = null,
+    /** True after the rider loaded alerts, even when the response was empty. */
+    val alertsEnabled: Boolean = false,
     val origin: GeoPoint = GeoPoint(DEFAULT_LAT, DEFAULT_LON),
     val destination: GeoPoint = GeoPoint(DEFAULT_DEST_LAT, DEFAULT_DEST_LON),
     val autoRefresh: Boolean = false,
@@ -78,6 +92,12 @@ data class AppState(
     val mapSelection: com.intellitrip.map.MapSelection = com.intellitrip.map.MapSelection.None,
     /** Saved stops, loaded from disk on startup and rewritten on every change. */
     val savedStops: List<com.intellitrip.ui.SavedStop> = emptyList(),
+    /** Offline basemap packages found in the app's private store. */
+    val basemapPackages: List<com.intellitrip.offline.BasemapPackage> = emptyList(),
+    /** The package whose style the map is currently using, if any. */
+    val activeBasemapId: String? = null,
+    /** Active style JSON with its pmtiles:// source bound to the installed file. */
+    val activeBasemapStyle: String? = null,
 )
 
 /**
@@ -96,6 +116,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     private var locationJob: Job? = null
 
     private var refreshJob: Job? = null
+    private var alertsRefreshJob: Job? = null
 
     init {
         // Saved places are rider-owned, so they load before anything touches the
@@ -103,6 +124,10 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         runCatching { savedPlaces.load() }.getOrNull()?.let { saved ->
             if (saved.isNotEmpty()) _state.update { it.copy(savedStops = saved) }
         }
+
+        // Load installed basemaps before the first map render so a rider who
+        // already imported a package does not briefly see the online basemap.
+        viewModelScope.launch { refreshBasemapState() }
 
         // Start from any previously stored snapshot so a cold launch has the
         // static network without touching the network.
@@ -142,6 +167,19 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
      * debounced and skips updates that would not change the scope meaningfully.
      */
     fun onViewportChanged(lat: Double, lon: Double, zoom: Double) {
+        // A rider's own pan means they are no longer following the vehicle. The
+        // renderer suppresses programmatic camera moves, so this only fires for a
+        // gesture; leaving follow on would fight the map on the next poll.
+        if (_state.value.trackedVehicleKey != null) {
+            _state.update {
+                it.copy(
+                    trackedVehicleKey = null,
+                    followTarget = null,
+                    trackingStatus = null,
+                    status = "Stopped following vehicle",
+                )
+            }
+        }
         // Inverse of DefaultScopeResolver.zoomForRadius, shared so
         // zoom -> meters -> zoom round-trips and MapCanvas's moveCamera back is
         // a no-op (no post-pinch snap). The previous web-mercator approximation
@@ -159,6 +197,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         viewportJob = viewModelScope.launch {
             delay(VIEWPORT_DEBOUNCE_MS)
             setScope("Map viewport", focus)
+            scheduleAlertRefresh()
         }
     }
 
@@ -214,6 +253,149 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         }
     }
 
+    /**
+     * Imports a PMTiles archive and its MapLibre style JSON chosen together in
+     * one SAF picker. The pair is validated as a unit: a style that does not
+     * reference a PMTiles source is rejected rather than leaving the map on the
+     * online basemap while claiming an offline install.
+     */
+    fun importBasemap(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        update { it.copy(status = "Importing offline basemap…") }
+        viewModelScope.launch {
+            try {
+                when (val result = withContext(Dispatchers.IO) { performBasemapImport(uris) }) {
+                    is InstallResult.Installed -> {
+                        refreshBasemapState(result.pkg.id)
+                        update {
+                            it.copy(
+                                status = "Offline basemap installed: ${result.pkg.displayName} " +
+                                    "(zoom ${result.pkg.minZoom}–${result.pkg.maxZoom})",
+                            )
+                        }
+                    }
+
+                    is InstallResult.Rejected -> update {
+                        it.copy(status = "Basemap import rejected: ${result.reason}")
+                    }
+                }
+            } catch (error: Exception) {
+                update {
+                    it.copy(status = "Basemap import failed: ${error.message ?: "I/O error"}")
+                }
+            }
+        }
+    }
+
+    /** Makes an installed package the map's basemap. */
+    fun selectBasemap(id: String) {
+        viewModelScope.launch {
+            refreshBasemapState(id)
+            val active = _state.value.basemapPackages.firstOrNull { it.id == id }
+            update {
+                it.copy(
+                    status = active?.let { pkg -> "Offline basemap: ${pkg.displayName}" }
+                        ?: "Offline basemap not found",
+                )
+            }
+        }
+    }
+
+    fun removeBasemap(id: String) {
+        viewModelScope.launch {
+            val removed = withContext(Dispatchers.IO) {
+                runCatching { host.basemapStore.remove(id) }.getOrDefault(false)
+            }
+            refreshBasemapState()
+            update {
+                it.copy(
+                    status = if (removed) "Offline basemap removed"
+                    else "Could not remove the offline basemap",
+                )
+            }
+        }
+    }
+
+    /**
+     * Re-reads installed packages and the active style from disk. Disk work is
+     * off the main thread; the state update is atomic so a concurrent refresh
+     * cannot restore a stale active id.
+     */
+    private suspend fun refreshBasemapState(preferredId: String? = null) {
+        val packages = withContext(Dispatchers.IO) {
+            runCatching { host.basemapStore.packages() }.getOrDefault(emptyList())
+        }
+        val requested = preferredId ?: _state.value.activeBasemapId
+        val active = packages.firstOrNull { it.id == requested } ?: packages.firstOrNull()
+        val style = active?.let { pkg ->
+            withContext(Dispatchers.IO) {
+                runCatching { host.basemapStore.styleFor(pkg) }.getOrNull()
+            }
+        }
+        update {
+            it.copy(
+                basemapPackages = packages,
+                activeBasemapId = active?.id,
+                activeBasemapStyle = style,
+            )
+        }
+    }
+
+    private fun performBasemapImport(uris: List<Uri>): InstallResult {
+        val staged = mutableListOf<BasemapImport.StagedFile>()
+        try {
+            uris.forEach { uri -> staged += BasemapImport.stage(host.context, uri) }
+            val archives = staged.filter { it.kind == BasemapImport.Kind.PMTILES }
+            val styles = staged.filter { it.kind == BasemapImport.Kind.STYLE }
+            val mbtiles = staged.filter { it.kind == BasemapImport.Kind.MBTILES }
+            val unknown = staged.filter { it.kind == BasemapImport.Kind.UNKNOWN }
+
+            if (mbtiles.isNotEmpty()) {
+                return InstallResult.Rejected(
+                    "MBTiles is not supported. Convert it with " +
+                        "`pmtiles convert input.mbtiles output.pmtiles`, then select the " +
+                        ".pmtiles archive and its .json style.",
+                )
+            }
+            if (unknown.isNotEmpty()) {
+                return InstallResult.Rejected(
+                    "Could not identify ${unknown.joinToString { it.displayName }}. " +
+                        "Select one .pmtiles archive and one MapLibre .json style.",
+                )
+            }
+            if (archives.size != 1 || styles.size != 1) {
+                return InstallResult.Rejected(
+                    "Select exactly one .pmtiles archive and one .json style " +
+                        "(found ${archives.size} archive(s) and ${styles.size} style(s)).",
+                )
+            }
+
+            val archive = archives.single()
+            val style = styles.single()
+            if (style.sizeBytes > BasemapImport.MAX_STYLE_BYTES) {
+                return InstallResult.Rejected(
+                    "style is ${style.sizeBytes} bytes; the maximum is " +
+                        "${BasemapImport.MAX_STYLE_BYTES} bytes",
+                )
+            }
+            if (archive.sizeBytes > host.context.filesDir.usableSpace) {
+                return InstallResult.Rejected(
+                    "not enough internal storage for this archive " +
+                        "(${archive.sizeBytes / (1024 * 1024)} MiB)",
+                )
+            }
+            val baseName = archive.displayName.substringBeforeLast('.', archive.displayName)
+            return host.basemapStore.install(
+                id = archive.sha256,
+                displayName = baseName.trim().ifBlank { "Offline basemap" }.take(120),
+                stagedPath = archive.file.absolutePath,
+                styleJson = style.file.readText(Charsets.UTF_8),
+            )
+        } finally {
+            staged.forEach { runCatching { it.file.delete() } }
+        }
+    }
+
     fun loadRadar() {
         update { it.copy(status = "Loading radar…") }
         viewModelScope.launch {
@@ -235,7 +417,11 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     }
 
     fun loadWeatherAlerts() {
-        update { it.copy(status = "Loading weather alerts…") }
+        update { it.copy(status = "Loading weather alerts…", alertsEnabled = true) }
+        refreshWeatherAlerts()
+    }
+
+    private fun refreshWeatherAlerts() {
         viewModelScope.launch {
             // The viewport is passed through deliberately. An earlier version called
             // alerts() with no bounds, which asked for the national active set and then
@@ -253,15 +439,86 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         }
     }
 
+    /**
+     * Re-queries alerts after the map settles, not on every animation frame.
+     *
+     * Alerts are area warnings; panning to a new county can change the set. The
+     * delay is deliberately longer than the scope debounce so a continuous pan
+     * issues one request, not one per viewport update.
+     */
+    private fun scheduleAlertRefresh() {
+        if (!_state.value.alertsEnabled) return
+        alertsRefreshJob?.cancel()
+        alertsRefreshJob = viewModelScope.launch {
+            delay(ALERTS_VIEWPORT_DEBOUNCE_MS)
+            refreshWeatherAlerts()
+        }
+    }
+
+    /**
+     * Switches between transit planning and a straight-line walk estimate.
+     *
+     * The previous sheet kept the mode in local Compose state, so tapping "Walk
+     * only" changed a chip but Plan still ran the transit planner. The mode now
+     * lives in the single state object and invalidates transit results.
+     */
+    fun setTravelMode(mode: TravelMode) {
+        if (_state.value.travelMode == mode) return
+        _state.update { state ->
+            state.copy(
+                travelMode = mode,
+                walkEstimate = if (mode == TravelMode.WALK_ONLY) {
+                    WalkEstimator.estimate(state.origin, state.destination)
+                } else {
+                    null
+                },
+                journeys = emptyList(),
+                journeyWarnings = emptyList(),
+                selectedJourneyId = null,
+                planning = false,
+                status = when (mode) {
+                    TravelMode.TRANSIT -> "Transit mode"
+                    TravelMode.WALK_ONLY -> "Walk mode: straight-line estimate, no routed path"
+                },
+            )
+        }
+    }
+
     fun planJourney() {
         val current = _state.value
+        if (current.travelMode == TravelMode.WALK_ONLY) {
+            val estimate = WalkEstimator.estimate(current.origin, current.destination)
+            update {
+                it.copy(
+                    planning = false,
+                    journeys = emptyList(),
+                    journeyWarnings = emptyList(),
+                    selectedJourneyId = null,
+                    walkEstimate = estimate,
+                    status = if (estimate.withinCoverage) {
+                        "Walk estimate: ${estimate.meters.toInt()} m, about ${estimate.minutes} min"
+                    } else {
+                        "Outside walk coverage (${estimate.meters.toInt()} m); try transit"
+                    },
+                )
+            }
+            return
+        }
         val network = current.staticFeed?.let { feed -> host.routingNetwork(feed) }
         if (network == null) {
             update { it.copy(status = "Load the static network before planning") }
             return
         }
         val engine = host.engineForRouting(network)
-        update { it.copy(planning = true, status = "Planning…", journeys = emptyList(), journeyWarnings = emptyList()) }
+        update {
+            it.copy(
+                planning = true,
+                status = "Planning…",
+                walkEstimate = null,
+                journeys = emptyList(),
+                journeyWarnings = emptyList(),
+            )
+        }
         viewModelScope.launch {
             // Planning searches the network and reads the stop-time index, so it
             // must not run on the main thread. AtlasEngine is the single path:
@@ -441,7 +698,37 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
 
     /** Follows a vehicle on the map. */
     fun trackVehicle(vehicleKey: com.intellitrip.domain.VehicleKey) {
-        setScope("Vehicle", com.intellitrip.domain.Focus.Vehicle(vehicleKey))
+        val follow = VehicleFollow.update(vehicleKey, _state.value.vehicles, Clock.System.now())
+        val focus = Focus.Vehicle(vehicleKey, follow.target)
+        _state.update {
+            it.copy(
+                scopeLabel = "Vehicle",
+                focus = focus,
+                scope = host.scopeEngine.currentScope(focus),
+                trackedVehicleKey = vehicleKey,
+                followTarget = follow.target,
+                trackingStatus = follow.status,
+                status = follow.status,
+            )
+        }
+    }
+
+    /**
+     * Stops following without changing the camera.
+     *
+     * The rider may still want to look at the vehicle's last position; the map
+     * simply stops moving with it.
+     */
+    fun stopTrackingVehicle() {
+        if (_state.value.trackedVehicleKey == null) return
+        _state.update {
+            it.copy(
+                trackedVehicleKey = null,
+                followTarget = null,
+                trackingStatus = null,
+                status = "Stopped following vehicle",
+            )
+        }
     }
 
     /** Moves the map to a saved stop and selects it. */
@@ -463,6 +750,9 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         }
 
     fun routeGeometry(): List<RouteLine> {
+        // A walk-only answer is an estimate, not a routed line. Drawing a straight
+        // line would read as a street route the app cannot produce.
+        if (_state.value.travelMode != TravelMode.TRANSIT) return emptyList()
         val feed = _state.value.staticFeed ?: return emptyList()
         val journey = selectedJourney ?: return emptyList()
         return RouteGeometry.build(
@@ -720,11 +1010,26 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     )
 
     private fun onVehicles(vehicles: List<Vehicle>, fetchedAt: Instant, ageSeconds: Long) {
-        update {
-            it.copy(
+        val now = Clock.System.now()
+        _state.update { state ->
+            val tracked = state.trackedVehicleKey
+            val follow = tracked?.let { VehicleFollow.update(it, vehicles, now) }
+            // Keep the data scope around the latest fix as well, so the followed
+            // vehicle cannot drive out of its own render bounds. The camera effect
+            // deliberately ignores Focus.Vehicle; followTarget owns the camera.
+            val focus = if (tracked != null && follow?.target != null) {
+                Focus.Vehicle(tracked, follow.target)
+            } else {
+                state.focus
+            }
+            state.copy(
                 vehicles = vehicles,
                 vehiclesFetchedAt = fetchedAt,
-                status = "Live vehicles: ${vehicles.size} (${ageSeconds}s old)",
+                focus = focus,
+                scope = if (focus != state.focus) host.scopeEngine.currentScope(focus) else state.scope,
+                followTarget = follow?.target,
+                trackingStatus = follow?.status ?: state.trackingStatus,
+                status = follow?.status ?: "Live vehicles: ${vehicles.size} (${ageSeconds}s old)",
             )
         }
     }
@@ -782,6 +1087,9 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         /** Settles a camera gesture before it changes scope, so panning stays smooth. */
         private const val VIEWPORT_DEBOUNCE_MS = 250L
 
+        /** One alert request per settled pan, not one per frame. */
+        private const val ALERTS_VIEWPORT_DEBOUNCE_MS = 2_000L
+
         /** Above this the camera stops following, so System view stays put. */
         private const val FOLLOW_METERS = 5_000.0
         private const val MIN_FOLLOW_METERS = 500.0
@@ -831,6 +1139,13 @@ internal fun AppState.withEndpoints(
         journeys = emptyList(),
         journeyWarnings = emptyList(),
         selectedJourneyId = null,
+        // The estimate is derived from the endpoints, so new endpoints must
+        // produce a new estimate rather than leaving the old distance on screen.
+        walkEstimate = if (travelMode == TravelMode.WALK_ONLY) {
+            WalkEstimator.estimate(origin, destination)
+        } else {
+            null
+        },
     )
 }
 
