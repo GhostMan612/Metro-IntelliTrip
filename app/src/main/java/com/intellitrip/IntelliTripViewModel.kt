@@ -115,6 +115,14 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
             if (host.snapshotStore.activeSnapshot(host.feedId) == null) {
                 runCatching { host.seedDebugFeedIfNeeded() }
             }
+            // A snapshot written before the stop-time index carried boarding
+            // restrictions is rebuilt once, off the main thread, before the
+            // board or planner reads it. No-op once the index is current.
+            withContext(Dispatchers.IO) {
+                if (!host.snapshotStore.hasCurrentStopTimeIndex(host.feedId)) {
+                    host.snapshotStore.reindexStopTimes(host.feedId)
+                }
+            }
             host.offlineRegistry.loadStaticFeed(host.feedId)?.let { feed ->
                 val focus = _state.value.focus
                 _state.update {

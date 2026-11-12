@@ -7,6 +7,9 @@ import com.intellitrip.domain.StopTime
 import com.intellitrip.domain.TripKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class StopTimeIndexTest {
@@ -79,5 +82,98 @@ class StopTimeIndexTest {
         val reader = StopTimeIndexReader(ByteArray(0), ByteArray(0))
         assertTrue(reader.stopTimesFor(TripKey(feedId, "T1"), stopKeyOf).isEmpty())
         assertEquals(0, reader.tripCount())
+    }
+
+    @Test
+    fun preservesBoardingAndAlightingRestrictions() {
+        val writer = StopTimeIndexWriter()
+        writer.write(stopTime("T1", 1, "S1", 3600).copy(pickupType = 1, dropOffType = 0))
+        writer.write(stopTime("T1", 2, "S2", 3660).copy(pickupType = 0, dropOffType = 1))
+        writer.write(stopTime("T1", 3, "S3", 3720))
+        val (data, index) = writer.finish()
+
+        val rows = StopTimeIndexReader(index, data).stopTimesFor(TripKey(feedId, "T1"), stopKeyOf)
+
+        assertEquals(listOf(1, 0), listOf(rows[0].pickupType, rows[0].dropOffType))
+        assertEquals(listOf(0, 1), listOf(rows[1].pickupType, rows[1].dropOffType))
+        // Absent in the feed stays absent, not silently "allowed".
+        assertNull(rows[2].pickupType)
+        assertNull(rows[2].dropOffType)
+    }
+
+    @Test
+    fun writesCurrentFormatMagic() {
+        val writer = StopTimeIndexWriter()
+        writer.write(stopTime("T1", 1, "S1", 3600))
+        val (_, index) = writer.finish()
+
+        assertTrue(StopTimeIndexReader.isCurrentFormat(index))
+        assertFalse(StopTimeIndexReader.isLegacyFormat(index))
+    }
+
+    @Test
+    fun unknownFormatIsRejected() {
+        val bogus = "NOPE0001".encodeToByteArray() + ByteArray(32)
+        assertFailsWith<StopTimeIndexFormatException> {
+            StopTimeIndexReader(bogus, ByteArray(32))
+        }
+    }
+
+    @Test
+    fun dataLengthMismatchIsRejected() {
+        val writer = StopTimeIndexWriter()
+        writer.write(stopTime("T1", 1, "S1", 3600))
+        val (data, index) = writer.finish()
+
+        // A half-published generation, or a data file from another format,
+        // must fail closed instead of being parsed at the wrong stride.
+        val reader = StopTimeIndexReader(index, data.copyOf(data.size - 1))
+        assertFailsWith<StopTimeIndexFormatException> { reader.tripCount() }
+    }
+
+    @Test
+    fun legacyIndexStillReadsWithNullRestrictions() {
+        val rows = listOf(stopTime("T1", 1, "S1", 3600), stopTime("T1", 2, "S2", 3660))
+        val (data, index) = legacyV2Index("T1", rows)
+
+        val reader = StopTimeIndexReader(index, data)
+
+        assertFalse(reader.isCurrentFormat, "a 002 index must report that it lacks restrictions")
+        val read = reader.stopTimesFor(TripKey(feedId, "T1"), stopKeyOf).associateBy { it.stopSequence }
+        assertEquals(2, read.size)
+        assertEquals(3600, read[1]?.arrivalTime?.secondsSinceServiceDayStart)
+        assertNull(read[1]?.pickupType)
+        assertNull(read[1]?.dropOffType)
+    }
+
+    /** Builds the pre-restriction `STIDX002` layout by hand. */
+    private fun legacyV2Index(tripId: String, rows: List<StopTime>): Pair<ByteArray, ByteArray> {
+        val data = GrowableBytes()
+        rows.forEach { row ->
+            val stopBytes = row.stopKey.stopId.encodeToByteArray()
+            data.writeInt(row.stopSequence)
+            data.writeInt(row.arrivalTime!!.secondsSinceServiceDayStart)
+            data.writeInt(row.departureTime!!.secondsSinceServiceDayStart)
+            data.writeShort(stopBytes.size)
+            data.writeBytes(stopBytes)
+        }
+        val index = GrowableBytes()
+        index.writeBytes("STIDX002".encodeToByteArray())
+        index.writeInt(1) // trips
+        index.writeLong(rows.size.toLong())
+        val key = "metro-transit-regional|$tripId".encodeToByteArray()
+        index.writeShort(key.size)
+        index.writeBytes(key)
+        index.writeInt(1) // segments
+        index.writeLong(0L)
+        index.writeInt(rows.size)
+        index.writeInt(1) // stops
+        val stopBytes = rows.first().stopKey.stopId.encodeToByteArray()
+        index.writeShort(stopBytes.size)
+        index.writeBytes(stopBytes)
+        index.writeInt(1) // trips at this stop
+        index.writeShort(key.size)
+        index.writeBytes(key)
+        return data.toByteArray() to index.toByteArray()
     }
 }
