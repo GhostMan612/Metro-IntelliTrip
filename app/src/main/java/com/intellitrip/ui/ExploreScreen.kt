@@ -115,7 +115,7 @@ fun NearbyDeparturesSheet(
                     modifier = Modifier.heightIn(max = 380.dp),
                     verticalArrangement = Arrangement.spacedBy(Space.sm),
                 ) {
-                    items(display, key = { "${it.stopName}-${it.scheduledTime}-${it.routeShortName}" }) { d ->
+                    items(display, key = { "${it.stopKey.feedId.value}/${it.stopKey.stopId}-${it.scheduledTime}-${it.routeShortName}" }) { d ->
                         DepartureRow(departure = d, onClick = { onSelectDeparture(d) })
                     }
                 }

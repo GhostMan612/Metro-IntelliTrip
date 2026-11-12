@@ -120,7 +120,9 @@ private fun SingleFeatureBody(
             StopDetailBody(
                 stop = stop,
                 fallbackName = feature.name,
-                departures = departures.filter { it.stopName == (stop?.name ?: feature.name) },
+                departures = departures.filter {
+                    it.stopKey.feedId.value == feature.feedId && it.stopKey.stopId == feature.stopId
+                },
                 now = now,
                 onSaveStop = { stop?.let(onSaveStop) },
                 userLocation = userLocation,

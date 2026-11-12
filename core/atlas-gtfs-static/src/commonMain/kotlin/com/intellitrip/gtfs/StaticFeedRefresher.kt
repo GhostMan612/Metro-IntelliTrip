@@ -60,6 +60,10 @@ class StaticFeedRefresher(
                 }
                 val refreshed = FeedValidators(acquisition.etag, acquisition.lastModified)
                 if (refreshed.usable) store.recordValidators(feedId, refreshed)
+                // A 304 is the cheapest moment to migrate a snapshot written
+                // by an older build: the archive is already on disk, and this
+                // runs off the main thread. No-op once the index is current.
+                ensureCurrentStopTimeIndex()
                 RefreshOutcome.NotModified(feedId)
             }
             is GtfsFeedAcquirer.AcquisitionResult.Failure -> RefreshOutcome.Rejected(feedId, acquisition.message)
@@ -109,6 +113,16 @@ class StaticFeedRefresher(
         return RefreshOutcome.Activated(feed)
     }
 
+    /**
+     * Brings a snapshot written by an older build onto the current stop-time
+     * index format. Re-parses the stored archive, so it must not run on the
+     * UI thread: [refresh] is already on a background dispatcher, and
+     * [refreshBlocking] callers already run on one.
+     */
+    private fun ensureCurrentStopTimeIndex() {
+        if (!store.hasCurrentStopTimeIndex(feedId)) store.reindexStopTimes(feedId)
+    }
+
     companion object {
         fun durablePayloadKey(feedId: FeedId, hash: String?): String =
             "payload/" + feedId.value + "/" + (hash ?: "nohash")
@@ -141,6 +155,7 @@ class StaticFeedRefresher(
                 // returning.
                 val refreshed = FeedValidators(acquisition.etag, acquisition.lastModified)
                 if (refreshed.usable) store.recordValidators(feedId, refreshed)
+                ensureCurrentStopTimeIndex()
                 RefreshOutcome.NotModified(feedId)
             }
 
