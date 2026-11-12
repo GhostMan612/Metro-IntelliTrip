@@ -134,6 +134,10 @@ class RiderSurfaceInstrumentedTest {
                     departures = listOf(
                         Departure(
                             stopName = "Nicollet Mall",
+                            stopKey = com.intellitrip.domain.StopKey(
+                                com.intellitrip.domain.FeedId("metro-transit"),
+                                "S1",
+                            ),
                             routeShortName = "A",
                             routeLongName = "Blue Line",
                             headsign = "Westbound",

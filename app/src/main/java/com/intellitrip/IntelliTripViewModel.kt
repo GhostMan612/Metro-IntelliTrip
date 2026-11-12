@@ -436,8 +436,10 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     }
 
     /** Focuses the map on a stop and selects it (departure-board tap). */
-    fun focusStop(stopName: String) {
-        val stop = _state.value.staticFeed?.stops?.firstOrNull { it.name == stopName } ?: return
+    fun focusStop(stopKey: com.intellitrip.domain.StopKey) {
+        // Resolve by key, not name: a GTFS feed routinely has several stops
+        // named "Main St" (opposite directions, station platforms).
+        val stop = _state.value.staticFeed?.stops?.firstOrNull { it.key == stopKey } ?: return
         setScope(stop.name, com.intellitrip.domain.Focus.Radius(stop.location, 300.0))
         update {
             it.copy(
@@ -550,7 +552,12 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                 radiusMeters = NEARBY_RADIUS_METERS,
                 departuresFor = { stop ->
                     index.tripsServing(stop.key).flatMap { tripKey ->
-                        index.stopTimesFor(tripKey) { stopId -> com.intellitrip.domain.StopKey(feed.feedId, stopId) }
+                        com.intellitrip.ui.DepartureBoard.boardableRowsAt(
+                            index.stopTimesFor(tripKey) { stopId ->
+                                com.intellitrip.domain.StopKey(feed.feedId, stopId)
+                            },
+                            stop.key,
+                        )
                     }.flatMap { stopTime ->
                         val trip = tripsByKey[stopTime.tripKey.tripId] ?: return@flatMap emptyList()
                         val scheduled = stopTime.departureTime ?: stopTime.arrivalTime

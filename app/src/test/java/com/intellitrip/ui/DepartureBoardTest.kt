@@ -7,6 +7,7 @@ import com.intellitrip.domain.RouteKey
 import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.Stop
 import com.intellitrip.domain.StopKey
+import com.intellitrip.domain.StopTime
 import com.intellitrip.domain.Trip
 import com.intellitrip.domain.TripKey
 import com.intellitrip.domain.ServiceKey
@@ -71,6 +72,23 @@ class DepartureBoardTest {
         blockId = null,
         shapeKey = null,
         wheelchairAccessible = null,
+    )
+
+    private fun stopTime(
+        stopKey: StopKey,
+        sequence: Int,
+        time: String,
+        pickupType: Int? = null,
+    ) = StopTime(
+        tripKey = TripKey(feedId, "T1"),
+        stopKey = stopKey,
+        stopSequence = sequence,
+        arrivalTime = GtfsServiceTime.parse(time),
+        departureTime = GtfsServiceTime.parse(time),
+        pickupType = pickupType,
+        dropOffType = null,
+        timepoint = null,
+        shapeDistTraveled = null,
     )
 
     private fun board(
@@ -278,5 +296,58 @@ class DepartureBoardTest {
             mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 20.seconds))),
         )
         assertEquals("Due", result.single().wait)
+    }
+
+    @Test
+    fun boardRowsBelongToTheQueriedStop() {
+        // The trip serves both stops; the row for S2 must never be offered as a
+        // departure from S1 (or vice versa).
+        val s1 = StopKey(feedId, "S1")
+        val s2 = StopKey(feedId, "S2")
+        val rows = listOf(
+            stopTime(s1, sequence = 1, time = "08:00:00"),
+            stopTime(s2, sequence = 2, time = "08:10:00"),
+        )
+
+        assertEquals(
+            listOf(2),
+            DepartureBoard.boardableRowsAt(rows, s2).map { it.stopSequence },
+        )
+        assertEquals(
+            listOf(1),
+            DepartureBoard.boardableRowsAt(rows, s1).map { it.stopSequence },
+        )
+    }
+
+    @Test
+    fun pickupProhibitedRowsAreNotBoardable() {
+        val s1 = StopKey(feedId, "S1")
+        val rows = listOf(stopTime(s1, sequence = 1, time = "08:00:00", pickupType = 1))
+
+        assertTrue(
+            "a pickup_type=1 stop cannot appear on a departure board",
+            DepartureBoard.boardableRowsAt(rows, s1).isEmpty(),
+        )
+    }
+
+    @Test
+    fun departureCarriesTheStopKeyNotJustTheName() {
+        // Opposite-direction platforms share a name; the board must keep them
+        // apart so a tap opens the stop the departure actually leaves from.
+        val northbound = stop("S1", "Main St", 44.9700, -93.26)
+        val southbound = stop("S2", "Main St", 44.9701, -93.26)
+        val result = board(
+            listOf(northbound, southbound),
+            mapOf(
+                "S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 300.seconds)),
+                "S2" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 600.seconds)),
+            ),
+        )
+
+        assertEquals(
+            setOf(StopKey(feedId, "S1"), StopKey(feedId, "S2")),
+            result.map { it.stopKey }.toSet(),
+        )
+        assertEquals(listOf("Main St"), result.map { it.stopName }.distinct())
     }
 }

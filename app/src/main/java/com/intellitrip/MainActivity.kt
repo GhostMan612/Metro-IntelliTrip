@@ -277,7 +277,7 @@ private fun MapPane(
                 onDownloadSchedules = model::loadStaticNetwork,
                 onDismiss = { onDeparturesOpenChange(false) },
                 onSelectDeparture = {
-                    model.focusStop(it.stopName)
+                    model.focusStop(it.stopKey)
                     onDeparturesOpenChange(false)
                 },
             )

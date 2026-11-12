@@ -4,6 +4,7 @@ import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.GtfsServiceTime
 import com.intellitrip.domain.Route
 import com.intellitrip.domain.Stop
+import com.intellitrip.domain.StopKey
 import com.intellitrip.domain.Trip
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.DateTimeUnit
@@ -25,6 +26,12 @@ import kotlin.math.abs
  */
 data class Departure(
     val stopName: String,
+    /**
+     * The exact stop this departure leaves from. Names are not unique in GTFS
+     * (opposite-direction platforms and station complexes share one), so the
+     * board and every tap-through resolve the stop by key.
+     */
+    val stopKey: StopKey,
     val routeShortName: String?,
     val routeLongName: String?,
     val headsign: String?,
@@ -124,6 +131,7 @@ object DepartureBoard {
                     val dist = origin?.let { metersBetween(it, stop.location) }
                     Departure(
                         stopName = stop.name,
+                        stopKey = stop.key,
                         routeShortName = route?.shortName,
                         routeLongName = route?.longName,
                         headsign = trip?.headsign,
@@ -151,6 +159,23 @@ object DepartureBoard {
         /** Realtime-reported departure, when a vehicle supplied one. */
         val reportedTime: Instant? = null,
     )
+
+    /**
+     * The rows a rider can actually board at [stopKey].
+     *
+     * The stop-time index is keyed by trip, so asking it for the trips that
+     * serve a stop returns every stop on each of those trips. A board must use
+     * only the row at the stop it is labeling, or a downstream departure is
+     * shown as if it left from the stop near the rider.
+     */
+    fun boardableRowsAt(
+        rows: List<com.intellitrip.domain.StopTime>,
+        stopKey: StopKey,
+    ): List<com.intellitrip.domain.StopTime> = rows.filter { row ->
+        row.stopKey == stopKey &&
+            // GTFS pickup_type 1 means no boarding at this stop.
+            row.pickupType != 1
+    }
 
     /**
      * Resolves a GTFS service time to an absolute instant near [now].
