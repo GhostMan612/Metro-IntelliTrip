@@ -81,9 +81,24 @@ jobs:
         run: |
           set -euo pipefail
           sdk="${ANDROID_HOME:?ANDROID_HOME is required}"
+          # setup-gradle does not add Android cmdline-tools to PATH; the emulator
+          # action does so internally, but this preflight runs before that action.
+          manager=""
+          for candidate in "$sdk/cmdline-tools/latest/bin/sdkmanager" "$sdk"/cmdline-tools/*/bin/sdkmanager "$sdk/tools/bin/sdkmanager"; do
+            if [ -x "$candidate" ]; then
+              manager="$candidate"
+              break
+            fi
+          done
+          if [ -z "$manager" ]; then
+            echo "::error::Android sdkmanager executable not found under $sdk"
+            ls -la "$sdk/cmdline-tools" || true
+            exit 1
+          fi
+          echo "Using SDK Manager at $manager"
           for attempt in 1 2 3; do
             echo "Checking Android Emulator package, attempt ${attempt}/3"
-            if sdkmanager --install "emulator" --channel=0 \
+            if "$manager" --sdk_root="$sdk" --install "emulator" --channel=0 \
                 && test -x "$sdk/emulator/emulator" \
                 && "$sdk/emulator/emulator" -version >/dev/null 2>&1; then
               echo "Android Emulator is installed and runnable."
