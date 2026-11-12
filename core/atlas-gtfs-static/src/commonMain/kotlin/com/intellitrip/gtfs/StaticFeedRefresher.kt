@@ -41,7 +41,8 @@ class StaticFeedRefresher(
      * in-memory/byte-based, so the whole refresh is portable.
      */
     private suspend fun refreshBlockingAsync(): RefreshOutcome {
-        val validators = store.validators(feedId)
+        val validators = if (store.activeSnapshot(feedId) != null) store.validators(feedId)
+            else FeedValidators(null, null)
         val acquisition = if (validators.usable) {
             acquirer.acquireAsync(
                 feedId = feedId,
@@ -54,6 +55,9 @@ class StaticFeedRefresher(
         }
         return when (acquisition) {
             is GtfsFeedAcquirer.AcquisitionResult.NotModified -> {
+                if (store.activeSnapshot(feedId) == null) {
+                    return RefreshOutcome.Rejected(feedId, "304 Not Modified without a usable local snapshot")
+                }
                 val refreshed = FeedValidators(acquisition.etag, acquisition.lastModified)
                 if (refreshed.usable) store.recordValidators(feedId, refreshed)
                 RefreshOutcome.NotModified(feedId)
@@ -64,7 +68,6 @@ class StaticFeedRefresher(
     }
 
     private suspend fun activate(acquisition: GtfsFeedAcquirer.AcquisitionResult.Updated): RefreshOutcome {
-        val active = store.activeSnapshot(feedId)
         val stagedPayload = try {
             store.writeStagedPayload(acquisition.payload)
         } catch (e: Exception) {
@@ -75,11 +78,11 @@ class StaticFeedRefresher(
             publisherName = null,
             publisherUrl = null,
             lang = null,
-            version = active?.metadata?.version,
+            version = null,
             hash = GtfsFeedAcquirer.sha256(acquisition.payload),
             fetchedAt = clock(),
-            validFrom = active?.metadata?.validFrom,
-            validTo = active?.metadata?.validTo,
+            validFrom = null,
+            validTo = null,
             sourceUrl = sourceUrl,
         )
         val feed = try {
@@ -113,12 +116,12 @@ class StaticFeedRefresher(
 
     /** Blocking refresh for hosts that already run on a background thread. */
     fun refreshBlocking(): RefreshOutcome {
-        val active = store.activeSnapshot(feedId)
         // Without this the acquirer is asked for the whole archive every time,
         // which for a real feed is tens of megabytes on every launch. The
         // publisher decides whether that is necessary: a 304 arrives when the
         // validators still match.
-        val validators = store.validators(feedId)
+        val validators = if (store.activeSnapshot(feedId) != null) store.validators(feedId)
+            else FeedValidators(null, null)
         val acquisition = if (validators.usable) {
             acquirer.acquire(
                 feedId = feedId,
@@ -131,6 +134,9 @@ class StaticFeedRefresher(
         }
         return when (acquisition) {
             is GtfsFeedAcquirer.AcquisitionResult.NotModified -> {
+                if (store.activeSnapshot(feedId) == null) {
+                    return RefreshOutcome.Rejected(feedId, "304 Not Modified without a usable local snapshot")
+                }
                 // A 304 may rotate the validators, so refresh them before
                 // returning.
                 val refreshed = FeedValidators(acquisition.etag, acquisition.lastModified)
@@ -154,11 +160,11 @@ class StaticFeedRefresher(
                     publisherName = null,
                     publisherUrl = null,
                     lang = null,
-                    version = active?.metadata?.version,
+                    version = null,
                     hash = GtfsFeedAcquirer.sha256(acquisition.payload),
                     fetchedAt = clock(),
-                    validFrom = active?.metadata?.validFrom,
-                    validTo = active?.metadata?.validTo,
+                    validFrom = null,
+                    validTo = null,
                     sourceUrl = sourceUrl,
                 )
                 val feed = try {
