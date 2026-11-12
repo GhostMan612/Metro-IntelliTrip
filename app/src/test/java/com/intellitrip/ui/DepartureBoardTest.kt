@@ -194,7 +194,7 @@ class DepartureBoardTest {
         val stop = stop("S1", "First & Main", 44.97, -93.26)
         val live = board(
             listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 240.seconds))),
+            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 240.seconds, reportedTime = now + 180.seconds))),
             liveTrips = setOf("T1"),
         ).single()
         val spoken = live.accessibilityLabel()
@@ -211,6 +211,20 @@ class DepartureBoardTest {
             scheduled.accessibilityLabel(),
             scheduled.accessibilityLabel().contains("scheduled"),
         )
+    }
+
+    @Test
+    fun vehicleOnlyReportMustNotMarkScheduledDepartureLive() {
+        val stop = stop("S1", "First", 44.97, -93.26)
+        val scheduled = now + 240.seconds
+        val result = board(
+            listOf(stop),
+            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", scheduled))),
+            liveTrips = setOf("T1"),
+        ).single()
+        assertFalse("vehicle location alone cannot prove a stop ETA", result.isLive)
+        assertEquals(scheduled, result.scheduledTime)
+        assertTrue(result.accessibilityLabel().contains("scheduled"))
     }
 
     @Test
