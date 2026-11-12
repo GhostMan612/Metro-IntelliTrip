@@ -31,6 +31,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.Dispatchers
@@ -118,7 +119,6 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     private val savedPlaces = com.intellitrip.ui.SavedPlacesStore(host.filesRoot())
 
     private var locationJob: Job? = null
-
     /**
      * One audible arrival cue per selected journey, not per GPS callback.
      *
@@ -149,6 +149,14 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
             // without a 4-minute full-feed parse. Skipped when a snapshot exists.
             if (host.snapshotStore.activeSnapshot(host.feedId) == null) {
                 runCatching { host.seedDebugFeedIfNeeded() }
+            }
+            // A snapshot written before the stop-time index carried boarding
+            // restrictions is rebuilt once, off the main thread, before the
+            // board or planner reads it. No-op once the index is current.
+            withContext(Dispatchers.IO) {
+                if (!host.snapshotStore.hasCurrentStopTimeIndex(host.feedId)) {
+                    host.snapshotStore.reindexStopTimes(host.feedId)
+                }
             }
             host.offlineRegistry.loadStaticFeed(host.feedId)?.let { feed ->
                 val focus = _state.value.focus
@@ -719,8 +727,10 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     }
 
     /** Focuses the map on a stop and selects it (departure-board tap). */
-    fun focusStop(stopName: String) {
-        val stop = _state.value.staticFeed?.stops?.firstOrNull { it.name == stopName } ?: return
+    fun focusStop(stopKey: com.intellitrip.domain.StopKey) {
+        // Resolve by key, not name: a GTFS feed routinely has several stops
+        // named "Main St" (opposite directions, station platforms).
+        val stop = _state.value.staticFeed?.stops?.firstOrNull { it.key == stopKey } ?: return
         setScope(stop.name, com.intellitrip.domain.Focus.Radius(stop.location, 300.0))
         update {
             it.copy(
@@ -867,15 +877,16 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                 radiusMeters = NEARBY_RADIUS_METERS,
                 departuresFor = { stop ->
                     index.tripsServing(stop.key).flatMap { tripKey ->
-                        index.stopTimesFor(tripKey) { stopId -> com.intellitrip.domain.StopKey(feed.feedId, stopId) }
+                        com.intellitrip.ui.DepartureBoard.boardableRowsAt(
+                            index.stopTimesFor(tripKey) { stopId ->
+                                com.intellitrip.domain.StopKey(feed.feedId, stopId)
+                            },
+                            stop.key,
+                        )
                     }.flatMap { stopTime ->
                         val trip = tripsByKey[stopTime.tripKey.tripId] ?: return@flatMap emptyList()
                         val scheduled = stopTime.departureTime ?: stopTime.arrivalTime
                             ?: return@flatMap emptyList()
-                        // Build candidates only for dates on which this trip's
-                        // service actually runs. The chosen occurrence keeps
-                        // its originating service date, so a 25:30 time can
-                        // never be paired with the wrong day.
                         val activeDates = candidateDates.filter { date ->
                             com.intellitrip.ui.DepartureBoard.isServiceActive(
                                 feed.calendars, feed.calendarDates, trip.serviceKey, date,
@@ -905,8 +916,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                             frequencies = frequencies,
                             firstDepartureSeconds = firstSec,
                         ).map { occurrence ->
-                            val date = occurrence.serviceDate
-                                ?: return@map occurrence
+                            val date = occurrence.serviceDate ?: return@map occurrence
                             val prediction = DepartureRealtime.resolve(
                                 updates = current.tripUpdates,
                                 tripId = occurrence.tripId,
@@ -971,16 +981,9 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                             is com.intellitrip.domain.Leg.WalkLeg -> last.to
                             is com.intellitrip.domain.Leg.Other -> null
                         }
-                        if (dest != null && ArrivalGate.shouldCue(
-                                fix = fix,
-                                destination = dest,
-                                journeyId = journey.id,
-                                alreadyCuedJourneyId = arrivalCuedJourneyId,
-                                now = Clock.System.now(),
-                            )
-                        ) {
-                            arrivalCuedJourneyId = journey.id
-                            com.intellitrip.ui.ArrivalCue.playIfAllowed(host.context, true)
+                        if (dest != null) {
+                            val dist = com.intellitrip.ui.DepartureBoard.metersBetween(fix.position, dest)
+                            if (dist < 100) com.intellitrip.ui.ArrivalCue.playIfAllowed(host.context, true)
                         }
                     }
                 }

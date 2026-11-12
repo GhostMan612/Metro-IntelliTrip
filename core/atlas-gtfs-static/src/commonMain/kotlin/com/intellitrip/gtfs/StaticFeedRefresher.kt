@@ -60,9 +60,6 @@ class StaticFeedRefresher(
      */
     private suspend fun refreshBlockingAsync(): RefreshOutcome {
         val active = store.activeSnapshot(feedId)
-        // Validators only describe the active payload. After a crash that left
-        // no active snapshot, sending them would invite a 304 for content the
-        // store cannot serve.
         val validators = if (active != null) store.validators(feedId) else FeedValidators()
         val acquisition = if (validators.usable) {
             acquirer.acquireAsync(
@@ -84,6 +81,10 @@ class StaticFeedRefresher(
                 }
                 val refreshed = FeedValidators(acquisition.etag, acquisition.lastModified)
                 if (refreshed.usable) store.recordValidators(feedId, refreshed)
+                // A 304 is the cheapest moment to migrate a snapshot written
+                // by an older build: the archive is already on disk, and this
+                // runs off the main thread. No-op once the index is current.
+                ensureCurrentStopTimeIndex()
                 RefreshOutcome.NotModified(feedId)
             }
             is GtfsFeedAcquirer.AcquisitionResult.Failure -> RefreshOutcome.Rejected(feedId, acquisition.message)
@@ -147,9 +148,8 @@ class StaticFeedRefresher(
     }
 
     /**
-     * Derives validity from the payload, never from the previous snapshot.
-     * Calendar rows define the covered service period; feed_info parsing can
-     * refine this later without changing the truth rule.
+     * Derives validity from this payload's service calendar, never from the
+     * snapshot it replaces.
      */
     private fun deriveMetadata(metadata: FeedMetadata, feed: StaticFeed): FeedMetadata {
         if (metadata.validFrom != null || metadata.validTo != null) return metadata
@@ -185,23 +185,13 @@ class StaticFeedRefresher(
                 ).encode().encodeToByteArray(),
             )
         } catch (_: Exception) {
-            // The snapshot store is authoritative; an unavailable durable
-            // cache only costs a re-download after reload.
+            // The snapshot store is authoritative; cache failure only costs a re-download.
         }
     }
 
     /**
-     * Restores the last activated payload from the durable byte cache.
-     *
-     * Intended for the browser shell immediately after start, where the
-     * in-memory [StaticFeedSnapshotStore] is empty but IndexedDB still holds
-     * the ZIP. The payload is re-hashed and fully re-parsed, so a truncated or
-     * corrupted entry is rejected rather than surfaced as a valid feed. The
-     * original `fetchedAt` is preserved, and [CachedFeed.stale] reports when
-     * it is older than [maxAge] without withholding otherwise usable data.
-     *
-     * Never replaces an active snapshot with a different hash: if the process
-     * already refreshed, the network result wins.
+     * Restores and revalidates the last activated payload from the durable
+     * cache. Existing active data always wins over a different cached hash.
      */
     suspend fun rehydrateCached(
         maxAge: Duration = DEFAULT_CACHED_MAX_AGE,
@@ -217,9 +207,6 @@ class StaticFeedRefresher(
         } catch (_: Exception) {
             null
         } ?: return null
-
-        // Integrity before parsing: the key is content-addressed, so a
-        // mismatch means the stored bytes are not the feed that was activated.
         if (!GtfsFeedAcquirer.sha256(payload).equals(manifest.hash, ignoreCase = true)) return null
 
         val fetchedAt = try {
@@ -277,6 +264,14 @@ class StaticFeedRefresher(
         return CachedFeed(feed = feed, age = age, stale = age > maxAge)
     }
 
+    /**
+     * Rebuilds snapshots written with an older stop-time index format.
+     * Refresh callers already run away from the UI thread.
+     */
+    private fun ensureCurrentStopTimeIndex() {
+        if (!store.hasCurrentStopTimeIndex(feedId)) store.reindexStopTimes(feedId)
+    }
+
     companion object {
         fun durablePayloadKey(feedId: FeedId, hash: String?): String =
             "payload/" + feedId.value + "/" + (hash ?: "nohash")
@@ -290,11 +285,11 @@ class StaticFeedRefresher(
 
     /** Blocking refresh for hosts that already run on a background thread. */
     fun refreshBlocking(): RefreshOutcome {
-        val active = store.activeSnapshot(feedId)
         // Without this the acquirer is asked for the whole archive every time,
         // which for a real feed is tens of megabytes on every launch. The
         // publisher decides whether that is necessary: a 304 arrives when the
         // validators still match.
+        val active = store.activeSnapshot(feedId)
         val validators = if (active != null) store.validators(feedId) else FeedValidators()
         val acquisition = if (validators.usable) {
             acquirer.acquire(
@@ -318,6 +313,7 @@ class StaticFeedRefresher(
                 // returning.
                 val refreshed = FeedValidators(acquisition.etag, acquisition.lastModified)
                 if (refreshed.usable) store.recordValidators(feedId, refreshed)
+                ensureCurrentStopTimeIndex()
                 RefreshOutcome.NotModified(feedId)
             }
 

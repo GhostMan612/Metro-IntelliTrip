@@ -13,12 +13,16 @@ import com.intellitrip.domain.TripKey
  * and read back per trip on demand. The parser streams into the writer
  * without ever holding the full table.
  *
- * On disk nothing changes between the old platform-stream build and this
- * one: the data file and the companion index keep the exact same binary
- * layout (`STIDX002`), so indexes written by either build are readable by
- * both. The difference is storage: rows are buffered into the writer's
- * [GrowableBytes] and handed out as bytes for [PlatformFileStore] to
- * persist, and the reader parses from bytes instead of a platform channel.
+ * Format history:
+ * - `STIDX002` kept sequence, arrival, departure and stop id, but dropped
+ *   `pickup_type`/`drop_off_type`. A planner reading it could not tell a
+ *   no-pickup stop from a regular one, so those rows were offered as
+ *   boarding points.
+ * - `STIDX003` stores both restrictions and the data-file length, so a
+ *   data/index pair from different generations is rejected instead of
+ *   misparsed. The reader still understands `002` (with null restrictions),
+ *   so an app upgrade keeps serving departures until the index is rebuilt
+ *   into the current format.
  */
 class StopTimeIndexWriter {
 
@@ -62,6 +66,8 @@ class StopTimeIndexWriter {
             data.writeInt(stopTime.stopSequence)
             data.writeInt(stopTime.arrivalTime?.secondsSinceServiceDayStart ?: -1)
             data.writeInt(stopTime.departureTime?.secondsSinceServiceDayStart ?: -1)
+            data.writeByte(stopTime.pickupType ?: NO_VALUE)
+            data.writeByte(stopTime.dropOffType ?: NO_VALUE)
             data.writeShort(stopBytes.size)
             data.writeBytes(stopBytes)
             offset += FIXED_RECORD_BYTES + stopBytes.size
@@ -76,8 +82,13 @@ class StopTimeIndexWriter {
      */
     fun finish(): Pair<ByteArray, ByteArray> {
         flushPending()
+        val dataBytes = data.toByteArray()
         val index = GrowableBytes()
         index.writeBytes(INDEX_MAGIC)
+        // The reader refuses a data file whose length does not match the one
+        // recorded here. That is what makes a half-published generation (or a
+        // data file left behind by another format) fail closed.
+        index.writeLong(dataBytes.size.toLong())
         index.writeInt(segments.size)
         index.writeLong(written)
         segments.forEach { (trip, ranges) ->
@@ -103,7 +114,7 @@ class StopTimeIndexWriter {
                 index.writeBytes(tripBytes)
             }
         }
-        return data.toByteArray() to index.toByteArray()
+        return dataBytes to index.toByteArray()
     }
 
     /**
@@ -117,17 +128,29 @@ class StopTimeIndexWriter {
     }
 
     companion object {
-        const val FIXED_RECORD_BYTES = 14
+        const val FIXED_RECORD_BYTES = 16
+
+        /** Sentinel for an absent GTFS restriction; valid values are small ints. */
+        internal const val NO_VALUE = 0xFF
 
         /** Stable, delimiter-separated identity so keys survive class changes. */
         fun keyOf(trip: TripKey): String = trip.feedId.value + "|" + trip.tripId
-        internal val INDEX_MAGIC = "STIDX002".encodeToByteArray()
+        internal val INDEX_MAGIC = "STIDX003".encodeToByteArray()
+        internal val INDEX_MAGIC_V2 = "STIDX002".encodeToByteArray()
     }
 }
+
+/** The index bytes are not a format this build can read. */
+class StopTimeIndexFormatException(message: String) : IllegalStateException(message)
 
 /**
  * Random access to stop times by trip, parsed from the in-memory [dataBytes]
  * file image built by [StopTimeIndexWriter.finish].
+ *
+ * Accepts both the current `STIDX003` layout and the legacy `STIDX002` one.
+ * Legacy rows carry no boarding/alighting restrictions, so callers should
+ * rebuild through [StaticFeedSnapshotStore.reindexStopTimes] before relying
+ * on them for routing.
  */
 class StopTimeIndexReader(
     private val indexBytes: ByteArray,
@@ -135,6 +158,11 @@ class StopTimeIndexReader(
 ) {
 
     private data class Segment(val start: Long, val count: Int)
+
+    private val format: IndexFormat = detectFormat(indexBytes)
+
+    /** True when this index carries pickup/drop-off restrictions. */
+    val isCurrentFormat: Boolean get() = format == IndexFormat.V3
 
     private val segments: Map<TripKey, List<Segment>> by lazy { loadIndex().first }
     private val stopIndex: Map<String, Set<TripKey>> by lazy { loadIndex().second }
@@ -158,7 +186,9 @@ class StopTimeIndexReader(
 
     private fun cachePut(trip: TripKey, rows: List<StopTime>) {
         cache[trip] = rows
-        while (cache.size > 512) {
+        // The planner touches many trips while checking transfer reachability;
+        // a 512-entry window thrashed and re-parsed rows on every miss.
+        while (cache.size > 2_048) {
             cache.remove(cache.keys.first())
         }
     }
@@ -185,6 +215,15 @@ class StopTimeIndexReader(
                     val sequence = cursor.readInt()
                     val arrival = cursor.readInt().takeIf { it >= 0 }?.let { GtfsServiceTime.ofSeconds(it) }
                     val departure = cursor.readInt().takeIf { it >= 0 }?.let { GtfsServiceTime.ofSeconds(it) }
+                    val pickup: Int?
+                    val dropOff: Int?
+                    if (format == IndexFormat.V3) {
+                        pickup = cursor.readByte().takeIf { it != StopTimeIndexWriter.NO_VALUE }
+                        dropOff = cursor.readByte().takeIf { it != StopTimeIndexWriter.NO_VALUE }
+                    } else {
+                        pickup = null
+                        dropOff = null
+                    }
                     val nameLength = cursor.readShort()
                     val stopId = cursor.readBytes(nameLength).decodeToString()
                     result += StopTime(
@@ -193,8 +232,8 @@ class StopTimeIndexReader(
                         stopSequence = sequence,
                         arrivalTime = arrival,
                         departureTime = departure,
-                        pickupType = null,
-                        dropOffType = null,
+                        pickupType = pickup,
+                        dropOffType = dropOff,
                         timepoint = null,
                         shapeDistTraveled = null,
                     )
@@ -219,6 +258,14 @@ class StopTimeIndexReader(
             return emptyMap<TripKey, List<Segment>>() to emptyMap<String, Set<TripKey>>()
         }
         val cursor = ByteArrayCursor(indexBytes, StopTimeIndexWriter.INDEX_MAGIC.size)
+        if (format == IndexFormat.V3) {
+            val dataLength = cursor.readLong()
+            if (dataLength != dataBytes.size.toLong()) {
+                throw StopTimeIndexFormatException(
+                    "stop-time index describes $dataLength data bytes but the data file has ${dataBytes.size}",
+                )
+            }
+        }
         val tripCount = cursor.readInt()
         cursor.readLong() // total rows, informational
         val result = LinkedHashMap<TripKey, List<Segment>>(tripCount * 2)
@@ -255,5 +302,36 @@ class StopTimeIndexReader(
         val separator = name.indexOf('|')
         require(separator > 0) { "malformed stop-time index key: $name" }
         return com.intellitrip.domain.FeedId(name.substring(0, separator)) to name.substring(separator + 1)
+    }
+
+    companion object {
+        /** True when [indexBytes] is the current format (restrictions present). */
+        fun isCurrentFormat(indexBytes: ByteArray): Boolean =
+            matches(indexBytes, StopTimeIndexWriter.INDEX_MAGIC)
+
+        /** True when [indexBytes] is the legacy format (no restrictions). */
+        fun isLegacyFormat(indexBytes: ByteArray): Boolean =
+            matches(indexBytes, StopTimeIndexWriter.INDEX_MAGIC_V2)
+
+        private fun matches(bytes: ByteArray, magic: ByteArray): Boolean {
+            if (bytes.size < magic.size) return false
+            for (index in magic.indices) {
+                if (bytes[index] != magic[index]) return false
+            }
+            return true
+        }
+    }
+}
+
+private enum class IndexFormat { V2, V3 }
+
+private fun detectFormat(indexBytes: ByteArray): IndexFormat {
+    if (indexBytes.isEmpty()) return IndexFormat.V3
+    return when {
+        StopTimeIndexReader.isCurrentFormat(indexBytes) -> IndexFormat.V3
+        StopTimeIndexReader.isLegacyFormat(indexBytes) -> IndexFormat.V2
+        else -> throw StopTimeIndexFormatException(
+            "unrecognized stop-time index format (expected STIDX002 or STIDX003)",
+        )
     }
 }

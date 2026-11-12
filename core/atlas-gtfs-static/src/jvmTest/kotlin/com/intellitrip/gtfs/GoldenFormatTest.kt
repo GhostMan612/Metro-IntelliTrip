@@ -10,9 +10,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Golden-byte checks for the two binary formats: the cache file and the
- * stop-time index must stay byte-identical to the old JVM build, so a cache
- * or index written by an earlier app version remains readable.
+ * Golden-byte checks for the binary cache and the archive fixtures. The
+ * stop-time index is no longer byte-compatible with the pre-restriction
+ * build on purpose: `STIDX003` adds pickup/drop-off, so it is checked by
+ * round trip and magic instead (see [StopTimeIndexTest]).
  *
  * Skipped when `build/golden/` does not contain the frozen fixtures (e.g. a
  * fresh `clean` run without regeneration).
@@ -48,20 +49,15 @@ class GoldenFormatTest {
     }
 
     @Test
-    fun stopTimeIndexBytesMatchGolden() {
-        val expectedData = golden("stop-times.dat") ?: run {
-            println("SKIPPED golden index check: build/golden absent")
-            return
-        }
-        val expectedIndex = Files.readAllBytes(Paths.get("build/golden/stop-times.idx"))
+    fun stopTimeIndexWritesCurrentFormat() {
         val f = feed()
         val writer = StopTimeIndexWriter()
         f.stopTimes.forEach { writer.write(it) }
         val (data, index) = writer.finish()
-        assertEquals(expectedData.toList(), data.toList(), "stop-time data bytes changed")
-        assertEquals(expectedIndex.toList(), index.toList(), "stop-time index bytes changed")
-        assertEquals(32, data.size)
-        assertEquals(143, index.size)
+        assertTrue(StopTimeIndexReader.isCurrentFormat(index), "writer must emit STIDX003")
+        val reader = StopTimeIndexReader(index, data)
+        assertEquals(f.stopTimes.size, reader.rowCount())
+        assertEquals(f.stopTimes.size, reader.stopTimesFor(f.stopTimes.first().tripKey) { id -> com.intellitrip.domain.StopKey(f.feedId, id) }.size)
     }
 
     @Test

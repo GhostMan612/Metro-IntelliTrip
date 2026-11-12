@@ -6,6 +6,7 @@ import com.intellitrip.domain.GeoMath
 import com.intellitrip.domain.GtfsServiceTime
 import com.intellitrip.domain.Route
 import com.intellitrip.domain.Stop
+import com.intellitrip.domain.StopKey
 import com.intellitrip.domain.Trip
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.hours
@@ -45,6 +46,12 @@ enum class DepartureStatus {
  */
 data class Departure(
     val stopName: String,
+    /**
+     * The exact stop this departure leaves from. Names are not unique in GTFS
+     * (opposite-direction platforms and station complexes share one), so the
+     * board and every tap-through resolve the stop by key.
+     */
+    val stopKey: StopKey,
     val routeShortName: String?,
     val routeLongName: String?,
     val headsign: String?,
@@ -103,9 +110,8 @@ data class Departure(
  * - Times come from the feed's stop_times via the disk index, interpreted against the
  *   feed's service day. GTFS allows hours above 24, so a trip at 25:30 belongs to the
  *   following morning and is not wrapped into "01:30 tonight".
- * - A time is only labeled live when a realtime vehicle is actually reporting that
- *   trip. Everything else is "Schedule". Where the feed sends a real prediction delay
- *   this is the place it would be applied; until then the scheduled time stands.
+ * - A time is only labeled live when a matching trip is reporting AND a stop-specific
+ *   reported departure time exists. A vehicle position alone is not an ETA.
  */
 object DepartureBoard {
 
@@ -151,15 +157,14 @@ object DepartureBoard {
                 .map { scheduled ->
                     val trip = tripsByKey[scheduled.tripId]
                     val route = trip?.let { routesByKey[it.routeKey.routeId] }
-                    // Provenance is explicit: a vehicle location is not a
-                    // stop time. Only a matching, fresh stop update replaces
-                    // the timetable.
+                    val live = liveTrips.contains(scheduled.tripId)
                     val status = when {
                         scheduled.status == DepartureStatus.CANCELED -> DepartureStatus.CANCELED
                         scheduled.status == DepartureStatus.SKIPPED -> DepartureStatus.SKIPPED
                         scheduled.reportedTime != null -> DepartureStatus.LIVE
                         else -> DepartureStatus.SCHEDULED
                     }
+                    // A vehicle report alone is not a stop-specific prediction.
                     val when_ = if (status == DepartureStatus.LIVE) {
                         scheduled.reportedTime ?: scheduled.departure
                     } else {
@@ -168,13 +173,14 @@ object DepartureBoard {
                     val dist = origin?.let { metersBetween(it, stop.location) }
                     Departure(
                         stopName = stop.name,
+                        stopKey = stop.key,
                         routeShortName = route?.shortName,
                         routeLongName = route?.longName,
                         headsign = trip?.headsign,
                         routeColor = route?.color,
                         scheduledTime = when_,
                         isLive = status == DepartureStatus.LIVE,
-                        vehicleReporting = liveTrips.contains(scheduled.tripId),
+                        vehicleReporting = live,
                         vehicleUpdatedAt = scheduled.reportedAt,
                         status = status,
                         predictionAgeSeconds = scheduled.reportedAt?.let {
@@ -290,6 +296,23 @@ object DepartureBoard {
     /** Constructs one occurrence on an explicit service date, preserving >24h times. */
     fun onServiceDate(serviceTime: GtfsServiceTime, serviceDate: LocalDate, zone: TimeZone): Instant =
         serviceDate.atStartOfDayIn(zone) + serviceTime.secondsSinceServiceDayStart.toLong().seconds
+
+    /**
+     * The rows a rider can actually board at [stopKey].
+     *
+     * The stop-time index is keyed by trip, so asking it for the trips that
+     * serve a stop returns every stop on each of those trips. A board must use
+     * only the row at the stop it is labeling, or a downstream departure is
+     * shown as if it left from the stop near the rider.
+     */
+    fun boardableRowsAt(
+        rows: List<com.intellitrip.domain.StopTime>,
+        stopKey: StopKey,
+    ): List<com.intellitrip.domain.StopTime> = rows.filter { row ->
+        row.stopKey == stopKey &&
+            // GTFS pickup_type 1 means no boarding at this stop.
+            row.pickupType != 1
+    }
 
     /**
      * Resolves a GTFS service time to an absolute instant near [now].

@@ -2,6 +2,8 @@ package com.intellitrip.gtfs
 
 import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.FeedMetadata
+import com.intellitrip.domain.StopKey
+import com.intellitrip.domain.TripKey
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlinx.datetime.Instant
@@ -9,6 +11,7 @@ import kotlinx.datetime.LocalDate
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -167,5 +170,25 @@ class StaticFeedRefreshTest {
         assertEquals(metadata.validFrom, read.validFrom)
         assertEquals(metadata.sourceUrl, read.sourceUrl)
         assertTrue(Files.exists(root))
+    }
+
+    @Test
+    fun missingStopTimeIndexIsRebuiltFromTheStoredArchive() {
+        val root = createTempDirectory("gtfs-store")
+        val store = storeAt(root)
+        val metadata = FeedMetadata(feedId, null, null, null, "v", "h", Instant.DISTANT_PAST, null, null, "src")
+        store.activate(feedId, zip, metadata)
+        // Activation here did not use a stop-time sink, so no index exists.
+        assertNull(store.stopTimeReader(feedId))
+        assertFalse(store.hasCurrentStopTimeIndex(feedId))
+
+        assertTrue(store.reindexStopTimes(feedId))
+        assertTrue(store.hasCurrentStopTimeIndex(feedId))
+
+        val reader = store.stopTimeReader(feedId)!!
+        assertTrue(reader.isCurrentFormat)
+        val rows = reader.stopTimesFor(TripKey(feedId, "1001")) { id -> StopKey(feedId, id) }
+        assertEquals(listOf(1, 2), rows.map { it.stopSequence })
+        assertEquals(listOf("34", "39"), rows.map { it.stopKey.stopId })
     }
 }

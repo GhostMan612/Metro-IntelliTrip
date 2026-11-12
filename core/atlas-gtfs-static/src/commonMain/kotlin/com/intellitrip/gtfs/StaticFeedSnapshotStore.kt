@@ -2,6 +2,8 @@ package com.intellitrip.gtfs
 
 import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.FeedMetadata
+import com.intellitrip.domain.StopTime
+import kotlinx.datetime.Clock
 
 /**
  * Conditional-request validators returned with the active payload.
@@ -44,14 +46,10 @@ class StaticFeedSnapshotStore(
      */
     private val readerCache = mutableMapOf<String, StopTimeIndexReader>()
     private val readerLock = SimpleLock()
-
-    /**
-     * Stages owned by a refresh that is still in flight. [pruneStages] must
-     * never delete one of these: a second refresh completing first would
-     * otherwise pull the directory out from under the first.
-     */
-    private val liveStages = mutableSetOf<String>()
     private val stageLock = SimpleLock()
+    private val liveStages = mutableSetOf<String>()
+    /** Serializes index rebuilds so overlapping rebuilds cannot prune each other. */
+    private val reindexLock = SimpleLock()
 
     data class Snapshot(val metadata: FeedMetadata, val snapshotDir: String)
 
@@ -178,14 +176,104 @@ class StaticFeedSnapshotStore(
         val snapshot = activeSnapshot(feedId) ?: return null
         return readerLock.locked {
             readerCache[snapshot.snapshotDir]?.let { return@locked it }
-            val data = joinPath(snapshot.snapshotDir, STOP_TIME_DATA)
-            val index = joinPath(snapshot.snapshotDir, STOP_TIME_INDEX)
-            if (!store.exists(data) || !store.exists(index)) return@locked null
-            val reader = StopTimeIndexReader(store.readBytes(index), store.readBytes(data))
+            val files = stopTimeFiles(snapshot.snapshotDir)
+            if (!store.exists(files.data) || !store.exists(files.index)) return@locked null
+            // A corrupt or foreign-format pair fails closed rather than
+            // returning rows parsed from the wrong record layout.
+            val reader = runCatching {
+                StopTimeIndexReader(store.readBytes(files.index), store.readBytes(files.data))
+            }.getOrNull() ?: return@locked null
             // Bound the cache: drop oldest dirs (map order = insertion order).
             while (readerCache.size >= 4) readerCache.remove(readerCache.keys.first())
             readerCache[snapshot.snapshotDir] = reader
             reader
+        }
+    }
+
+    /** True when the active snapshot has a usable index in the current format. */
+    fun hasCurrentStopTimeIndex(feedId: FeedId): Boolean {
+        val snapshot = activeSnapshot(feedId) ?: return false
+        val files = stopTimeFiles(snapshot.snapshotDir)
+        if (!store.exists(files.data) || !store.exists(files.index)) return false
+        // Verify the magic, not just the pointer: a half-pruned or corrupted
+        // generation must be rebuilt rather than reported as current.
+        return runCatching {
+            StopTimeIndexReader.isCurrentFormat(store.readBytes(files.index))
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Rebuilds the active snapshot's stop-time index in the current format.
+     *
+     * This re-parses the stored archive, so it belongs on a background
+     * thread. Publishing is atomic: both files are written under generation
+     * names and the pointer file is swapped last. A crash therefore leaves
+     * the previous generation readable, and an interrupted rebuild simply
+     * runs again on the next refresh.
+     *
+     * Returns true when the active snapshot now has a current-format index.
+     */
+    fun reindexStopTimes(feedId: FeedId): Boolean = reindexLock.locked {
+        val snapshot = activeSnapshot(feedId) ?: return@locked false
+        val payload = joinPath(snapshot.snapshotDir, PAYLOAD_FILE)
+        if (!store.exists(payload)) return@locked false
+        try {
+            val writer = StopTimeIndexWriter()
+            val sink = object : StopTimeSink {
+                override fun accept(stopTime: StopTime) {
+                    writer.write(stopTime)
+                }
+            }
+            GtfsStaticParser.parseFromZip(feedId, store.readBytes(payload), snapshot.metadata, sink)
+            val (data, index) = writer.finish()
+            val generation = STOP_TIME_GENERATION_PREFIX + Clock.System.now().toEpochMilliseconds()
+            val dataName = "$generation.dat"
+            val indexName = "$generation.idx"
+            store.writeBytes(joinPath(snapshot.snapshotDir, dataName), data)
+            store.writeBytes(joinPath(snapshot.snapshotDir, indexName), index)
+            val pointer = joinPath(snapshot.snapshotDir, STOP_TIME_POINTER)
+            val temp = "$pointer.tmp"
+            writeText(temp, listOf(dataName, indexName))
+            store.move(temp, pointer, atomic = true)
+            // The cached reader (if any) belongs to the previous generation.
+            readerLock.locked { readerCache.remove(snapshot.snapshotDir) }
+            pruneStopTimeFiles(snapshot.snapshotDir, dataName, indexName)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Resolves the data/index pair named by the snapshot's pointer file. */
+    private fun stopTimeFiles(snapshotDir: String): StopTimeFiles {
+        val pointer = joinPath(snapshotDir, STOP_TIME_POINTER)
+        if (store.exists(pointer)) {
+            val names = runCatching { readText(pointer).lines().filter { it.isNotBlank() } }.getOrNull()
+            if (names != null && names.size == 2) {
+                return StopTimeFiles(
+                    data = joinPath(snapshotDir, names[0].substringAfterLast('/')),
+                    index = joinPath(snapshotDir, names[1].substringAfterLast('/')),
+                )
+            }
+        }
+        return StopTimeFiles(
+            data = joinPath(snapshotDir, STOP_TIME_DATA),
+            index = joinPath(snapshotDir, STOP_TIME_INDEX),
+        )
+    }
+
+    /** Removes stop-time files from superseded generations (best effort). */
+    private fun pruneStopTimeFiles(snapshotDir: String, dataName: String, indexName: String) {
+        runCatching {
+            store.listNames(snapshotDir)
+                .filter { name ->
+                    name.startsWith(STOP_TIME_FILE_PREFIX) &&
+                        name != dataName &&
+                        name != indexName &&
+                        name != STOP_TIME_POINTER &&
+                        name != "$STOP_TIME_POINTER.tmp"
+                }
+                .forEach { name -> store.deleteIfExists(joinPath(snapshotDir, name)) }
         }
     }
 
@@ -354,12 +442,25 @@ class StaticFeedSnapshotStore(
         metadata.sourceUrl?.let { "sourceUrl=$it" },
     )
 
+    private data class StopTimeFiles(val data: String, val index: String)
+
     private fun carryStagedStopTimes(snapshotStaging: String) {
+        var carried = 0
         listOf(STOP_TIME_DATA, STOP_TIME_INDEX).forEach { name ->
             val staged = joinPath(rootOf(STAGING_DIR), name)
             if (store.exists(staged)) {
                 store.move(staged, joinPath(snapshotStaging, name), atomic = false)
+                carried += 1
             }
+        }
+        // The sink writes the current format, so name the pair in a pointer
+        // file. Without it the snapshot would look like a legacy index and be
+        // rebuilt on the next refresh for no reason.
+        if (carried == 2) {
+            writeText(
+                joinPath(snapshotStaging, STOP_TIME_POINTER),
+                listOf(STOP_TIME_DATA, STOP_TIME_INDEX),
+            )
         }
     }
 
@@ -470,6 +571,9 @@ class StaticFeedSnapshotStore(
         private const val STAGING_DIR = "staging-stop-times"
         private const val STOP_TIME_DATA = "stop-times.dat"
         private const val STOP_TIME_INDEX = "stop-times.idx"
+        private const val STOP_TIME_POINTER = "stop-times.current"
+        private const val STOP_TIME_FILE_PREFIX = "stop-times"
+        private const val STOP_TIME_GENERATION_PREFIX = "stop-times-g"
         private const val STAGED_PAYLOAD_FILE = "gtfs.zip.staging"
 
         /** Formats a [kotlinx.datetime.LocalDate] as GTFS `yyyyMMdd`. */
@@ -488,4 +592,3 @@ class StaticFeedSnapshotStore(
         }
     }
 }
-
