@@ -3,10 +3,18 @@ package com.intellitrip.domain
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 
+/** GTFS-Realtime `StopTimeUpdate.ScheduleRelationship` for one stop. */
+enum class StopTimeRelationship { SCHEDULED, SKIPPED, NO_DATA, UNSCHEDULED }
+
 data class StopTimeUpdate(
     val stopKey: StopKey,
     val arrivalDelaySeconds: Int?,
     val departureDelaySeconds: Int?,
+    /** Absolute provider event time, when the feed sends one instead of a delay. */
+    val arrivalTime: Instant? = null,
+    val departureTime: Instant? = null,
+    /** Skipped/no-data stops must never be presented as a live prediction. */
+    val scheduleRelationship: StopTimeRelationship = StopTimeRelationship.SCHEDULED,
 )
 
 data class TripUpdate(

@@ -182,7 +182,10 @@ fun DepartureRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                ProvenanceBadge(isLive = departure.isLive)
+                ProvenanceBadge(
+                    status = departure.status,
+                    vehicleReporting = departure.vehicleReporting,
+                )
             }
 
             Spacer(Modifier.width(Space.md))
@@ -245,22 +248,42 @@ private fun RoutePill(shortName: String?, longName: String?, color: Color?, head
 }
 
 /**
- * Live or Schedule.
+ * Live, Schedule, Canceled or Skipped.
  *
- * Green is reserved for a vehicle actually reporting. "Due" in amber marks a timetable
- * time that has passed without confirmation, which is the honest state for a stop with
- * no realtime feed.
+ * Green is reserved for a fresh stop-specific prediction. A vehicle that is
+ * reporting but supplied no stop ETA stays "Schedule" with a small dot; the
+ * timetable is still the only supported departure time.
  */
 @Composable
-private fun ProvenanceBadge(isLive: Boolean) {
+private fun ProvenanceBadge(
+    status: DepartureStatus,
+    vehicleReporting: Boolean,
+) {
     val colors = MaterialTheme.status
-    val label = if (isLive) "Live" else "Schedule"
-    val tint = if (isLive) colors.live else colors.scheduled
+    val label = when (status) {
+        DepartureStatus.LIVE -> "Live"
+        DepartureStatus.CANCELED -> "Canceled"
+        DepartureStatus.SKIPPED -> "Skipped"
+        DepartureStatus.SCHEDULED -> "Schedule"
+    }
+    val tint = when (status) {
+        DepartureStatus.LIVE -> colors.live
+        DepartureStatus.CANCELED -> colors.critical
+        DepartureStatus.SKIPPED -> colors.warning
+        DepartureStatus.SCHEDULED -> colors.scheduled
+    }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
                 .clearAndSetSemantics { }
-                .background(if (isLive) tint else Color.Transparent, CircleShape)
+                .background(
+                    when {
+                        status == DepartureStatus.LIVE -> tint
+                        vehicleReporting -> tint.copy(alpha = 0.55f)
+                        else -> Color.Transparent
+                    },
+                    CircleShape,
+                )
                 .width(8.dp)
                 .height(8.dp),
         )

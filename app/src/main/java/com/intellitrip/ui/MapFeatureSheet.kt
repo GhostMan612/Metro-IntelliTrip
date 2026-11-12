@@ -264,9 +264,19 @@ private fun StopDetailBody(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = if (d.isLive) "Live" else "Schedule",
+                                text = when (d.status) {
+                                    DepartureStatus.LIVE -> "Live"
+                                    DepartureStatus.CANCELED -> "Canceled"
+                                    DepartureStatus.SKIPPED -> "Skipped"
+                                    DepartureStatus.SCHEDULED -> "Schedule"
+                                },
                                 style = MaterialTheme.typography.labelMedium,
-                                color = if (d.isLive) MaterialTheme.status.live else MaterialTheme.status.scheduled,
+                                color = when (d.status) {
+                                    DepartureStatus.LIVE -> MaterialTheme.status.live
+                                    DepartureStatus.CANCELED -> MaterialTheme.status.critical
+                                    DepartureStatus.SKIPPED -> MaterialTheme.status.warning
+                                    DepartureStatus.SCHEDULED -> MaterialTheme.status.scheduled
+                                },
                             )
                         }
                         Text(text = d.wait, style = MaterialTheme.typography.titleMedium)

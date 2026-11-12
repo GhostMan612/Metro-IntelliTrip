@@ -63,11 +63,15 @@ data class RtStopTimeUpdate(
     val stopId: String = "",
     val arrival: RtStopTimeEvent? = null,
     val departure: RtStopTimeEvent? = null,
+    /** Wire enum: SCHEDULED=0, SKIPPED=1, NO_DATA=2, UNSCHEDULED=3. */
+    val scheduleRelationship: Int = 0,
 )
 
 data class RtStopTimeEvent(
     /** Null when `hasDelay()` is false. */
     val delay: Int? = null,
+    /** Absolute event time (epoch seconds), null when `hasTime()` is false. */
+    val time: Long? = null,
 )
 
 data class RtAlert(

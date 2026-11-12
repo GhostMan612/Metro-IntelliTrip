@@ -13,6 +13,7 @@ import com.intellitrip.domain.RouteKey
 import com.intellitrip.domain.ScheduleRelationship
 import com.intellitrip.domain.ServiceAlert
 import com.intellitrip.domain.StopKey
+import com.intellitrip.domain.StopTimeRelationship
 import com.intellitrip.domain.StopTimeUpdate
 import com.intellitrip.domain.TripKey
 import com.intellitrip.domain.TripUpdate
@@ -122,6 +123,9 @@ class GtfsRealtimeMapper(
                         stopKey = StopKey(feedId, stopUpdate.stopId),
                         arrivalDelaySeconds = stopUpdate.arrival?.delay,
                         departureDelaySeconds = stopUpdate.departure?.delay,
+                        arrivalTime = stopUpdate.arrival?.time?.let(Instant::fromEpochSeconds),
+                        departureTime = stopUpdate.departure?.time?.let(Instant::fromEpochSeconds),
+                        scheduleRelationship = stopTimeRelationship(stopUpdate.scheduleRelationship),
                     )
                 },
             )
@@ -157,6 +161,19 @@ class GtfsRealtimeMapper(
         SEVERITY_SEVERE -> AlertSeverity.SEVERE
         SEVERITY_WARNING -> AlertSeverity.WARNING
         else -> AlertSeverity.INFO
+    }
+
+    /**
+     * GTFS-Realtime StopTimeUpdate.ScheduleRelationship:
+     * SCHEDULED=0, SKIPPED=1, NO_DATA=2, UNSCHEDULED=3. Unknown wire values
+     * are treated as NO_DATA, never as a live prediction.
+     */
+    private fun stopTimeRelationship(value: Int): StopTimeRelationship = when (value) {
+        0 -> StopTimeRelationship.SCHEDULED
+        1 -> StopTimeRelationship.SKIPPED
+        2 -> StopTimeRelationship.NO_DATA
+        3 -> StopTimeRelationship.UNSCHEDULED
+        else -> StopTimeRelationship.NO_DATA
     }
 
     private companion object {

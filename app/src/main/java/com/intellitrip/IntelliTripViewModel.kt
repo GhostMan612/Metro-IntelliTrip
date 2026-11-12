@@ -35,6 +35,7 @@ import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -55,6 +56,9 @@ data class AppState(
     val scope: ScopeState = ScopeEngine().currentScope(Focus.System),
     val vehicles: List<Vehicle> = emptyList(),
     val vehiclesFetchedAt: Instant? = null,
+    /** Stop-specific GTFS-Realtime trip updates, kept separate from vehicles. */
+    val tripUpdates: List<com.intellitrip.domain.TripUpdate> = emptyList(),
+    val tripUpdatesFetchedAt: Instant? = null,
     val staticFeed: StaticFeed? = null,
     val radarFrame: RadarFrame? = null,
     val radarEnabled: Boolean = false,
@@ -114,6 +118,15 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     private val savedPlaces = com.intellitrip.ui.SavedPlacesStore(host.filesRoot())
 
     private var locationJob: Job? = null
+
+    /**
+     * One audible arrival cue per selected journey, not per GPS callback.
+     *
+     * Reset only when the rider starts or selects a different journey. The
+     * geofence can be entered repeatedly during one trip without ringing
+     * repeatedly.
+     */
+    private var arrivalCuedJourneyId: String? = null
 
     private var refreshJob: Job? = null
     private var alertsRefreshJob: Job? = null
@@ -245,10 +258,20 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     fun loadLiveTransit() {
         update { it.copy(status = "Loading live transit…") }
         viewModelScope.launch {
-            when (val result = host.realtime.vehiclePositions().first()) {
+            // Vehicles and trip updates are independent feeds. Fetch both at
+            // once so a slow prediction endpoint cannot delay vehicle markers,
+            // and keep their provenance separate: a vehicle is not an ETA.
+            val vehiclesDeferred = async { host.realtime.vehiclePositions().first() }
+            val updatesDeferred = async { host.realtime.tripUpdates().first() }
+            when (val result = vehiclesDeferred.await()) {
                 is ProviderResult.Success -> onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.inWholeSeconds)
                 is ProviderResult.StaleSuccess -> onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.inWholeSeconds)
                 else -> update { it.copy(status = "Live transit unavailable: ${describe(result)}") }
+            }
+            when (val result = updatesDeferred.await()) {
+                is ProviderResult.Success -> onTripUpdates(result.data, result.freshness.fetchedAt)
+                is ProviderResult.StaleSuccess -> onTripUpdates(result.data, result.freshness.fetchedAt)
+                else -> update { it.copy(status = "Live predictions unavailable: ${describe(result)}") }
             }
         }
     }
@@ -486,6 +509,9 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
 
     fun planJourney() {
         val current = _state.value
+        // A new plan is a new arrival opportunity. Reset the one-shot cue so
+        // the next selected journey can announce its own destination once.
+        arrivalCuedJourneyId = null
         if (current.travelMode == TravelMode.WALK_ONLY) {
             val estimate = WalkEstimator.estimate(current.origin, current.destination)
             update {
@@ -563,7 +589,9 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
             var failures = 0
             while (isActive) {
                 delay(backoffMs(failures))
-                when (val result = host.realtime.vehiclePositions().first()) {
+                val vehiclesDeferred = async { host.realtime.vehiclePositions().first() }
+                val updatesDeferred = async { host.realtime.tripUpdates().first() }
+                when (val result = vehiclesDeferred.await()) {
                     is ProviderResult.Success -> { failures = 0; onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.inWholeSeconds) }
                     is ProviderResult.StaleSuccess -> { failures = 0; onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.inWholeSeconds) }
                     is ProviderResult.RateLimited -> {
@@ -573,6 +601,15 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                     else -> {
                         failures++
                         update { it.copy(status = "Refresh failed: ${describe(result)}") }
+                    }
+                }
+                when (val result = updatesDeferred.await()) {
+                    is ProviderResult.Success ->
+                        onTripUpdates(result.data, result.freshness.fetchedAt)
+                    is ProviderResult.StaleSuccess ->
+                        onTripUpdates(result.data, result.freshness.fetchedAt)
+                    else -> update {
+                        it.copy(status = "Live predictions unavailable: ${describe(result)}")
                     }
                 }
             }
@@ -775,9 +812,10 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
      * retained. Returns an empty list when there is no feed or no index yet, which
      * the UI presents as "download schedules" rather than as a blank list.
      *
-     * Only trips with a current vehicle report are marked live. Everything else keeps
-     * its scheduled time and is labelled "Schedule", because an estimated arrival with
-     * no data behind it is worse than admitting the time comes from the timetable.
+     * A departure is marked live only when a fresh, stop-specific GTFS-Realtime
+     * prediction matches its trip, stop and service date. A reporting vehicle
+     * with no stop ETA is shown as Schedule; an estimated arrival with no data
+     * behind it is worse than admitting the time comes from the timetable.
      *
      * Frequency-based trips are expanded at headway intervals (capped, 2 h
      * horizon) the same way the planner expands them, so the board shows the
@@ -830,66 +868,61 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                 departuresFor = { stop ->
                     index.tripsServing(stop.key).flatMap { tripKey ->
                         index.stopTimesFor(tripKey) { stopId -> com.intellitrip.domain.StopKey(feed.feedId, stopId) }
-                    }.filter { stopTime ->
-                        // Only trips actually running on a candidate service day.
-                        val trip = tripsByKey[stopTime.tripKey.tripId] ?: return@filter false
-                        candidateDates.any { d ->
-                            com.intellitrip.ui.DepartureBoard.isServiceActive(
-                                feed.calendars, feed.calendarDates, trip.serviceKey, d,
-                            )
-                        }
                     }.flatMap { stopTime ->
+                        val trip = tripsByKey[stopTime.tripKey.tripId] ?: return@flatMap emptyList()
                         val scheduled = stopTime.departureTime ?: stopTime.arrivalTime
                             ?: return@flatMap emptyList()
-                        val freqs = frequenciesByTrip[stopTime.tripKey.tripId]
-                        if (freqs.isNullOrEmpty()) {
-                            listOf(
-                                com.intellitrip.ui.DepartureBoard.ScheduledDeparture(
-                                    tripId = stopTime.tripKey.tripId,
-                                    departure = com.intellitrip.ui.DepartureBoard.resolveServiceTime(scheduled, now, agencyZone),
-                                ),
+                        // Build candidates only for dates on which this trip's
+                        // service actually runs. The chosen occurrence keeps
+                        // its originating service date, so a 25:30 time can
+                        // never be paired with the wrong day.
+                        val activeDates = candidateDates.filter { date ->
+                            com.intellitrip.ui.DepartureBoard.isServiceActive(
+                                feed.calendars, feed.calendarDates, trip.serviceKey, date,
                             )
+                        }
+                        if (activeDates.isEmpty()) return@flatMap emptyList()
+                        val frequencies = frequenciesByTrip[stopTime.tripKey.tripId].orEmpty()
+                        val firstSec = if (frequencies.isEmpty()) {
+                            null
                         } else {
-                            // Expand headway runs like the planner does.
-                            val firstSec = firstDepartureSec.getOrPut(stopTime.tripKey.tripId) {
+                            firstDepartureSec.getOrPut(stopTime.tripKey.tripId) {
                                 index.stopTimesFor(stopTime.tripKey) { stopId ->
                                     com.intellitrip.domain.StopKey(feed.feedId, stopId)
-                                }.firstOrNull()?.departureTime?.secondsSinceServiceDayStart
+                                }.minByOrNull { it.stopSequence }
+                                    ?.let { it.departureTime ?: it.arrivalTime }
+                                    ?.secondsSinceServiceDayStart
                                     ?: scheduled.secondsSinceServiceDayStart
                             }
-                            val out = mutableListOf<com.intellitrip.ui.DepartureBoard.ScheduledDeparture>()
-                            for (freq in freqs) {
-                                if (freq.headwaySeconds <= 0) continue
-                                var runStart = freq.startTime.secondsSinceServiceDayStart
-                                var count = 0
-                                // Top 20 per frequency run, inside the 7200 s horizon
-                                // below: the planner expands up to 300 runs for
-                                // search completeness (StaticNetworkPlanner); the
-                                // board lists only upcoming departures, so the
-                                // tighter cap is deliberate, not a mismatch.
-                                while (runStart <= freq.endTime.secondsSinceServiceDayStart && count < 20) {
-                                    val delta = runStart - firstSec
-                                    val shifted = com.intellitrip.domain.GtfsServiceTime.ofSeconds(
-                                        scheduled.secondsSinceServiceDayStart + delta,
-                                    )
-                                    val instant = com.intellitrip.ui.DepartureBoard.resolveServiceTime(shifted, now, agencyZone)
-                                    if (instant > now + 7200.seconds) break
-                                    out += com.intellitrip.ui.DepartureBoard.ScheduledDeparture(
-                                        tripId = stopTime.tripKey.tripId,
-                                        departure = instant,
-                                    )
-                                    runStart += freq.headwaySeconds
-                                    count++
-                                }
-                            }
-                            out.ifEmpty {
-                                listOf(
-                                    com.intellitrip.ui.DepartureBoard.ScheduledDeparture(
-                                        tripId = stopTime.tripKey.tripId,
-                                        departure = com.intellitrip.ui.DepartureBoard.resolveServiceTime(scheduled, now, agencyZone),
-                                    ),
-                                )
-                            }
+                        }
+                        com.intellitrip.ui.DepartureBoard.occurrences(
+                            tripId = stopTime.tripKey.tripId,
+                            stopId = stopTime.stopKey.stopId,
+                            serviceTime = scheduled,
+                            activeDates = activeDates,
+                            zone = agencyZone,
+                            now = now,
+                            frequencies = frequencies,
+                            firstDepartureSeconds = firstSec,
+                        ).map { occurrence ->
+                            val date = occurrence.serviceDate
+                                ?: return@map occurrence
+                            val prediction = DepartureRealtime.resolve(
+                                updates = current.tripUpdates,
+                                tripId = occurrence.tripId,
+                                stopId = occurrence.stopId ?: stopTime.stopKey.stopId,
+                                serviceDate = date,
+                                scheduled = occurrence.departure,
+                                now = now,
+                                fetchedAt = current.tripUpdatesFetchedAt,
+                                frequencyRunStartSeconds = occurrence.frequencyRunStartSeconds,
+                            )
+                            occurrence.copy(
+                                reportedTime = prediction?.time,
+                                reportedAt = prediction?.reportedAt,
+                                status = prediction?.status
+                                    ?: com.intellitrip.ui.DepartureStatus.SCHEDULED,
+                            )
                         }
                     }.sortedBy { it.departure }
                 },
@@ -938,9 +971,16 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                             is com.intellitrip.domain.Leg.WalkLeg -> last.to
                             is com.intellitrip.domain.Leg.Other -> null
                         }
-                        if (dest != null) {
-                            val dist = com.intellitrip.ui.DepartureBoard.metersBetween(fix.position, dest)
-                            if (dist < 100) com.intellitrip.ui.ArrivalCue.playIfAllowed(host.context, true)
+                        if (dest != null && ArrivalGate.shouldCue(
+                                fix = fix,
+                                destination = dest,
+                                journeyId = journey.id,
+                                alreadyCuedJourneyId = arrivalCuedJourneyId,
+                                now = Clock.System.now(),
+                            )
+                        ) {
+                            arrivalCuedJourneyId = journey.id
+                            com.intellitrip.ui.ArrivalCue.playIfAllowed(host.context, true)
                         }
                     }
                 }
@@ -981,6 +1021,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
 
     /** Selects a journey, draws it on the map, and frames it. */
     fun selectJourney(id: String) {
+        if (_state.value.selectedJourneyId != id) arrivalCuedJourneyId = null
         _state.update { it.copy(selectedJourneyId = id) }
         val focus = focusJourney(id) ?: return
         setScope("Selected journey", focus)
@@ -1008,6 +1049,15 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
             offlineInstalled = runCatching { host.basemapStore.hasPackage() }.getOrDefault(false),
         ).availability(),
     )
+
+    private fun onTripUpdates(updates: List<com.intellitrip.domain.TripUpdate>, fetchedAt: Instant) {
+        _state.update {
+            it.copy(
+                tripUpdates = updates,
+                tripUpdatesFetchedAt = fetchedAt,
+            )
+        }
+    }
 
     private fun onVehicles(vehicles: List<Vehicle>, fetchedAt: Instant, ageSeconds: Long) {
         val now = Clock.System.now()

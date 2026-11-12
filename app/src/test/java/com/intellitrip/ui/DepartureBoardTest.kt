@@ -105,19 +105,84 @@ class DepartureBoardTest {
     }
 
     @Test
-    fun aReportingTripIsLiveAndUsesItsReportedTime() {
+    fun aStopPredictionIsLiveAndUsesItsReportedTime() {
         val stop = stop("S1", "First", 44.97, -93.26)
         val scheduled = now + 600.seconds
         val reported = now + 60.seconds
         val result = board(
             listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", scheduled, reportedTime = reported))),
+            mapOf(
+                "S1" to listOf(
+                    DepartureBoard.ScheduledDeparture(
+                        "T1",
+                        scheduled,
+                        reportedTime = reported,
+                        reportedAt = now - 10.seconds,
+                    ),
+                ),
+            ),
             liveTrips = setOf("T1"),
         )
         val departure = result.single()
         assertTrue(departure.isLive)
+        assertEquals(DepartureStatus.LIVE, departure.status)
         assertEquals(1, departure.minutesUntil)
         assertEquals(reported, departure.scheduledTime)
+        assertEquals(10L, departure.predictionAgeSeconds)
+    }
+
+    @Test
+    fun vehicleOnlyReportMustNotMarkAScheduledDepartureLive() {
+        val stop = stop("S1", "First", 44.97, -93.26)
+        val scheduled = now + 240.seconds
+        val departure = board(
+            listOf(stop),
+            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", scheduled))),
+            liveTrips = setOf("T1"),
+        ).single()
+        assertFalse("a vehicle location is not a stop ETA", departure.isLive)
+        assertEquals(DepartureStatus.SCHEDULED, departure.status)
+        assertTrue(departure.vehicleReporting)
+        assertEquals(scheduled, departure.scheduledTime)
+        assertTrue(departure.accessibilityLabel().contains("scheduled"))
+        assertTrue(departure.accessibilityLabel().contains("vehicle reporting"))
+    }
+
+    @Test
+    fun canceledAndSkippedPredictionsAreExplicitStates() {
+        val stop = stop("S1", "First", 44.97, -93.26)
+        val canceled = board(
+            listOf(stop),
+            mapOf(
+                "S1" to listOf(
+                    DepartureBoard.ScheduledDeparture(
+                        "T1",
+                        now + 300.seconds,
+                        status = DepartureStatus.CANCELED,
+                        reportedAt = now - 5.seconds,
+                    ),
+                ),
+            ),
+        ).single()
+        assertEquals(DepartureStatus.CANCELED, canceled.status)
+        assertFalse(canceled.isLive)
+        assertTrue(canceled.accessibilityLabel().contains("canceled"))
+
+        val skipped = board(
+            listOf(stop),
+            mapOf(
+                "S1" to listOf(
+                    DepartureBoard.ScheduledDeparture(
+                        "T1",
+                        now + 300.seconds,
+                        status = DepartureStatus.SKIPPED,
+                        reportedAt = now - 5.seconds,
+                    ),
+                ),
+            ),
+        ).single()
+        assertEquals(DepartureStatus.SKIPPED, skipped.status)
+        assertFalse(skipped.isLive)
     }
 
     @Test
@@ -194,7 +259,16 @@ class DepartureBoardTest {
         val stop = stop("S1", "First & Main", 44.97, -93.26)
         val live = board(
             listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 240.seconds))),
+            mapOf(
+                "S1" to listOf(
+                    DepartureBoard.ScheduledDeparture(
+                        "T1",
+                        now + 240.seconds,
+                        reportedTime = now + 120.seconds,
+                        reportedAt = now - 5.seconds,
+                    ),
+                ),
+            ),
             liveTrips = setOf("T1"),
         ).single()
         val spoken = live.accessibilityLabel()
@@ -245,15 +319,26 @@ class DepartureBoardTest {
     }
 
     @Test
-    fun liveDepartureDoesNotFabricateVehicleTimestamp() {
+    fun liveDepartureCarriesThePredictionTimestampNotTheClock() {
         val stop = stop("S1", "First", 44.97, -93.26)
         val reported = now + 60.seconds
+        val providerTimestamp = now - 15.seconds
         val result = board(
             listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 600.seconds, reportedTime = reported))),
+            mapOf(
+                "S1" to listOf(
+                    DepartureBoard.ScheduledDeparture(
+                        "T1",
+                        now + 600.seconds,
+                        reportedTime = reported,
+                        reportedAt = providerTimestamp,
+                    ),
+                ),
+            ),
             liveTrips = setOf("T1"),
         ).single()
-        assertEquals(reported, result.vehicleUpdatedAt)
+        assertEquals(providerTimestamp, result.vehicleUpdatedAt)
+        assertEquals(15L, result.predictionAgeSeconds)
     }
 
     @Test
@@ -264,5 +349,93 @@ class DepartureBoardTest {
             mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 20.seconds))),
         )
         assertEquals("Due", result.single().wait)
+    }
+
+    @Test
+    fun occurrenceKeepsTheServiceDateThatMadeItValid() {
+        val monday = LocalDate(2026, 10, 5)
+        val saturday = LocalDate(2026, 10, 3)
+        val time = GtfsServiceTime.parse("07:30:00")
+        val onMonday = DepartureBoard.occurrences(
+            tripId = "T1",
+            stopId = "S1",
+            serviceTime = time,
+            activeDates = listOf(monday),
+            zone = zone,
+            now = now,
+        ).single()
+        assertEquals(monday, onMonday.serviceDate)
+        assertEquals(LocalDateTime(2026, 10, 5, 7, 30).toInstant(zone), onMonday.departure)
+
+        // The same trip is not active on Saturday, so no occurrence may be
+        // constructed for it even though a wall-clock resolver could find one.
+        assertTrue(
+            DepartureBoard.occurrences(
+                tripId = "T1",
+                stopId = "S1",
+                serviceTime = time,
+                activeDates = emptyList(),
+                zone = zone,
+                now = now,
+            ).isEmpty(),
+        )
+        assertTrue(
+            DepartureBoard.occurrences(
+                tripId = "T1",
+                stopId = "S1",
+                serviceTime = time,
+                activeDates = listOf(saturday),
+                zone = zone,
+                now = now,
+            ).isEmpty(),
+        )
+    }
+
+    @Test
+    fun lateNightTimeKeepsItsOriginatingServiceDate() {
+        val sunday = LocalDate(2026, 10, 4)
+        val lateNow = LocalDateTime(2026, 10, 4, 23, 59).toInstant(zone)
+        val occurrence = DepartureBoard.occurrences(
+            tripId = "T1",
+            stopId = "S1",
+            serviceTime = GtfsServiceTime.parse("25:30:00"),
+            activeDates = listOf(sunday),
+            zone = zone,
+            now = lateNow,
+        ).single()
+        assertEquals(sunday, occurrence.serviceDate)
+        assertEquals(LocalDateTime(2026, 10, 5, 1, 30).toInstant(zone), occurrence.departure)
+    }
+
+    @Test
+    fun frequencyRunsUseTheirOwnServiceDateAndHeadway() {
+        val monday = LocalDate(2026, 10, 5)
+        val frequency = com.intellitrip.domain.Frequency(
+            tripKey = TripKey(feedId, "T1"),
+            startTime = GtfsServiceTime.parse("06:00:00"),
+            endTime = GtfsServiceTime.parse("08:00:00"),
+            headwaySeconds = 1_800,
+            exactTimes = null,
+        )
+        val occurrences = DepartureBoard.occurrences(
+            tripId = "T1",
+            stopId = "S1",
+            serviceTime = GtfsServiceTime.parse("06:10:00"),
+            activeDates = listOf(monday),
+            zone = zone,
+            now = now,
+            frequencies = listOf(frequency),
+            firstDepartureSeconds = 6 * 3_600,
+        )
+        assertEquals(
+            listOf(
+                LocalDateTime(2026, 10, 5, 7, 10).toInstant(zone),
+                LocalDateTime(2026, 10, 5, 7, 40).toInstant(zone),
+                LocalDateTime(2026, 10, 5, 8, 10).toInstant(zone),
+            ),
+            occurrences.map { it.departure },
+        )
+        assertTrue(occurrences.all { it.serviceDate == monday })
+        assertTrue(occurrences.all { it.frequencyRunStartSeconds != null })
     }
 }

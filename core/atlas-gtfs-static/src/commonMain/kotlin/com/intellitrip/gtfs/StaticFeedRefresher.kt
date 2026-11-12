@@ -59,7 +59,11 @@ class StaticFeedRefresher(
      * in-memory/byte-based, so the whole refresh is portable.
      */
     private suspend fun refreshBlockingAsync(): RefreshOutcome {
-        val validators = store.validators(feedId)
+        val active = store.activeSnapshot(feedId)
+        // Validators only describe the active payload. After a crash that left
+        // no active snapshot, sending them would invite a 304 for content the
+        // store cannot serve.
+        val validators = if (active != null) store.validators(feedId) else FeedValidators()
         val acquisition = if (validators.usable) {
             acquirer.acquireAsync(
                 feedId = feedId,
@@ -72,6 +76,12 @@ class StaticFeedRefresher(
         }
         return when (acquisition) {
             is GtfsFeedAcquirer.AcquisitionResult.NotModified -> {
+                if (active == null) {
+                    return RefreshOutcome.Rejected(
+                        feedId,
+                        "Publisher returned 304 but no active snapshot exists",
+                    )
+                }
                 val refreshed = FeedValidators(acquisition.etag, acquisition.lastModified)
                 if (refreshed.usable) store.recordValidators(feedId, refreshed)
                 RefreshOutcome.NotModified(feedId)
@@ -82,38 +92,46 @@ class StaticFeedRefresher(
     }
 
     private suspend fun activate(acquisition: GtfsFeedAcquirer.AcquisitionResult.Updated): RefreshOutcome {
-        val active = store.activeSnapshot(feedId)
-        val stagedPayload = try {
-            store.writeStagedPayload(acquisition.payload)
+        val stage = store.beginRefresh()
+        try {
+            store.writeStagedPayload(acquisition.payload, stage)
         } catch (e: Exception) {
+            store.abortRefresh(stage)
             return RefreshOutcome.Rejected(feedId, e.message ?: "Storage failed")
         }
+        // New feeds must not inherit the previous feed's validity window. The
+        // dates are derived from this payload's own calendar tables below.
         val metadata = FeedMetadata(
             feedId = feedId,
             publisherName = null,
             publisherUrl = null,
             lang = null,
-            version = active?.metadata?.version,
+            version = null,
             hash = GtfsFeedAcquirer.sha256(acquisition.payload),
             fetchedAt = clock(),
-            validFrom = active?.metadata?.validFrom,
-            validTo = active?.metadata?.validTo,
+            validFrom = null,
+            validTo = null,
             sourceUrl = sourceUrl,
         )
-        val feed = try {
-            // Parse from the payload bytes, streaming each entry row-by-row
-            // to the stop-time sink (same as refreshBlocking).
-            val stopTimeSink = store.newStopTimeSink()
+        val parsed = try {
+            val stopTimeSink = store.newStopTimeSink(stage)
             try {
                 GtfsStaticParser.parseFromZip(feedId, acquisition.payload, metadata, stopTimeSink)
             } finally {
                 stopTimeSink.close()
             }
         } catch (e: Exception) {
-            runCatching { store.deleteStagedPayload(stagedPayload) }
+            store.abortRefresh(stage)
             return RefreshOutcome.Rejected(feedId, e.message ?: "Validation failed")
         }
-        store.activateStaged(feedId, stagedPayload, metadata)
+        val feed = parsed.copy(metadata = deriveMetadata(metadata, parsed))
+        try {
+            store.activateStaged(feedId, stage, feed.metadata)
+        } catch (e: Exception) {
+            store.abortRefresh(stage)
+            return RefreshOutcome.Rejected(feedId, e.message ?: "Activation failed")
+        }
+        store.pruneStages()
         runCatching { store.writeCache(feedId, feed) }
         store.recordValidators(feedId, FeedValidators(acquisition.etag, acquisition.lastModified))
         // Durable cross-restart payload cache (IndexedDB on wasmJs, in-memory
@@ -122,10 +140,30 @@ class StaticFeedRefresher(
         // half-completed write can never point at missing bytes.
         persistDurable(
             payload = acquisition.payload,
-            metadata = metadata,
+            metadata = feed.metadata,
             validators = FeedValidators(acquisition.etag, acquisition.lastModified),
         )
         return RefreshOutcome.Activated(feed)
+    }
+
+    /**
+     * Derives validity from the payload, never from the previous snapshot.
+     * Calendar rows define the covered service period; feed_info parsing can
+     * refine this later without changing the truth rule.
+     */
+    private fun deriveMetadata(metadata: FeedMetadata, feed: StaticFeed): FeedMetadata {
+        if (metadata.validFrom != null || metadata.validTo != null) return metadata
+        val dates = buildList {
+            feed.calendars.forEach {
+                add(it.startDate)
+                add(it.endDate)
+            }
+            feed.calendarDates.forEach { add(it.date) }
+        }
+        return metadata.copy(
+            validFrom = dates.minOrNull(),
+            validTo = dates.maxOrNull(),
+        )
     }
 
     private suspend fun persistDurable(
@@ -197,27 +235,40 @@ class StaticFeedRefresher(
             publisherName = null,
             publisherUrl = null,
             lang = null,
-            version = active?.metadata?.version,
+            version = null,
             hash = manifest.hash,
             fetchedAt = fetchedAt,
-            validFrom = active?.metadata?.validFrom,
-            validTo = active?.metadata?.validTo,
+            validFrom = null,
+            validTo = null,
             sourceUrl = manifest.sourceUrl ?: sourceUrl,
         )
-        val feed = try {
-            val stopTimeSink = store.newStopTimeSink()
+        val stage = store.beginRefresh()
+        val parsed = try {
+            val stopTimeSink = store.newStopTimeSink(stage)
             try {
                 GtfsStaticParser.parseFromZip(feedId, payload, metadata, stopTimeSink)
             } finally {
                 stopTimeSink.close()
             }
         } catch (_: Exception) {
+            store.abortRefresh(stage)
             return null
         }
+        val finalMetadata = active?.metadata ?: deriveMetadata(metadata, parsed)
+        val feed = parsed.copy(metadata = finalMetadata)
 
         if (active == null) {
-            store.activate(feedId, payload, metadata)
-            runCatching { store.writeCache(feedId, feed) }
+            try {
+                store.writeStagedPayload(payload, stage)
+                store.activateStaged(feedId, stage, finalMetadata)
+                store.pruneStages()
+                runCatching { store.writeCache(feedId, feed) }
+            } catch (_: Exception) {
+                store.abortRefresh(stage)
+                return null
+            }
+        } else {
+            store.abortRefresh(stage)
         }
         val validators = FeedValidators(manifest.etag, manifest.lastModified)
         if (validators.usable) store.recordValidators(feedId, validators)
@@ -244,7 +295,7 @@ class StaticFeedRefresher(
         // which for a real feed is tens of megabytes on every launch. The
         // publisher decides whether that is necessary: a 304 arrives when the
         // validators still match.
-        val validators = store.validators(feedId)
+        val validators = if (active != null) store.validators(feedId) else FeedValidators()
         val acquisition = if (validators.usable) {
             acquirer.acquire(
                 feedId = feedId,
@@ -257,6 +308,12 @@ class StaticFeedRefresher(
         }
         return when (acquisition) {
             is GtfsFeedAcquirer.AcquisitionResult.NotModified -> {
+                if (active == null) {
+                    return RefreshOutcome.Rejected(
+                        feedId,
+                        "Publisher returned 304 but no active snapshot exists",
+                    )
+                }
                 // A 304 may rotate the validators, so refresh them before
                 // returning.
                 val refreshed = FeedValidators(acquisition.etag, acquisition.lastModified)
@@ -268,11 +325,13 @@ class StaticFeedRefresher(
             is GtfsFeedAcquirer.AcquisitionResult.Updated -> {
                 val etag = acquisition.etag
                 val lastModified = acquisition.lastModified
+                val stage = store.beginRefresh()
                 // Stage to the store first so the compressed payload can be
                 // released before uncompressed tables peak (low-end OOM fix).
-                val stagedPayload = try {
-                    store.writeStagedPayload(acquisition.payload)
+                try {
+                    store.writeStagedPayload(acquisition.payload, stage)
                 } catch (e: Exception) {
+                    store.abortRefresh(stage)
                     return RefreshOutcome.Rejected(feedId, e.message ?: "Storage failed")
                 }
                 val metadata = FeedMetadata(
@@ -280,34 +339,36 @@ class StaticFeedRefresher(
                     publisherName = null,
                     publisherUrl = null,
                     lang = null,
-                    version = active?.metadata?.version,
+                    version = null,
                     hash = GtfsFeedAcquirer.sha256(acquisition.payload),
                     fetchedAt = clock(),
-                    validFrom = active?.metadata?.validFrom,
-                    validTo = active?.metadata?.validTo,
+                    validFrom = null,
+                    validTo = null,
                     sourceUrl = sourceUrl,
                 )
-                val feed = try {
-                    // Parse from the payload bytes, streaming each entry
-                    // row-by-row to the stop-time sink.
-                    val stopTimeSink = store.newStopTimeSink()
-                    val parsed = try {
+                val parsed = try {
+                    val stopTimeSink = store.newStopTimeSink(stage)
+                    try {
                         GtfsStaticParser.parseFromZip(feedId, acquisition.payload, metadata, stopTimeSink)
                     } finally {
                         stopTimeSink.close()
                     }
-                    parsed
                 } catch (e: Exception) {
-                    runCatching { store.deleteStagedPayload(stagedPayload) }
+                    store.abortRefresh(stage)
                     return RefreshOutcome.Rejected(feedId, e.message ?: "Validation failed")
                 }
+                val feed = parsed.copy(metadata = deriveMetadata(metadata, parsed))
+                try {
+                    store.activateStaged(feedId, stage, feed.metadata)
+                } catch (e: Exception) {
+                    store.abortRefresh(stage)
+                    return RefreshOutcome.Rejected(feedId, e.message ?: "Activation failed")
+                }
+                store.pruneStages()
                 // Only now that parsing succeeded is the snapshot activated.
                 // Recording the new validators before this point would let a
                 // rejected payload suppress the retry that would have
                 // replaced it.
-                // Payload array is still referenced here; release the archive
-                // reference via letting the acquisition go out of scope next.
-                store.activateStaged(feedId, stagedPayload, metadata)
                 // Binary cache for cold start (best-effort).
                 runCatching { store.writeCache(feedId, feed) }
                 store.recordValidators(feedId, FeedValidators(etag, lastModified))

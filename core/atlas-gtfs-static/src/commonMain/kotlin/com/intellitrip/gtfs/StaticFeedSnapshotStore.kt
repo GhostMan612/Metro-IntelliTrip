@@ -45,9 +45,66 @@ class StaticFeedSnapshotStore(
     private val readerCache = mutableMapOf<String, StopTimeIndexReader>()
     private val readerLock = SimpleLock()
 
+    /**
+     * Stages owned by a refresh that is still in flight. [pruneStages] must
+     * never delete one of these: a second refresh completing first would
+     * otherwise pull the directory out from under the first.
+     */
+    private val liveStages = mutableSetOf<String>()
+    private val stageLock = SimpleLock()
+
     data class Snapshot(val metadata: FeedMetadata, val snapshotDir: String)
 
-    /** Opens a stop-time sink writing into a staging area; call [close] to finalize. */
+    /**
+     * One refresh attempt's private staging area.
+     *
+     * A payload, its stop-time data and its index are written under a unique
+     * directory. Activation moves only this stage's files, so two overlapping
+     * refreshes can never mix one attempt's payload with another's stop-time
+     * index. The active pointer remains the single commit point.
+     */
+    data class RefreshStage(
+        val id: String,
+        val directory: String,
+        val payloadPath: String,
+        val stopTimeDataPath: String,
+        val stopTimeIndexPath: String,
+    )
+
+    /**
+     * Creates an isolated staging area for one refresh.
+     *
+     * Callers must finish with [activateStaged] or [abortRefresh]. A process
+     * kill may leave an orphaned stage; [pruneStages] removes those on the next
+     * successful refresh.
+     */
+    fun beginRefresh(): RefreshStage {
+        val token = stageToken()
+        stageLock.locked { liveStages += token }
+        val directory = try {
+            createDirectories(joinPath(rootOf(STAGING_DIR), "stage-$token"))
+        } catch (e: Exception) {
+            stageLock.locked { liveStages -= token }
+            throw e
+        }
+        return RefreshStage(
+            id = token,
+            directory = directory,
+            payloadPath = joinPath(directory, STAGED_PAYLOAD_FILE),
+            stopTimeDataPath = joinPath(directory, STOP_TIME_DATA),
+            stopTimeIndexPath = joinPath(directory, STOP_TIME_INDEX),
+        )
+    }
+
+    /** Opens a stop-time sink writing into [stage]; call [close] to finalize. */
+    fun newStopTimeSink(stage: RefreshStage): StopTimeSinkHandle = StopTimeSinkHandle(
+        writer = StopTimeIndexWriter(),
+        store = store,
+        dataPath = stage.stopTimeDataPath,
+        indexPath = stage.stopTimeIndexPath,
+    )
+
+    /** Legacy shared staging sink, retained for tests and single-attempt hosts. */
     fun newStopTimeSink(): StopTimeSinkHandle {
         val staging = createDirectories(rootOf(STAGING_DIR))
         return StopTimeSinkHandle(
@@ -57,6 +114,65 @@ class StaticFeedSnapshotStore(
             indexPath = joinPath(staging, STOP_TIME_INDEX),
         )
     }
+
+    /** Writes [payload] into this stage without touching any other refresh. */
+    fun writeStagedPayload(payload: ByteArray, stage: RefreshStage): String {
+        store.writeBytes(stage.payloadPath, payload)
+        return stage.payloadPath
+    }
+
+    /** Deletes an abandoned stage and everything in it. */
+    fun abortRefresh(stage: RefreshStage) {
+        stageLock.locked { liveStages -= stage.id }
+        runCatching { store.deleteIfExists(stage.directory) }
+    }
+
+    /**
+     * Activates a staged refresh. The pointer move is the only visible commit;
+     * a failure before it leaves the previous snapshot untouched.
+     */
+    fun activateStaged(feedId: FeedId, stage: RefreshStage, metadata: FeedMetadata): String {
+        return try {
+            val snapshots = createDirectories(feedDir(feedId, SNAPSHOTS_DIR))
+            val snapshotName = snapshotName(metadata, stage.id)
+            val snapshot = createDirectories(joinPath(snapshots, snapshotName))
+            store.move(stage.payloadPath, joinPath(snapshot, PAYLOAD_FILE), atomic = false)
+            writeText(joinPath(snapshot, FEED_ID_FILE), listOf(feedId.value))
+            writeText(joinPath(snapshot, METADATA_FILE), metadataLines(metadata))
+            carryStageStopTimes(stage, snapshot)
+            movePointer(feedId, snapshotName)
+            prune(feedId, keepName = snapshotName)
+            // Best-effort: the moved files are already part of the snapshot.
+            stageLock.locked { liveStages -= stage.id }
+            runCatching { store.deleteIfExists(stage.directory) }
+            snapshot
+        } catch (e: Exception) {
+            abortRefresh(stage)
+            throw e
+        }
+    }
+
+    /**
+     * Removes stale stages left by an interrupted refresh.
+     *
+     * Stages are never referenced by the active pointer, so any stage older
+     * than the current activation is dead. Keeping this explicit avoids an
+     * unbounded staging directory after repeated crashes.
+     */
+    fun pruneStages(keep: RefreshStage? = null) {
+        val stagingRoot = rootOf(STAGING_DIR)
+        if (!store.isDirectory(stagingRoot)) return
+        val live = stageLock.locked { liveStages.toSet() }
+        runCatching { store.listNames(stagingRoot) }.getOrElse { return }.forEach { name ->
+            if (keep != null && name == "stage-${keep.id}") return@forEach
+            if (name.startsWith("stage-") && name.removePrefix("stage-") in live) return@forEach
+            runCatching { store.deleteIfExists(joinPath(stagingRoot, name)) }
+        }
+    }
+
+    private fun stageToken(): String =
+        kotlinx.datetime.Clock.System.now().toEpochMilliseconds().toString() + "-" +
+            kotlin.random.Random.nextLong().toString(16).removePrefix("-")
 
     fun stopTimeReader(feedId: FeedId): StopTimeIndexReader? {
         val snapshot = activeSnapshot(feedId) ?: return null
@@ -116,12 +232,18 @@ class StaticFeedSnapshotStore(
     }
 
     /**
+     * Legacy activation from a shared staging payload. Production refresh
+     * paths use [activateStaged] with a [RefreshStage]; this remains for
+     * callers that only have a payload path.
+     */
+
+    /**
      * Activates from a previously staged payload file. Same atomicity as
      * [activate] but without holding the payload in memory.
      */
     fun activateStaged(feedId: FeedId, stagedPayload: String, metadata: FeedMetadata): String {
         val snapshots = createDirectories(feedDir(feedId, SNAPSHOTS_DIR))
-        val snapshotName = snapshotName(metadata)
+        val snapshotName = snapshotName(metadata, stageToken())
         val staging = createDirectories(joinPath(snapshots, snapshotName))
         store.move(stagedPayload, joinPath(staging, PAYLOAD_FILE), atomic = false)
         writeText(joinPath(staging, FEED_ID_FILE), listOf(feedId.value))
@@ -134,7 +256,7 @@ class StaticFeedSnapshotStore(
 
     fun activate(feedId: FeedId, payload: ByteArray, metadata: FeedMetadata): String {
         val snapshots = createDirectories(feedDir(feedId, SNAPSHOTS_DIR))
-        val snapshotName = snapshotName(metadata)
+        val snapshotName = snapshotName(metadata, stageToken())
         val staging = createDirectories(joinPath(snapshots, snapshotName))
         store.writeBytes(joinPath(staging, PAYLOAD_FILE), payload)
         writeText(joinPath(staging, FEED_ID_FILE), listOf(feedId.value))
@@ -219,9 +341,9 @@ class StaticFeedSnapshotStore(
         }
     }
 
-    private fun snapshotName(metadata: FeedMetadata): String = "snapshot-" +
+    private fun snapshotName(metadata: FeedMetadata, token: String): String = "snapshot-" +
         kotlinx.datetime.Clock.System.now().toEpochMilliseconds() + "-" +
-        (metadata.hash ?: "nohash").take(12)
+        (metadata.hash ?: "nohash").take(12) + "-" + token
 
     private fun metadataLines(metadata: FeedMetadata): List<String> = listOfNotNull(
         metadata.version?.let { "version=$it" },
@@ -235,6 +357,15 @@ class StaticFeedSnapshotStore(
     private fun carryStagedStopTimes(snapshotStaging: String) {
         listOf(STOP_TIME_DATA, STOP_TIME_INDEX).forEach { name ->
             val staged = joinPath(rootOf(STAGING_DIR), name)
+            if (store.exists(staged)) {
+                store.move(staged, joinPath(snapshotStaging, name), atomic = false)
+            }
+        }
+    }
+
+    private fun carryStageStopTimes(stage: RefreshStage, snapshotStaging: String) {
+        listOf(STOP_TIME_DATA, STOP_TIME_INDEX).forEach { name ->
+            val staged = joinPath(stage.directory, name)
             if (store.exists(staged)) {
                 store.move(staged, joinPath(snapshotStaging, name), atomic = false)
             }

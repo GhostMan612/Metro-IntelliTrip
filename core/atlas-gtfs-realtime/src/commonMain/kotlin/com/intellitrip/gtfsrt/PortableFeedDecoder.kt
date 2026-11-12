@@ -307,11 +307,12 @@ object PortableFeedDecoder : FeedDecoder {
         )
     }
 
-    // StopTimeUpdate: arrival = 2, departure = 3, stop_id = 4
+    // StopTimeUpdate: arrival = 2, departure = 3, stop_id = 4, schedule_relationship = 5
     private fun parseStopTimeUpdate(reader: ProtoReader): RtStopTimeUpdate {
         var stopId = ""
         var arrival: RtStopTimeEvent? = null
         var departure: RtStopTimeEvent? = null
+        var scheduleRelationship = 0
         while (reader.hasMore()) {
             val tag = reader.readTag()
             when (tag.field) {
@@ -328,6 +329,12 @@ object PortableFeedDecoder : FeedDecoder {
                 }
 
                 4 -> if (tag.wire == WIRE_LENGTH) stopId = reader.readString() else reader.skip(tag.wire)
+                5 -> if (tag.wire == WIRE_VARINT) {
+                    scheduleRelationship = reader.readVarint().toInt()
+                } else {
+                    reader.skip(tag.wire)
+                }
+
                 else -> reader.skip(tag.wire)
             }
         }
@@ -335,18 +342,21 @@ object PortableFeedDecoder : FeedDecoder {
             stopId = stopId,
             arrival = arrival,
             departure = departure,
+            scheduleRelationship = scheduleRelationship,
         )
     }
 
     /**
-     * StopTimeEvent.delay = 1.
+     * StopTimeEvent: delay = 1, time = 2.
      *
-     * The portable model only carries `delay`, mirroring the JVM mapping. An
-     * event with only an absolute `time` is therefore null rather than an
-     * object with a fabricated delay of zero.
+     * Both encodings are legal. A delay is relative to the schedule; an
+     * absolute `time` is the provider's predicted event instant. Keeping both
+     * lets the UI prefer the absolute time when present and fall back to the
+     * delay without inventing a zero.
      */
     private fun parseStopTimeEvent(reader: ProtoReader): RtStopTimeEvent? {
         var delay: Int? = null
+        var time: Long? = null
         while (reader.hasMore()) {
             val tag = reader.readTag()
             when (tag.field) {
@@ -356,10 +366,16 @@ object PortableFeedDecoder : FeedDecoder {
                     reader.skip(tag.wire)
                 }
 
+                2 -> if (tag.wire == WIRE_VARINT) {
+                    time = reader.readVarint()
+                } else {
+                    reader.skip(tag.wire)
+                }
+
                 else -> reader.skip(tag.wire)
             }
         }
-        return delay?.let { RtStopTimeEvent(delay = it) }
+        return if (delay != null || time != null) RtStopTimeEvent(delay = delay, time = time) else null
     }
 
     // Alert: informed_entity = 5, header_text = 10, description_text = 11, severity_level = 14

@@ -44,7 +44,7 @@ class StaticFeedRefreshTest {
     }
 
     @Test
-    fun conditionalRefreshReturnsNotModified() {
+    fun orphanNotModifiedIsRejectedInsteadOfCreatingAFeedlessActiveState() {
         val root = createTempDirectory("gtfs-store")
         val transport = GtfsFeedAcquirer.HttpTransport { GtfsFeedAcquirer.HttpResponse(304, ByteArray(0), emptyMap()) }
         val outcome = runBlocking {
@@ -55,8 +55,64 @@ class StaticFeedRefreshTest {
                 storeAt(root),
             ).refresh()
         }
-        assertIs<RefreshOutcome.NotModified>(outcome)
+        assertIs<RefreshOutcome.Rejected>(outcome)
         assertNull(storeAt(root).activeSnapshot(feedId))
+    }
+
+    @Test
+    fun conditionalRefreshReturnsNotModifiedWhenASnapshotExists() {
+        val root = createTempDirectory("gtfs-store")
+        val store = storeAt(root)
+        store.activate(
+            feedId,
+            zip,
+            FeedMetadata(feedId, null, null, null, "v", "h", Instant.DISTANT_PAST, null, null, "src"),
+        )
+        val transport = GtfsFeedAcquirer.HttpTransport { GtfsFeedAcquirer.HttpResponse(304, ByteArray(0), emptyMap()) }
+        val outcome = runBlocking {
+            StaticFeedRefresher(feedId, "https://example/gtfs.zip", acquirer(transport), store).refresh()
+        }
+        assertIs<RefreshOutcome.NotModified>(outcome)
+        assertEquals("h", store.activeSnapshot(feedId)?.metadata?.hash)
+    }
+
+    @Test
+    fun refreshDerivesValidityFromTheNewPayloadInsteadOfInheritingTheOldFeed() {
+        val root = createTempDirectory("gtfs-store")
+        val store = storeAt(root)
+        store.activate(
+            feedId,
+            zip,
+            FeedMetadata(
+                feedId = feedId,
+                publisherName = null,
+                publisherUrl = null,
+                lang = null,
+                version = "old-version",
+                hash = "oldhash",
+                fetchedAt = Instant.parse("2020-01-01T00:00:00Z"),
+                validFrom = LocalDate(2020, 1, 1),
+                validTo = LocalDate(2020, 12, 31),
+                sourceUrl = "https://old.example/gtfs.zip",
+            ),
+        )
+        val transport = GtfsFeedAcquirer.HttpTransport {
+            GtfsFeedAcquirer.HttpResponse(
+                200,
+                zip,
+                mapOf("ETag" to "\"new-etag\""),
+            )
+        }
+        val outcome = runBlocking {
+            StaticFeedRefresher(feedId, "https://example/gtfs.zip", acquirer(transport), store).refresh()
+        }
+        val activated = assertIs<RefreshOutcome.Activated>(outcome)
+        assertEquals(null, activated.feed.metadata.version)
+        assertEquals(LocalDate(2026, 1, 1), activated.feed.metadata.validFrom)
+        assertEquals(LocalDate(2026, 12, 31), activated.feed.metadata.validTo)
+        val active = store.activeSnapshot(feedId)!!.metadata
+        assertEquals(LocalDate(2026, 1, 1), active.validFrom)
+        assertEquals(LocalDate(2026, 12, 31), active.validTo)
     }
 
     @Test
