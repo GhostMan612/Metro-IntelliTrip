@@ -11,7 +11,7 @@ package com.intellitrip.webspike
 @JsModule("@js-joda/timezone")
 external object JsJodaTimezone
 
-internal fun installJsJodaTimezone() {
+internal actual fun installPlatformTimeZones() {
     // Referencing the external declaration keeps the module import in the
     // generated bundle; the module has no API we need to call.
     JsJodaTimezone

@@ -78,5 +78,5 @@ internal object RealtimeFixtures {
         ),
     )
 
-    fun malformedPayload(): ByteArray = "this is definitely not a protobuf feed message".toByteArray()
+    fun malformedPayload(): ByteArray = "this is definitely not a protobuf feed message".encodeToByteArray()
 }

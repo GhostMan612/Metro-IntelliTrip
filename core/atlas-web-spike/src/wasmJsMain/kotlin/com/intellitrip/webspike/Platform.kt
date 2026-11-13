@@ -629,7 +629,7 @@ fun atlasLocate() {
 }
 
 fun main() {
-    installJsJodaTimezone()
+    installPlatformTimeZones()
     isDemoMode = WebProduction.demoRequested(pageSearch())
     createShell(isDemoMode)
     loadMapLibreGl()
@@ -642,4 +642,3 @@ fun main() {
     }
     println(describeNow())
 }
-

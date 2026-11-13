@@ -42,6 +42,10 @@ import kotlinx.datetime.toLocalDateTime
  */
 object WebProduction {
 
+    init {
+        installPlatformTimeZones()
+    }
+
     val feedId = com.intellitrip.domain.FeedId("metro-transit-regional")
     val zone: TimeZone = TimeZone.of("America/Chicago")
 

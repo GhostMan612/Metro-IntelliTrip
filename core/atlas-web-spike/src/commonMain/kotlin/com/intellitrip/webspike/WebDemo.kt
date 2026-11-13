@@ -39,6 +39,10 @@ import kotlinx.datetime.toLocalDateTime
  */
 object WebDemo {
 
+    init {
+        installPlatformTimeZones()
+    }
+
     val feedId: FeedId = FeedId("metro-transit-regional")
     val zone: TimeZone = TimeZone.of("America/Chicago")
     val departAt: Instant = LocalDateTime(2026, 10, 5, 7, 0).toInstant(zone)

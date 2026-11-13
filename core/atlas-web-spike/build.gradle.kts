@@ -56,6 +56,7 @@ kotlin {
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
             }
         }
     }
@@ -87,4 +88,3 @@ tasks.register<Copy>("vendorMapLibreProd") {
     }
     into(layout.projectDirectory.dir("build/kotlin-webpack/wasmJs/productionExecutable"))
 }
-

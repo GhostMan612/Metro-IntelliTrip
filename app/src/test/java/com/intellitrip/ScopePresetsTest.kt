@@ -20,7 +20,9 @@ class ScopePresetsTest {
         focus: Focus? = Focus.System,
         fix: UserLocation? = null,
         scopeCenter: GeoPoint = mapCenter,
+        scopeLabel: String = "",
     ): AppState = AppState(
+        scopeLabel = scopeLabel,
         focus = focus,
         scope = ScopeEngine().currentScope(Focus.Radius(scopeCenter, 2_000.0)),
         userLocation = fix,
@@ -35,6 +37,20 @@ class ScopePresetsTest {
         val focus = resolution.focus as Focus.Radius
         assertEquals(rider, focus.center)
         assertEquals(805.0, focus.meters, 0.001)
+    }
+
+    @Test
+    fun deliberateMapPanWinsOverFreshLocation() {
+        val fix = UserLocation(rider, 12.0, now - 10.seconds)
+        val resolution = stateWith(
+            focus = Focus.Radius(mapCenter, 1_000.0),
+            fix = fix,
+            scopeLabel = "Map viewport",
+        ).presetResolution(ScopePreset.AREA, now)
+        assertEquals(ScopeAnchor.MAP_VIEW, resolution.anchor)
+        val focus = resolution.focus as Focus.Radius
+        assertEquals(mapCenter, focus.center)
+        assertEquals(3_218.0, focus.meters, 0.001)
     }
 
     @Test

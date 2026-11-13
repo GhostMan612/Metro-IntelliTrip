@@ -1,14 +1,14 @@
 package com.intellitrip.webspike
 
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
 class WebDemoTest {
 
     @Test
-    fun demoPlanSucceedsOnLocalNetwork() {
-        val verdict = runBlocking { WebDemo.demoPlanText() }
+    fun demoPlanSucceedsOnLocalNetwork() = runTest {
+        val verdict = WebDemo.demoPlanText()
         assertTrue(verdict.contains("planned"), "expected a plan, got: $verdict")
     }
 

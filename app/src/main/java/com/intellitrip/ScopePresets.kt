@@ -44,6 +44,21 @@ data class PresetResolution(
  * fixed city coordinate.
  */
 fun AppState.presetResolution(preset: ScopePreset, now: Instant): PresetResolution {
+    val currentFocus = focus
+    val fromFocus = when (currentFocus) {
+        is Focus.Radius -> currentFocus.center
+        is Focus.Viewport -> currentFocus.bounds.center()
+        is Focus.Vehicle -> currentFocus.anchor
+        else -> null
+    }
+
+    if (scopeLabel == "Map viewport" && fromFocus != null) {
+        return PresetResolution(
+            focus = Focus.Radius(fromFocus, preset.meters),
+            anchor = ScopeAnchor.MAP_VIEW,
+        )
+    }
+
     val fix = userLocation
     if (fix != null && fix.shouldCenterCamera(now)) {
         return PresetResolution(
@@ -52,13 +67,6 @@ fun AppState.presetResolution(preset: ScopePreset, now: Instant): PresetResoluti
         )
     }
 
-    val currentFocus = focus
-    val fromFocus = when (currentFocus) {
-        is Focus.Radius -> currentFocus.center
-        is Focus.Viewport -> currentFocus.bounds.center()
-        is Focus.Vehicle -> currentFocus.anchor
-        else -> null
-    }
     if (fromFocus != null) {
         return PresetResolution(
             focus = Focus.Radius(fromFocus, preset.meters),
