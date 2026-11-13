@@ -295,6 +295,8 @@ private fun MapPane(
             onSwapEndpoints = model::swapEndpoints,
             onPlan = model::planJourney,
             onSetTravelMode = model::setTravelMode,
+            onSetPlanningTimeMode = model::setPlanningTimeMode,
+            onSetPlanningTime = model::setPlanningTime,
             onStopTracking = model::stopTrackingVehicle,
             onSelectJourney = model::selectJourney,
             onToggleDepartures = { onDeparturesOpenChange(!departuresOpen) },

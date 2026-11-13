@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.intellitrip.AppState
+import com.intellitrip.PlanningTimeMode
 import com.intellitrip.ScopePreset
 import com.intellitrip.TravelMode
 import com.intellitrip.WalkEstimator
@@ -118,6 +119,8 @@ fun MapChrome(
     onSwapEndpoints: () -> Unit,
     onPlan: () -> Unit,
     onSetTravelMode: (TravelMode) -> Unit,
+    onSetPlanningTimeMode: (PlanningTimeMode) -> Unit,
+    onSetPlanningTime: (kotlinx.datetime.Instant?) -> Unit,
     onStopTracking: () -> Unit,
     onSelectJourney: (String) -> Unit,
     onToggleDepartures: () -> Unit,
@@ -145,6 +148,8 @@ fun MapChrome(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilterChipRow(
+                timeLabel = planningTimeShortLabel(state),
+                onTimeClick = { sheet = Sheet.Plan },
                 onTransitClick = { sheet = Sheet.Data },
                 onRadarClick = onLoadRadar,
             )
@@ -261,6 +266,8 @@ fun MapChrome(
                         onSwapEndpoints = onSwapEndpoints,
                         onPlan = onPlan,
                         onSetTravelMode = onSetTravelMode,
+                        onSetPlanningTimeMode = onSetPlanningTimeMode,
+                        onSetPlanningTime = onSetPlanningTime,
                         onSelectJourney = onSelectJourney,
                     )
                     Sheet.None -> Unit
@@ -551,6 +558,8 @@ private fun PlanSheet(
     onSwapEndpoints: () -> Unit,
     onPlan: () -> Unit,
     onSetTravelMode: (TravelMode) -> Unit,
+    onSetPlanningTimeMode: (PlanningTimeMode) -> Unit,
+    onSetPlanningTime: (kotlinx.datetime.Instant?) -> Unit,
     onSelectJourney: (String) -> Unit,
 ) {
     SheetHeader("Plan a trip")
@@ -597,6 +606,14 @@ private fun PlanSheet(
         )
     }
 
+    if (!modeWalkOnly) {
+        PlanningTimeControls(
+            state = state,
+            onMode = onSetPlanningTimeMode,
+            onTime = onSetPlanningTime,
+        )
+    }
+
     PlaceRow("From", labelFor(state.origin), state.origin) {
         if (state.userLocation != null) {
             PlaceChoice("My location") { onSetOrigin(state.userLocation.position) }
@@ -622,7 +639,13 @@ private fun PlanSheet(
             // Walk only is an explicitly unrouted distance estimate, not a
             // transit request. Disable the transit action rather than sending
             // a hidden transit plan under the walk selection.
-            enabled = canSubmitTransitPlan(modeWalkOnly, state.planning),
+            enabled = canSubmitTransitPlan(
+                modeWalkOnly,
+                state.planning || (
+                    state.planningTimeMode == PlanningTimeMode.ARRIVE_BY &&
+                        state.planningTime == null
+                    ),
+            ),
             modifier = Modifier.weight(2f),
         ) {
             Text(
@@ -831,14 +854,15 @@ private fun labelFor(point: GeoPoint): String =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FilterChipRow(
+    timeLabel: String,
+    onTimeClick: () -> Unit,
     onTransitClick: () -> Unit = {},
     onRadarClick: () -> Unit = {},
 ) {
-    var nowSelected by remember { mutableStateOf(true) }
     FilterChip(
-        selected = nowSelected,
-        onClick = { nowSelected = true },
-        label = { Text("Now") },
+        selected = false,
+        onClick = onTimeClick,
+        label = { Text(timeLabel) },
         trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) },
     )
     FilterChip(selected = false, onClick = onTransitClick, label = { Text("Transit") })

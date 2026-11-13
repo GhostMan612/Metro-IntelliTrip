@@ -26,6 +26,7 @@ import com.intellitrip.offline.InstallResult
 import com.intellitrip.offline.loadStaticFeed
 import com.intellitrip.routing.RoutingNetwork
 import com.intellitrip.routing.TransferIntelligenceService
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
@@ -132,6 +133,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
 
     private var refreshJob: Job? = null
     private var alertsRefreshJob: Job? = null
+    private var planningJob: Job? = null
 
     init {
         // Saved places are rider-owned, so they load before anything touches the
@@ -232,12 +234,36 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
      * endpoints as though it answered the new question. The plan is dropped rather
      * than left stale; the user re-runs it explicitly.
      */
-    fun setOrigin(point: GeoPoint) = update { it.withEndpoints(origin = point) }
+    fun setOrigin(point: GeoPoint) {
+        if (_state.value.origin == point) return
+        invalidatePlan()
+        update { it.withEndpoints(origin = point) }
+    }
 
-    fun setDestination(point: GeoPoint) = update { it.withEndpoints(destination = point) }
+    fun setDestination(point: GeoPoint) {
+        if (_state.value.destination == point) return
+        invalidatePlan()
+        update { it.withEndpoints(destination = point) }
+    }
 
-    fun swapEndpoints() = update {
-        it.withEndpoints(origin = it.destination, destination = it.origin)
+    fun swapEndpoints() {
+        if (_state.value.origin == _state.value.destination) return
+        invalidatePlan()
+        update {
+            it.withEndpoints(origin = it.destination, destination = it.origin)
+        }
+    }
+
+    fun setPlanningTimeMode(mode: PlanningTimeMode) {
+        if (_state.value.planningTimeMode == mode) return
+        invalidatePlan()
+        update { it.withPlanningTime(mode, it.planningTime) }
+    }
+
+    fun setPlanningTime(time: Instant?) {
+        if (_state.value.planningTime == time) return
+        invalidatePlan()
+        update { it.withPlanningTime(it.planningTimeMode, time) }
     }
 
     fun loadStaticNetwork() {
@@ -503,6 +529,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
      */
     fun setTravelMode(mode: TravelMode) {
         if (_state.value.travelMode == mode) return
+        invalidatePlan()
         _state.update { state ->
             state.copy(
                 travelMode = mode,
@@ -525,6 +552,11 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
 
     fun planJourney() {
         val current = _state.value
+        val request = current.toTripPlanRequest(Clock.System.now())
+        if (current.travelMode == TravelMode.TRANSIT && request == null) {
+            update { it.copy(status = "Choose an arrival time before planning") }
+            return
+        }
         // A new plan is a new arrival opportunity. Reset the one-shot cue so
         // the next selected journey can announce its own destination once.
         arrivalCuedJourneyId = null
@@ -561,18 +593,14 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                 journeyWarnings = emptyList(),
             )
         }
-        viewModelScope.launch {
+        invalidatePlan()
+        planningJob = viewModelScope.launch {
             // Planning searches the network and reads the stop-time index, so it
             // must not run on the main thread. AtlasEngine is the single path:
             // the ViewModel no longer owns transfer scoring.
-            val request = TripPlanRequest(
-                origin = current.origin,
-                destination = current.destination,
-                departAt = Clock.System.now() + 120.seconds,
-                arriveBy = null,
-                maxTransfers = 2,
-            )
-            val outcome = withContext(Dispatchers.Default) { engine.planJourney(request) }
+            val outcome = withContext(Dispatchers.Default) {
+                engine.planJourney(requireNotNull(request))
+            }
             when (outcome) {
                 is com.intellitrip.engine.JourneyOutcome.Planned -> {
                     val report = engine.evaluateTransfers(outcome.journeys)
@@ -1101,6 +1129,11 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         _state.update(block)
     }
 
+    private fun invalidatePlan() {
+        planningJob?.cancel()
+        planningJob = null
+    }
+
     /** Whether a vehicle report is recent enough to represent a live service. */
     private fun isLiveVehicle(
         vehicle: com.intellitrip.domain.Vehicle,
@@ -1209,6 +1242,42 @@ internal fun AppState.withEndpoints(
         },
     )
 }
+
+internal fun AppState.withPlanningTime(
+    mode: PlanningTimeMode,
+    time: Instant?,
+): AppState = if (mode == planningTimeMode && time == planningTime) {
+    this
+} else {
+    copy(
+        planningTimeMode = mode,
+        planningTime = time,
+        journeys = emptyList(),
+        journeyWarnings = emptyList(),
+        selectedJourneyId = null,
+        planning = false,
+    )
+}
+
+internal fun AppState.toTripPlanRequest(now: Instant): TripPlanRequest? =
+    when (planningTimeMode) {
+        PlanningTimeMode.DEPART_AT -> TripPlanRequest(
+            origin = origin,
+            destination = destination,
+            departAt = planningTime ?: now + 2.minutes,
+            arriveBy = null,
+            maxTransfers = 2,
+        )
+        PlanningTimeMode.ARRIVE_BY -> planningTime?.let { time ->
+            TripPlanRequest(
+                origin = origin,
+                destination = destination,
+                departAt = null,
+                arriveBy = time,
+                maxTransfers = 2,
+            )
+        }
+    }
 
 /**
  * The single journey drawn on the map, or null when there is no plan.
