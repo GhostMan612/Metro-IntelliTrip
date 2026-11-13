@@ -1,5 +1,7 @@
 .gradle/
 build/
+build-*.log
+.vscode/
 local.properties
 *.iml
 .idea/

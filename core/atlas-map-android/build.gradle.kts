@@ -17,5 +17,8 @@ android {
 dependencies {
     implementation(project(":core:atlas-map"))
     implementation(project(":core:atlas-domain"))
-    api("org.maplibre.gl:android-sdk:11.6.0")
+    // 11.7.0 added native PMTiles sources (pmtiles://file:///...), which the
+    // offline basemap import binds to. Stay on the 11.x line: 12+ moved the
+    // default renderer to Vulkan and would change device compatibility.
+    api("org.maplibre.gl:android-sdk:11.13.5")
 }

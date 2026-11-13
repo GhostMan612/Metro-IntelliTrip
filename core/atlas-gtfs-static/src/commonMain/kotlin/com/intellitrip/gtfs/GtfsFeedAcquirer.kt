@@ -125,25 +125,31 @@ class GtfsFeedAcquirer(
         return summarize(feedId, response)
     }
 
-    private fun summarize(feedId: FeedId, response: HttpResponse): AcquisitionResult = when (response.status) {
-        304 -> AcquisitionResult.NotModified(response.headers["ETag"], response.headers["Last-Modified"])
-        401, 403 -> AcquisitionResult.Failure("Authentication required for feed $feedId")
-        429 -> AcquisitionResult.Failure("Rate limited while acquiring feed $feedId")
-        in 200..299 -> {
-            if (response.body.isEmpty()) {
-                AcquisitionResult.Failure("Empty GTFS payload for feed $feedId")
-            } else if (!GtfsArchive.isZip(response.body)) {
-                AcquisitionResult.Failure("GTFS payload for feed $feedId is not a ZIP archive")
-            } else {
-                AcquisitionResult.Updated(
-                    feedId = feedId,
-                    payload = response.body,
-                    etag = response.headers["ETag"],
-                    lastModified = response.headers["Last-Modified"],
-                )
+    private fun summarize(feedId: FeedId, response: HttpResponse): AcquisitionResult {
+        // HTTP header names are case-insensitive. The JVM transport preserves
+        // the publisher's casing (`Etag`, `ETag`, ...), so normalize once
+        // instead of hoping for one spelling.
+        val headers = response.headers.entries.associate { (key, value) -> key.lowercase() to value }
+        return when (response.status) {
+            304 -> AcquisitionResult.NotModified(headers["etag"], headers["last-modified"])
+            401, 403 -> AcquisitionResult.Failure("Authentication required for feed $feedId")
+            429 -> AcquisitionResult.Failure("Rate limited while acquiring feed $feedId")
+            in 200..299 -> {
+                if (response.body.isEmpty()) {
+                    AcquisitionResult.Failure("Empty GTFS payload for feed $feedId")
+                } else if (!GtfsArchive.isZip(response.body)) {
+                    AcquisitionResult.Failure("GTFS payload for feed $feedId is not a ZIP archive")
+                } else {
+                    AcquisitionResult.Updated(
+                        feedId = feedId,
+                        payload = response.body,
+                        etag = headers["etag"],
+                        lastModified = headers["last-modified"],
+                    )
+                }
             }
+            else -> AcquisitionResult.Failure("Unexpected HTTP ${response.status} for feed $feedId")
         }
-        else -> AcquisitionResult.Failure("Unexpected HTTP ${response.status} for feed $feedId")
     }
 
     companion object {

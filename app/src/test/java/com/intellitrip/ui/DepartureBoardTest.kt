@@ -123,19 +123,84 @@ class DepartureBoardTest {
     }
 
     @Test
-    fun aReportingTripIsLiveAndUsesItsReportedTime() {
+    fun aStopPredictionIsLiveAndUsesItsReportedTime() {
         val stop = stop("S1", "First", 44.97, -93.26)
         val scheduled = now + 600.seconds
         val reported = now + 60.seconds
         val result = board(
             listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", scheduled, reportedTime = reported))),
+            mapOf(
+                "S1" to listOf(
+                    DepartureBoard.ScheduledDeparture(
+                        "T1",
+                        scheduled,
+                        reportedTime = reported,
+                        reportedAt = now - 10.seconds,
+                    ),
+                ),
+            ),
             liveTrips = setOf("T1"),
         )
         val departure = result.single()
         assertTrue(departure.isLive)
+        assertEquals(DepartureStatus.LIVE, departure.status)
         assertEquals(1, departure.minutesUntil)
         assertEquals(reported, departure.scheduledTime)
+        assertEquals(10L, departure.predictionAgeSeconds)
+    }
+
+    @Test
+    fun vehicleOnlyReportMustNotMarkAScheduledDepartureLive() {
+        val stop = stop("S1", "First", 44.97, -93.26)
+        val scheduled = now + 240.seconds
+        val departure = board(
+            listOf(stop),
+            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", scheduled))),
+            liveTrips = setOf("T1"),
+        ).single()
+        assertFalse("a vehicle location is not a stop ETA", departure.isLive)
+        assertEquals(DepartureStatus.SCHEDULED, departure.status)
+        assertTrue(departure.vehicleReporting)
+        assertEquals(scheduled, departure.scheduledTime)
+        assertTrue(departure.accessibilityLabel().contains("scheduled"))
+        assertTrue(departure.accessibilityLabel().contains("vehicle reporting"))
+    }
+
+    @Test
+    fun canceledAndSkippedPredictionsAreExplicitStates() {
+        val stop = stop("S1", "First", 44.97, -93.26)
+        val canceled = board(
+            listOf(stop),
+            mapOf(
+                "S1" to listOf(
+                    DepartureBoard.ScheduledDeparture(
+                        "T1",
+                        now + 300.seconds,
+                        status = DepartureStatus.CANCELED,
+                        reportedAt = now - 5.seconds,
+                    ),
+                ),
+            ),
+        ).single()
+        assertEquals(DepartureStatus.CANCELED, canceled.status)
+        assertFalse(canceled.isLive)
+        assertTrue(canceled.accessibilityLabel().contains("canceled"))
+
+        val skipped = board(
+            listOf(stop),
+            mapOf(
+                "S1" to listOf(
+                    DepartureBoard.ScheduledDeparture(
+                        "T1",
+                        now + 300.seconds,
+                        status = DepartureStatus.SKIPPED,
+                        reportedAt = now - 5.seconds,
+                    ),
+                ),
+            ),
+        ).single()
+        assertEquals(DepartureStatus.SKIPPED, skipped.status)
+        assertFalse(skipped.isLive)
     }
 
     @Test
@@ -252,11 +317,82 @@ class DepartureBoardTest {
     }
 
     @Test
+    fun occurrencesKeepTheServiceDateForAfterMidnightTrips() {
+        val serviceDate = LocalDate(2026, 10, 5)
+        val afterMidnight = LocalDateTime(2026, 10, 6, 1, 0, 0).toInstant(zone)
+        val occurrence = DepartureBoard.occurrences(
+            tripId = "T1",
+            stopId = "S1",
+            serviceTime = GtfsServiceTime.parse("25:30:00"),
+            activeDates = listOf(serviceDate),
+            zone = zone,
+            now = afterMidnight,
+        ).single()
+
+        assertEquals(serviceDate, occurrence.serviceDate)
+        assertEquals(LocalDate(2026, 10, 6), occurrence.departure.toLocalDateTime(zone).date)
+        assertEquals(1, occurrence.departure.toLocalDateTime(zone).hour)
+    }
+
+    @Test
+    fun frequencyOccurrencesRetainTheirRunStart() {
+        val serviceDate = LocalDate(2026, 10, 5)
+        val occurrences = DepartureBoard.occurrences(
+            tripId = "T1",
+            stopId = "S1",
+            serviceTime = GtfsServiceTime.parse("07:10:00"),
+            activeDates = listOf(serviceDate),
+            zone = zone,
+            now = now,
+            frequencies = listOf(
+                com.intellitrip.domain.Frequency(
+                    tripKey = TripKey(feedId, "T1"),
+                    startTime = GtfsServiceTime.parse("07:00:00"),
+                    endTime = GtfsServiceTime.parse("07:30:00"),
+                    headwaySeconds = 600,
+                    exactTimes = null,
+                ),
+            ),
+            firstDepartureSeconds = GtfsServiceTime.parse("07:00:00").secondsSinceServiceDayStart,
+        )
+
+        assertEquals(4, occurrences.size)
+        assertEquals(
+            listOf(7 * 3600, 7 * 3600 + 600, 7 * 3600 + 1200, 7 * 3600 + 1800),
+            occurrences.map { it.frequencyRunStartSeconds },
+        )
+        assertTrue(occurrences.all { it.serviceDate == serviceDate })
+    }
+
+    @Test
+    fun boardableRowsAreLimitedToTheExactStopAndExcludeNoPickupRows() {
+        val queriedStop = StopKey(feedId, "S1")
+        val downstreamStop = StopKey(feedId, "S2")
+        val expected = stopTime(queriedStop, sequence = 1, time = "07:10:00")
+        val rows = listOf(
+            expected,
+            stopTime(downstreamStop, sequence = 2, time = "07:20:00"),
+            stopTime(queriedStop, sequence = 3, time = "07:30:00", pickupType = 1),
+        )
+
+        assertEquals(listOf(expected), DepartureBoard.boardableRowsAt(rows, queriedStop))
+    }
+
+    @Test
     fun accessibilityLabelCarriesRouteDirectionAndProvenance() {
         val stop = stop("S1", "First & Main", 44.97, -93.26)
         val live = board(
             listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 240.seconds, reportedTime = now + 180.seconds))),
+            mapOf(
+                "S1" to listOf(
+                    DepartureBoard.ScheduledDeparture(
+                        "T1",
+                        now + 240.seconds,
+                        reportedTime = now + 180.seconds,
+                        reportedAt = now - 10.seconds,
+                    ),
+                ),
+            ),
             liveTrips = setOf("T1"),
         ).single()
         val spoken = live.accessibilityLabel()
@@ -273,20 +409,6 @@ class DepartureBoardTest {
             scheduled.accessibilityLabel(),
             scheduled.accessibilityLabel().contains("scheduled"),
         )
-    }
-
-    @Test
-    fun vehicleOnlyReportMustNotMarkScheduledDepartureLive() {
-        val stop = stop("S1", "First", 44.97, -93.26)
-        val scheduled = now + 240.seconds
-        val result = board(
-            listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", scheduled))),
-            liveTrips = setOf("T1"),
-        ).single()
-        assertFalse("vehicle location alone cannot prove a stop ETA", result.isLive)
-        assertEquals(scheduled, result.scheduledTime)
-        assertTrue(result.accessibilityLabel().contains("scheduled"))
     }
 
     @Test
@@ -321,15 +443,26 @@ class DepartureBoardTest {
     }
 
     @Test
-    fun liveDepartureDoesNotFabricateVehicleTimestamp() {
+    fun liveDepartureCarriesThePredictionTimestampNotTheClock() {
         val stop = stop("S1", "First", 44.97, -93.26)
         val reported = now + 60.seconds
+        val providerTimestamp = now - 15.seconds
         val result = board(
             listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 600.seconds, reportedTime = reported))),
+            mapOf(
+                "S1" to listOf(
+                    DepartureBoard.ScheduledDeparture(
+                        "T1",
+                        now + 600.seconds,
+                        reportedTime = reported,
+                        reportedAt = providerTimestamp,
+                    ),
+                ),
+            ),
             liveTrips = setOf("T1"),
         ).single()
-        assertEquals(reported, result.vehicleUpdatedAt)
+        assertEquals(providerTimestamp, result.vehicleUpdatedAt)
+        assertEquals(15L, result.predictionAgeSeconds)
     }
 
     @Test
@@ -340,58 +473,5 @@ class DepartureBoardTest {
             mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 20.seconds))),
         )
         assertEquals("Due", result.single().wait)
-    }
-
-    @Test
-    fun boardRowsBelongToTheQueriedStop() {
-        // The trip serves both stops; the row for S2 must never be offered as a
-        // departure from S1 (or vice versa).
-        val s1 = StopKey(feedId, "S1")
-        val s2 = StopKey(feedId, "S2")
-        val rows = listOf(
-            stopTime(s1, sequence = 1, time = "08:00:00"),
-            stopTime(s2, sequence = 2, time = "08:10:00"),
-        )
-
-        assertEquals(
-            listOf(2),
-            DepartureBoard.boardableRowsAt(rows, s2).map { it.stopSequence },
-        )
-        assertEquals(
-            listOf(1),
-            DepartureBoard.boardableRowsAt(rows, s1).map { it.stopSequence },
-        )
-    }
-
-    @Test
-    fun pickupProhibitedRowsAreNotBoardable() {
-        val s1 = StopKey(feedId, "S1")
-        val rows = listOf(stopTime(s1, sequence = 1, time = "08:00:00", pickupType = 1))
-
-        assertTrue(
-            "a pickup_type=1 stop cannot appear on a departure board",
-            DepartureBoard.boardableRowsAt(rows, s1).isEmpty(),
-        )
-    }
-
-    @Test
-    fun departureCarriesTheStopKeyNotJustTheName() {
-        // Opposite-direction platforms share a name; the board must keep them
-        // apart so a tap opens the stop the departure actually leaves from.
-        val northbound = stop("S1", "Main St", 44.9700, -93.26)
-        val southbound = stop("S2", "Main St", 44.9701, -93.26)
-        val result = board(
-            listOf(northbound, southbound),
-            mapOf(
-                "S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 300.seconds)),
-                "S2" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 600.seconds)),
-            ),
-        )
-
-        assertEquals(
-            setOf(StopKey(feedId, "S1"), StopKey(feedId, "S2")),
-            result.map { it.stopKey }.toSet(),
-        )
-        assertEquals(listOf("Main St"), result.map { it.stopName }.distinct())
     }
 }

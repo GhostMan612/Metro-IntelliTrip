@@ -1,15 +1,15 @@
 # WO-015 — Web MapLibre style lifecycle and visual correctness
 
-**Priority:** P1 web rendering. **State:** SPECCED, implementation/verification NOT STARTED.  
+**Priority:** P1 web rendering. **State:** Partial implementation; browser verification remains open.
 **Baseline:** `ccf662c7de6e9b0b34e20994366f5ecfec5d5d40` / `master`. **Corresponds to W-09 (renderer half)**.  
 **Source:** `core/atlas-map-web/src/wasmJsMain/kotlin/com/intellitrip/map/web/WebMapRenderer.kt`; `WebRenderBridge.kt`; `core/atlas-web-spike/src/wasmJsMain/kotlin/com/intellitrip/webspike/Platform.kt`; `core/atlas-web-spike/build.gradle.kts`.
 
 ## SEED
 - `setStyle()` creates/restyles MapLibre, and `setSources()`/`setRadarOverlay()` immediately call JS map `addSource`/`addLayer` without explicit map style-load readiness. Style is asynchronous; a source add before style load can fail.
-- `setStyle()` calls `map.setStyle(styleUrl)` on an existing map. MapLibre resets nonpersistent custom layers/sources; the renderer retains no source-and-radar desired-state registry to restore them on style reload.
-- Current `firstRender` only runs once per renderer lifetime and isn't rearmed on `destroy()` or restyle. Camera semantics may remain stale on a reused renderer.
-- Vendored `maplibre-gl.js`/CSS are committed with manually registered Copy tasks. They are not necessarily inputs to all dev/prod run and packaged output tasks; browser runtime can lose the assets.
-- Browser shell waits for global `maplibregl` up to 6s, but global existence is different from map-style readiness. Errors currently surface as thrown exceptions rather than a recoverable UI.
+- Renderer queues source and radar state until the style is ready and replays it after a restyle; frame URL changes replace the raster source instead of retaining stale tiles.
+- Source calls are treated as complete desired-state snapshots: omitted layers are explicitly cleared, unchanged payloads are not resent, and radar state is re-applied after a style reset.
+- Vendored MapLibre JS/CSS are copied by explicit dev/prod Gradle tasks. All runnable and static packaging paths still need verification.
+- Browser bootstrap waits for the global MapLibre library; style lifecycle is managed separately by the renderer. Visible error/retry behavior and real Chromium verification remain open.
 
 ## SPEC — deterministic renderer
 
@@ -23,7 +23,7 @@
 8. Weather attribution is visible. An unrenderable NWS alert polygon is never represented by a fictitious point.
 
 ## PLAN
-**A. Pure bridge tests.** Keep `snapshotToSources()` returning all four layers with empty FeatureCollection for no data. Test escaping and valid GeoJSON.  
+**A. Pure bridge tests.** Keep `snapshotToSources()` returning all four layers with empty FeatureCollection for no data. Test desired-state completion and valid GeoJSON.
 **B. Stateful adapter.** Add desired sources/radar/style, callbacks and lifecycle guard to `WebMapRenderer`; do not let JavaScript exceptions escape the UI thread unreported.  
 **C. Integration.** Update `Platform.kt` host to await both vendored library and MapLibre style-ready; expose loading, no-tile, failure and retry UI.  
 **D. Build.** Depend dev/prod bundles on vendor-copy staging; validate bundled asset URLs for local hosting and static deployment.  
@@ -44,6 +44,9 @@
 - Dev/prod artifacts serve vendored JS/CSS offline (the basemap may require network), with exact version receipt; no missing-asset fallback claimed successful.
 - JVM bridge tests, `compileKotlinWasmJs`, webpack packaging, Chromium console/video/screenshot and keyboard accessibility. Android tests should remain green.
 - Evidence must show actual browser run; compilation alone is insufficient.
+
+## LOCAL IMPLEMENTATION CHECKPOINT
+The style-ready source/radar queue, restyle replay, omitted-layer clearing, unchanged-source suppression, and radar-frame replacement are implemented. The browser receipt gates above, including errors, remount behavior, and packaging coverage, remain unverified.
 
 ## OUT OF SCOPE / closing rule
 Not a real GTFS-Web backend, not Wasm protobuf, not durable IndexedDB (WO-016); not Play release. This PR contains only the specification until the renderer is implemented and separately verified. Do not call "web parity" completed on this spec.

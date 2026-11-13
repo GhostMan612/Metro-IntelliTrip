@@ -63,6 +63,26 @@ class DefaultScopeResolverTest {
     }
 
     @Test
+    fun vehicleFocusWithAnchorFramesTheVehicleNotTheMetro() {
+        val vehicle = VehicleKey(feedId, "bus-4242")
+        val anchor = GeoPoint(44.9500, -93.2000)
+        val resolution = resolver.resolve(Focus.Vehicle(vehicle, anchor))
+        val bounds = assertNotNull(resolution.cameraScope.bounds)
+        val center = bounds.center()
+        assertEquals(anchor.lat, center.lat, 0.000001)
+        assertEquals(anchor.lon, center.lon, 0.000001)
+        assertEquals(15.0, resolution.cameraScope.zoom)
+        assertEquals(anchor, resolution.dataScope.radius?.center)
+    }
+
+    @Test
+    fun vehicleFocusWithoutAnchorDoesNotInventAPosition() {
+        val resolution = resolver.resolve(Focus.Vehicle(VehicleKey(feedId, "bus-4242")))
+        assertNull(resolution.dataScope.radius)
+        assertEquals(TwinCitiesBounds, resolution.cameraScope.bounds)
+    }
+
+    @Test
     fun zoomAndRadiusRoundTrip() {
         // Viewport zoom -> meters -> zoom must be identity within epsilon, or
         // MapCanvas moves the camera to a derived zoom and the map snaps.

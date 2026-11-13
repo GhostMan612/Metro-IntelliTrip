@@ -49,10 +49,15 @@ A future orchestration tool should validate this schema, compare referenced SHAs
 
 ## Deferred work inventory (2026-11-10)
 
+The table below is the original acceptance inventory, not a current completion
+claim. The local implementation checkpoint is separate and deliberately keeps
+source implementation distinct from device, browser, external-service, and
+release verification.
+
 | ID | Work order | Definition of done / evidence |
 | --- | --- | --- |
 | W-01 | Vehicle follow and unsubscribe lifecycle | Latest selected `VehicleKey` maps to a fresh matching fix; camera follows while selected, handles stale/missing vehicle, stops on toggle-off/manual pan; UI+device tests |
-| W-02 | Offline basemap install and binding | Document provider/license; SAF picker validates `.mbtiles`/style/size/digest/coverage, atomic store, renderer uses installed style, offline map restarts intact; security tests |
+| W-02 | Offline basemap install and binding | Document provider/license; SAF picker validates PMTiles v3/style/size/digest/coverage, atomic store, renderer uses installed style, offline map restarts intact; security tests |
 | W-03 | wasm GTFS-RT protobuf | Real portable wire decoder, fixture parity with JVM, bound errors, real browser decode; no synthetic fallback |
 | W-04 | wasm durable snapshots/offline files | Rehydrate validated payload from IndexedDB on reload with staleness and integrity checks; no promise of offline basemap until tile store is durable; reload tests |
 | W-05 | Walking mode | Choose either implemented street-network walk routing or clear read-only straight-line estimate with no route claim; Plan control respects mode; tests |
@@ -61,6 +66,34 @@ A future orchestration tool should validate this schema, compare referenced SHAs
 | W-08 | Scope preset anchoring | Center on live fresh fix or current map viewport (explicit priority); never force Minneapolis; camera/gesture tests |
 | W-09 | Web MapLibre lifecycle + production data | Style-ready event and deferred source/radar install, style reset reattachment, real feed bootstrap, no demo data in production; Chromium eye-check |
 | W-10 | SDK/CI/release boundary audit | Validate published KMP variants in external JVM/Android consumer; check actual JUnit executions, signing configuration and default branch; release evidence |
+
+## Current local implementation checkpoint
+
+This checkpoint describes source in the current local working tree. It is not
+evidence of a GitHub merge, release approval, or closure of a workchain.
+
+| ID | Source implementation status | Remaining proof or known gap |
+| --- | --- | --- |
+| W-01 | Partial | Selected-vehicle follow, fresh-fix updates, stale/missing pauses, manual-pan stop, and explicit stop are wired in source; map-camera/device lifecycle verification remains open. |
+| W-02 | Partial | Android SAF imports PMTiles v3 plus style JSON; header/style validation, atomic package storage, local file URI binding, and renderer style handoff exist. Startup revalidates the installed header/style and reports unusable packages instead of marking them active. Permitted archive provenance, true offline rendering/restart, coverage fallback, and physical-device proof remain open. |
+| W-03 | Implemented; targeted Wasm tests passed locally | Portable decoder and browser transport exist; real-feed/CORS and end-to-end rendering still need browser verification. |
+| W-04 | Partial | GTFS static payload persistence/rehydration now waits for IndexedDB transaction completion and cleans canceled continuations; `OfflineFileStore.wasmJs.kt` remains process-memory-only, so offline basemap files are not durable. |
+| W-05 | Implemented in source | Walk-only UI and planner behavior have regression tests; device interaction proof remains open. |
+| W-06 | Partial | Coverage handling exists; Android alert geometry is not drawn on the map. |
+| W-07 | Adapter only | No version-pinned live OTP service, verified identity mapping, or real integration receipt. |
+| W-08 | Implemented in source | Presets use a deliberate map viewport before a fresh location, with current map scope and system fallback; resolver tests cover precedence. Gesture/camera behavior still needs device verification. |
+| W-09 | Partial | Production browser entry/data path and renderer lifecycle code exist; radar frame replacement, restyle replay, omitted-layer clearing, and unchanged-source suppression are implemented. Chromium end-to-end and packaging verification are still required. |
+| W-10 | Partial | Local Maven publication and JVM sample host exist; an independent consumer and Play/release gates remain open. |
+
+Work-order follow-ups in this branch:
+
+| Work order | Local status | Remaining proof |
+| --- | --- | --- |
+| WO-011 | Partial implementation; `test lint` and `assembleDebug` passed locally | Real-feed, Android-device, accessibility, and independent-review receipts. |
+| WO-012 | Transaction staging and JVM regression coverage implemented; local build gates passed | Crash/fault recovery matrix, multi-tab/process policy, real-feed/device durability, and independent review. |
+| WO-016 | Decoder and static-feed IndexedDB rehydration implemented; put/get await transaction completion and canceled operations release pending continuations; targeted Wasm tests passed locally | Browser live-feed/CORS/render test and offline reload/corruption/quota coverage. Wasm `OfflineFileStore` remains memory-only. |
+| WO-017 | Partial: SAF PMTiles v3/style import, header/style validation, atomic package storage, local archive binding, MapLibre style handoff, and startup invalid-package reporting are implemented | Permitted archive provenance, no-network rendering/restart, viewport coverage behavior, and physical-device verification. Static schedule snapshot availability does not prove offline basemap rendering. |
+| WO-018 | OTP adapter and local SDK publication/sample path exist | Version-pinned live OTP, independent external consumer, signing, licensing, privacy, and owner release gates. |
 
 ## Suggested execution order
 

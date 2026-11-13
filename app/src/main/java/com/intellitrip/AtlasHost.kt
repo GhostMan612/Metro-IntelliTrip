@@ -17,6 +17,8 @@ import com.intellitrip.map.RenderUpdateThrottle
 import com.intellitrip.map.TransitRenderPipeline
 import com.intellitrip.offline.JvmOfflineSnapshotPort
 import com.intellitrip.offline.OfflineRegistry
+import com.intellitrip.routing.HybridRoutingProvider
+import com.intellitrip.routing.OpenTripPlannerRoutingProvider
 import com.intellitrip.routing.StaticNetworkPlanner
 import com.intellitrip.routing.RoutingNetwork
 import com.intellitrip.scope.ScopeEngine
@@ -189,12 +191,36 @@ class AtlasHost(val context: Context) {
     fun engine(providers: AtlasProviders = AtlasProviders()): AtlasEngine = AtlasEngine(
         feedId = feedId,
         providers = providers,
-        offlineAvailable = true,
+        offlineAvailable = offlineRegistry.capabilities(feedId).staticNetworkUsable,
         scopeEngine = scopeEngine,
         renderPipeline = pipeline,
     )
 
-    /** Engine whose routing provider is the local static planner over [network]. */
-    fun engineForRouting(network: RoutingNetwork): AtlasEngine =
-        engine(AtlasProviders(routing = StaticNetworkPlanner(network)))
+    /**
+     * Engine whose routing provider is the local static planner over [network].
+     *
+     * Remote routing is opt-in at build time. When `OTP_ENDPOINT` is blank the
+     * engine only ever runs the in-process planner, so origin/destination never
+     * leave the device. When it is set, [HybridRoutingProvider] still answers
+     * locally first and only sends a request when the local planner has no
+     * journeys to offer.
+     */
+    fun engineForRouting(network: RoutingNetwork): AtlasEngine {
+        val local = StaticNetworkPlanner(network)
+        val endpoint = BuildConfig.OTP_ENDPOINT.trim()
+        if (endpoint.isEmpty()) {
+            return engine(AtlasProviders(routing = local))
+        }
+        val remote = OpenTripPlannerRoutingProvider(
+            baseUrl = endpoint,
+            feedId = feedId,
+            transport = HttpRoutingTransport(),
+            network = network,
+        )
+        return engine(
+            AtlasProviders(
+                routing = HybridRoutingProvider(local = local, remote = remote),
+            ),
+        )
+    }
 }

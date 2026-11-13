@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Metro IntelliTrip</title>
+  <link rel="stylesheet" href="maplibre-gl.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: #0f1115; }
+    #atlas-map { background: #1a1d23; }
+    /* The Kotlin shell fills the body; this prevents a flash of unstyled text. */
+    body { visibility: hidden; }
+  </style>
+</head>
+<body>
+  <!--
+    Development/production host for the Kotlin/Wasm shell.
+
+    `atlas-spike.js` is the webpack bundle produced by
+    `wasmJsBrowserDevelopmentWebpack`. The vendorMapLibreDev/Prod Gradle tasks
+    copy this file, the vendored MapLibre dist and the bundle into one directory
+    so a plain static server is enough. No CDN is involved.
+  -->
+  <script>
+    // The Kotlin shell rebuilds the body; reveal it once the module has started.
+    window.addEventListener('atlas-ready', () => { document.body.style.visibility = 'visible'; });
+    setTimeout(() => { document.body.style.visibility = 'visible'; }, 1500);
+
+    // A module-init failure must be visible, not a blank page. Kotlin/Wasm
+    // surfaces startup errors as an unhandled rejection before `main` runs.
+    function atlasStartupFailure(reason) {
+      document.body.textContent = '';
+      var pre = document.createElement('pre');
+      pre.id = 'atlas-startup-error';
+      pre.style.cssText = 'margin:24px;padding:16px;border:1px solid #e05a5a;border-radius:8px;' +
+        'background:#2a1414;color:#ffb4b4;white-space:pre-wrap;font:13px/1.5 ui-monospace,monospace';
+      pre.textContent = 'Metro IntelliTrip could not start.\\n\\n' + reason;
+      document.body.appendChild(pre);
+      document.body.style.visibility = 'visible';
+    }
+    window.addEventListener('error', function (event) {
+      atlasStartupFailure((event.error && (event.error.stack || event.error.message)) || event.message || 'Unknown error');
+    });
+    window.addEventListener('unhandledrejection', function (event) {
+      var reason = event.reason;
+      atlasStartupFailure((reason && (reason.stack || reason.message)) || String(reason));
+    });
+  </script>
+  <script type="module" src="atlas-spike.js"></script>
+</body>
+</html>

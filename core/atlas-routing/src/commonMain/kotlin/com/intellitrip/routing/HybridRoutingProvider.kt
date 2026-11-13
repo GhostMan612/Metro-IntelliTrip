@@ -32,6 +32,8 @@ class HybridRoutingProvider(
     override suspend fun plan(request: TripPlanRequest): ProviderResult<List<JourneyOption>> {
         val localResult = try {
             local.plan(request)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             ProviderResult.Unavailable(
                 com.intellitrip.contracts.ProviderError("Local planner failed", e),
@@ -49,6 +51,8 @@ class HybridRoutingProvider(
 
         val remoteResult = try {
             remote.plan(request)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             ProviderResult.NetworkFailure(
                 com.intellitrip.contracts.ProviderError("Remote planner failed", e),

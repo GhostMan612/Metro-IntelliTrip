@@ -1,17 +1,27 @@
 package com.intellitrip.gtfs
 
+import com.intellitrip.contracts.platformDurableGet
+import com.intellitrip.contracts.platformDurablePut
 import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.FeedMetadata
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.days
 
 sealed interface RefreshOutcome {
     data class NotModified(val feedId: FeedId) : RefreshOutcome
     data class Activated(val feed: StaticFeed) : RefreshOutcome
     data class Rejected(val feedId: FeedId, val reason: String) : RefreshOutcome
 }
+
+data class CachedFeed(
+    val feed: StaticFeed,
+    val age: Duration,
+    val stale: Boolean,
+)
 
 /**
  * Coordinates conditional refresh: acquire (with validators), parse/validate,
@@ -42,8 +52,7 @@ class StaticFeedRefresher(
      */
     private suspend fun refreshBlockingAsync(): RefreshOutcome {
         val currentSnapshot = store.activeSnapshot(feedId)
-        val validators = if (currentSnapshot != null) store.validators(feedId)
-            else FeedValidators(null, null)
+        val validators = if (currentSnapshot != null) store.validators(feedId) else FeedValidators()
         val acquisition = if (validators.usable) {
             acquirer.acquireAsync(
                 feedId = feedId,
@@ -56,7 +65,7 @@ class StaticFeedRefresher(
         }
         return when (acquisition) {
             is GtfsFeedAcquirer.AcquisitionResult.NotModified -> {
-                if (store.activeSnapshot(feedId) == null) {
+                if (currentSnapshot == null || store.activeSnapshot(feedId) == null) {
                     return RefreshOutcome.Rejected(feedId, "304 Not Modified without a usable local snapshot")
                 }
                 val refreshed = FeedValidators(acquisition.etag, acquisition.lastModified)
@@ -69,6 +78,47 @@ class StaticFeedRefresher(
             }
             is GtfsFeedAcquirer.AcquisitionResult.Failure -> RefreshOutcome.Rejected(feedId, acquisition.message)
             is GtfsFeedAcquirer.AcquisitionResult.Updated -> activate(acquisition)
+        }
+    }
+
+    private data class DurableManifest(
+        val hash: String,
+        val fetchedAt: String,
+        val etag: String?,
+        val lastModified: String?,
+        val sourceUrl: String?,
+    ) {
+        private fun String.oneLine(): String = replace('\r', ' ').replace('\n', ' ')
+
+        fun encode(): String = buildString {
+            appendLine("version=1")
+            appendLine("hash=${hash.oneLine()}")
+            appendLine("fetchedAt=${fetchedAt.oneLine()}")
+            etag?.let { appendLine("etag=${it.oneLine()}") }
+            lastModified?.let { appendLine("lastModified=${it.oneLine()}") }
+            sourceUrl?.let { appendLine("sourceUrl=${it.oneLine()}") }
+        }
+
+        companion object {
+            fun parse(text: String): DurableManifest? {
+                val fields = mutableMapOf<String, String>()
+                text.lineSequence().forEach { line ->
+                    if (line.isBlank()) return@forEach
+                    val separator = line.indexOf('=')
+                    if (separator <= 0) return null
+                    fields[line.substring(0, separator).trim()] = line.substring(separator + 1)
+                }
+                if (fields["version"] != "1") return null
+                val hash = fields["hash"]?.takeIf { it.isNotBlank() } ?: return null
+                val fetchedAt = fields["fetchedAt"]?.takeIf { it.isNotBlank() } ?: return null
+                return DurableManifest(
+                    hash = hash,
+                    fetchedAt = fetchedAt,
+                    etag = fields["etag"]?.takeIf { it.isNotBlank() },
+                    lastModified = fields["lastModified"]?.takeIf { it.isNotBlank() },
+                    sourceUrl = fields["sourceUrl"]?.takeIf { it.isNotBlank() },
+                )
+            }
         }
     }
 
@@ -90,7 +140,7 @@ class StaticFeedRefresher(
             validTo = null,
             sourceUrl = sourceUrl,
         )
-        val feed = try {
+        val parsed = try {
             store.writeStagedPayload(acquisition.payload, stage)
             val stopTimeSink = store.newStopTimeSink(stage)
             try {
@@ -102,20 +152,57 @@ class StaticFeedRefresher(
             store.abortRefresh(stage)
             return RefreshOutcome.Rejected(feedId, e.message ?: "Validation failed")
         }
+        val feed = parsed.copy(metadata = deriveMetadata(metadata, parsed))
         val snapshotDir = try {
-            store.activateStaged(feedId, stage, metadata)
+            store.activateStaged(feedId, stage, feed.metadata)
         } catch (e: Exception) {
             store.abortRefresh(stage)
             return RefreshOutcome.Rejected(feedId, e.message ?: "Activation failed")
         }
+        val newValidators = FeedValidators(acquisition.etag, acquisition.lastModified)
         runCatching { store.writeCache(feedId, feed, snapshotDir) }
-        store.recordValidators(feedId, FeedValidators(acquisition.etag, acquisition.lastModified), snapshotDir)
+        store.recordValidators(feedId, newValidators, snapshotDir)
         // Durable cross-restart payload cache (IndexedDB on wasmJs, in-memory
         // on JVM): a web shell primed with this can skip re-downloading bytes
         // it already activated. Best-effort — the snapshot store stays
-        // authoritative; validators still drive the next conditional GET.
-        runCatching { com.intellitrip.contracts.platformDurablePut(durablePayloadKey(feedId, metadata.hash), acquisition.payload) }
+        // authoritative.
+        persistDurable(acquisition.payload, feed.metadata, newValidators)
         return RefreshOutcome.Activated(feed)
+    }
+
+    private fun deriveMetadata(metadata: FeedMetadata, feed: StaticFeed): FeedMetadata {
+        if (metadata.validFrom != null || metadata.validTo != null) return metadata
+        val dates = buildList {
+            feed.calendars.forEach {
+                add(it.startDate)
+                add(it.endDate)
+            }
+            feed.calendarDates.forEach { add(it.date) }
+        }
+        return metadata.copy(validFrom = dates.minOrNull(), validTo = dates.maxOrNull())
+    }
+
+    private suspend fun persistDurable(
+        payload: ByteArray,
+        metadata: FeedMetadata,
+        validators: FeedValidators,
+    ) {
+        val hash = metadata.hash ?: return
+        try {
+            platformDurablePut(durablePayloadKey(feedId, hash), payload)
+            platformDurablePut(
+                durableIndexKey(feedId),
+                DurableManifest(
+                    hash = hash,
+                    fetchedAt = metadata.fetchedAt.toString(),
+                    etag = validators.etag,
+                    lastModified = validators.lastModified,
+                    sourceUrl = metadata.sourceUrl,
+                ).encode().encodeToByteArray(),
+            )
+        } catch (_: Exception) {
+            // The snapshot store is authoritative; durable storage only avoids a later download.
+        }
     }
 
     /**
@@ -131,6 +218,79 @@ class StaticFeedRefresher(
     companion object {
         fun durablePayloadKey(feedId: FeedId, hash: String?): String =
             "payload/" + feedId.value + "/" + (hash ?: "nohash")
+
+        fun durableIndexKey(feedId: FeedId): String = "payload-index/" + feedId.value
+
+        val DEFAULT_CACHED_MAX_AGE: Duration = 7.days
+    }
+
+    suspend fun rehydrateCached(maxAge: Duration = DEFAULT_CACHED_MAX_AGE): CachedFeed? {
+        val indexBytes = try {
+            platformDurableGet(durableIndexKey(feedId))
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        val manifest = DurableManifest.parse(indexBytes.decodeToString()) ?: return null
+        val payload = try {
+            platformDurableGet(durablePayloadKey(feedId, manifest.hash))
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        if (!GtfsFeedAcquirer.sha256(payload).equals(manifest.hash, ignoreCase = true)) return null
+
+        val fetchedAt = try {
+            Instant.parse(manifest.fetchedAt)
+        } catch (_: Exception) {
+            return null
+        }
+        val active = store.activeSnapshot(feedId)
+        if (active != null && active.metadata.hash != manifest.hash) return null
+
+        val metadata = FeedMetadata(
+            feedId = feedId,
+            publisherName = null,
+            publisherUrl = null,
+            lang = null,
+            version = null,
+            hash = manifest.hash,
+            fetchedAt = fetchedAt,
+            validFrom = null,
+            validTo = null,
+            sourceUrl = manifest.sourceUrl ?: sourceUrl,
+        )
+        val stage = store.beginRefresh()
+        val parsed = try {
+            val stopTimeSink = store.newStopTimeSink(stage)
+            try {
+                GtfsStaticParser.parseFromZip(feedId, payload, metadata, stopTimeSink)
+            } finally {
+                stopTimeSink.close()
+            }
+        } catch (_: Exception) {
+            store.abortRefresh(stage)
+            return null
+        }
+        val finalMetadata = active?.metadata ?: deriveMetadata(metadata, parsed)
+        val feed = parsed.copy(metadata = finalMetadata)
+        val snapshotDir = if (active == null) {
+            try {
+                store.writeStagedPayload(payload, stage)
+                store.activateStaged(feedId, stage, finalMetadata).also {
+                    runCatching { store.writeCache(feedId, feed, it) }
+                }
+            } catch (_: Exception) {
+                store.abortRefresh(stage)
+                return null
+            }
+        } else {
+            store.abortRefresh(stage)
+            active.snapshotDir
+        }
+        val cachedValidators = FeedValidators(manifest.etag, manifest.lastModified)
+        if (cachedValidators.usable) store.recordValidators(feedId, cachedValidators, snapshotDir)
+
+        val age = (clock() - fetchedAt).coerceAtLeast(Duration.ZERO)
+        return CachedFeed(feed = feed, age = age, stale = age > maxAge)
     }
 
     /** Blocking refresh for hosts that already run on a background thread. */
@@ -188,7 +348,7 @@ class StaticFeedRefresher(
                     validTo = null,
                     sourceUrl = sourceUrl,
                 )
-                val feed = try {
+                val parsed = try {
                     store.writeStagedPayload(acquisition.payload, stage)
                     val stopTimeSink = store.newStopTimeSink(stage)
                     val parsed = try {
@@ -201,6 +361,7 @@ class StaticFeedRefresher(
                     store.abortRefresh(stage)
                     return RefreshOutcome.Rejected(feedId, e.message ?: "Validation failed")
                 }
+                val feed = parsed.copy(metadata = deriveMetadata(metadata, parsed))
                 // Only now that parsing succeeded is the snapshot activated.
                 // Recording the new validators before this point would let a
                 // rejected payload suppress the retry that would have
@@ -208,7 +369,7 @@ class StaticFeedRefresher(
                 // Payload array is still referenced here; release the archive
                 // reference via letting the acquisition go out of scope next.
                 val snapshotDir = try {
-                    store.activateStaged(feedId, stage, metadata)
+                    store.activateStaged(feedId, stage, feed.metadata)
                 } catch (e: Exception) {
                     store.abortRefresh(stage)
                     return RefreshOutcome.Rejected(feedId, e.message ?: "Activation failed")

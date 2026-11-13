@@ -8,6 +8,7 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.Instant
 
 /**
@@ -146,5 +147,45 @@ class PlannerEndpointStateTest {
         assertEquals(state.activeJourneyId(), state.activeJourney()?.id)
         val cleared = state.withEndpoints(destination = elsewhere)
         assertNull(cleared.activeJourneyId())
+    }
+
+    @Test
+    fun planningTimeChangesClearResultsAndSelections() {
+        val after = stateWithPlan().withPlanningTime(
+            PlanningTimeMode.ARRIVE_BY,
+            Instant.parse("2026-10-05T13:00:00Z"),
+        )
+
+        assertEquals(PlanningTimeMode.ARRIVE_BY, after.planningTimeMode)
+        assertEquals(Instant.parse("2026-10-05T13:00:00Z"), after.planningTime)
+        assertTrue(after.journeys.isEmpty())
+        assertTrue(after.journeyWarnings.isEmpty())
+        assertNull(after.selectedJourneyId)
+        assertTrue(!after.planning)
+    }
+
+    @Test
+    fun departAtUsesTheSelectedTimeOrExplicitNowDefault() {
+        val now = Instant.parse("2026-10-05T12:00:00Z")
+        val defaultRequest = AppState().toTripPlanRequest(now)
+        assertEquals(now + 120.seconds, defaultRequest?.departAt)
+        assertNull(defaultRequest?.arriveBy)
+
+        val selected = Instant.parse("2026-10-05T13:15:00Z")
+        val selectedRequest = AppState(planningTime = selected).toTripPlanRequest(now)
+        assertEquals(selected, selectedRequest?.departAt)
+        assertNull(selectedRequest?.arriveBy)
+    }
+
+    @Test
+    fun arriveByRequiresAndUsesASelectedTime() {
+        val now = Instant.parse("2026-10-05T12:00:00Z")
+        val empty = AppState(planningTimeMode = PlanningTimeMode.ARRIVE_BY)
+        assertNull(empty.toTripPlanRequest(now))
+
+        val arrival = Instant.parse("2026-10-05T13:15:00Z")
+        val request = empty.copy(planningTime = arrival).toTripPlanRequest(now)
+        assertNull(request?.departAt)
+        assertEquals(arrival, request?.arriveBy)
     }
 }

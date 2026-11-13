@@ -1,14 +1,14 @@
 package com.intellitrip.webspike
 
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
 class WebDemoTest {
 
     @Test
-    fun demoPlanSucceedsOnLocalNetwork() {
-        val verdict = runBlocking { WebDemo.demoPlanText() }
+    fun demoPlanSucceedsOnLocalNetwork() = runTest {
+        val verdict = WebDemo.demoPlanText()
         assertTrue(verdict.contains("planned"), "expected a plan, got: $verdict")
     }
 
@@ -25,12 +25,5 @@ class WebDemoTest {
         val end = WebDemo.demoSnapshot(progress = 1.0).vehicles.single()
         assertTrue(start.lon != end.lon || start.lat != end.lat)
         assertTrue(start.lat < end.lat)
-    }
-
-    @Test
-    fun radarOverlayIsRainViewerTileTemplate() {
-        val overlay = WebDemo.demoRadarOverlay()
-        assertTrue(overlay.tileUrlTemplate.contains("tilecache.rainviewer.com"))
-        assertTrue(overlay.tileUrlTemplate.contains("{z}/{x}/{y}"))
     }
 }

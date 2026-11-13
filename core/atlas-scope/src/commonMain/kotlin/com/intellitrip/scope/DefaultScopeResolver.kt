@@ -6,6 +6,7 @@ import com.intellitrip.domain.CameraScope
 import com.intellitrip.domain.DataScope
 import com.intellitrip.domain.Focus
 import com.intellitrip.domain.GeoPoint
+import com.intellitrip.domain.GeoMath
 import com.intellitrip.domain.LatLngBounds
 import com.intellitrip.domain.RenderScope
 import com.intellitrip.domain.ZoomBucket
@@ -80,11 +81,26 @@ class DefaultScopeResolver(private val policy: ScopePolicy = ScopePolicy()) : Sc
                 render = render,
             )
 
-            is Focus.Vehicle -> resolution(
-                camera = CameraScope(policy.systemBounds, policy.followZoom),
-                data = dataScope(vehicles = setOf(focus.key), maxAge = 20.seconds),
-                render = render,
-            )
+            is Focus.Vehicle -> {
+                // A followed vehicle is a specific point, not the metro area. The
+                // app passes the latest fix as `anchor`; without one we keep the
+                // system extent rather than inventing a location for a bare key.
+                val anchor = focus.anchor
+                resolution(
+                    camera = if (anchor != null) {
+                        CameraScope(boundsAround(anchor, policy.tripCorridorMeters), policy.followZoom)
+                    } else {
+                        CameraScope(policy.systemBounds, policy.followZoom)
+                    },
+                    data = dataScope(
+                        vehicles = setOf(focus.key),
+                        bounds = anchor?.let { boundsAround(it, policy.tripCorridorMeters) },
+                        radius = anchor?.let { com.intellitrip.domain.RadiusFilter(it, policy.tripCorridorMeters) },
+                        maxAge = 20.seconds,
+                    ),
+                    render = render,
+                )
+            }
 
             is Focus.Radius -> resolution(
                 // Camera follows the radius center, not the system extent. Framing
@@ -202,16 +218,11 @@ class DefaultScopeResolver(private val policy: ScopePolicy = ScopePolicy()) : Sc
     }
 
     fun boundsAround(center: GeoPoint, meters: Double): LatLngBounds {
-        val latDelta = meters / 111_320.0
-        val lonDelta = meters / (111_320.0 * cos(center.lat * PI / 180.0).coerceAtLeast(0.01))
+        val latDelta = meters / GeoMath.METERS_PER_LATITUDE_DEGREE
+        val lonDelta = meters / (GeoMath.METERS_PER_LATITUDE_DEGREE * cos(center.lat * PI / 180.0).coerceAtLeast(0.01))
         return LatLngBounds(
             southWest = GeoPoint((center.lat - latDelta).coerceAtLeast(-90.0), center.lon - lonDelta),
             northEast = GeoPoint((center.lat + latDelta).coerceAtMost(90.0), center.lon + lonDelta),
         )
     }
 }
-
-fun LatLngBounds.center(): GeoPoint = GeoPoint(
-    lat = (southWest.lat + northEast.lat) / 2,
-    lon = (southWest.lon + northEast.lon) / 2,
-)

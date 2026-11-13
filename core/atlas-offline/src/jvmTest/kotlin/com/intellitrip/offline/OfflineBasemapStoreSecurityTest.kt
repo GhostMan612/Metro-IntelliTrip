@@ -5,7 +5,9 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -16,20 +18,20 @@ import kotlin.test.assertTrue
  *
  * The round-trip tests are equally load-bearing. A manifest separator regression
  * once left `FIELD_SEPARATOR` empty, which made every write silently unreadable
- * while the traversal tests still passed — they never reloaded a package.
+ * while the traversal tests still passed: they never reloaded a package.
  */
 class OfflineBasemapStoreSecurityTest {
 
-    private fun store(): OfflineBasemapStore =
-        OfflineBasemapStore(Files.createTempDirectory("basemap-sec").toString())
+    private fun store(minimumBytes: Long = 1024L): OfflineBasemapStore =
+        OfflineBasemapStore(
+            Files.createTempDirectory("basemap-sec").toString(),
+            minimumBytes = minimumBytes,
+        )
 
-    private fun staged(bytes: Int = 4096): Path {
-        val file = Files.createTempFile("stage", ".mbtiles")
-        Files.write(file, ByteArray(bytes) { 0x42 })
-        return file
-    }
+    private fun staged(size: Int = 4096): Path =
+        PmtilesFixture.write(Files.createTempFile("stage", ".pmtiles"), PmtilesFixture.bytes(size))
 
-    private val style = """{"version":8,"sources":{}}"""
+    private val style = PmtilesFixture.style()
 
     /** Matches the store manifest separator. */
     private val SEP = 0x1F.toChar().toString()
@@ -50,17 +52,31 @@ class OfflineBasemapStoreSecurityTest {
         assertEquals(installed.pkg.tilePath, reloaded.single().tilePath)
         assertEquals(4096L, reloaded.single().sizeBytes)
         assertEquals(0, reloaded.single().minZoom)
-        assertEquals(16, reloaded.single().maxZoom)
+        assertEquals(14, reloaded.single().maxZoom)
+        assertEquals(44.8, reloaded.single().bounds.minLat)
+        assertEquals(-93.4, reloaded.single().bounds.minLon)
+        assertEquals(45.1, reloaded.single().bounds.maxLat)
+        assertEquals(-92.9, reloaded.single().bounds.maxLon)
     }
 
     @Test
-    fun styleSurvivesTheRoundTrip() {
+    fun styleSurvivesTheRoundTripAndIsBoundToTheInstalledArchive() {
         val store = store()
         val installed = store.install("metro", "Twin Cities", staged().toString(), style)
         assertTrue(installed is InstallResult.Installed)
         val reloaded = OfflineBasemapStore(store.rootForTest())
         val pkg = reloaded.packages().single()
-        assertEquals(style, reloaded.styleFor(pkg))
+        val bound = assertNotNull(reloaded.styleFor(pkg))
+
+        assertTrue(bound.contains("\"sources\""), "style body was lost: $bound")
+        assertTrue(
+            bound.contains("pmtiles://file:"),
+            "style was not bound to a local archive: $bound",
+        )
+        assertFalse(
+            bound.contains("pmtiles://basemap.pmtiles"),
+            "the placeholder archive URL survived binding: $bound",
+        )
     }
 
     @Test
@@ -111,14 +127,18 @@ class OfflineBasemapStoreSecurityTest {
     }
 
     @Test
-    fun reinstallOfTheSameIdReplacesRatherThanDuplicates() {
+    fun reinstallOfTheSameIdReplacesRatherThanDuplicatesAndDeletesTheOldGeneration() {
         val store = store()
-        store.install("metro", "First", staged().toString(), style)
-        store.install("metro", "Second", staged(8192).toString(), style)
+        val first = store.install("metro", "First", staged().toString(), style) as InstallResult.Installed
+        val firstTile = Paths.get(first.pkg.tilePath)
+        val second = store.install("metro", "Second", staged(8192).toString(), style) as InstallResult.Installed
 
         val reloaded = OfflineBasemapStore(store.rootForTest()).packages()
         assertEquals(1, reloaded.size, "reinstall created a duplicate entry")
         assertEquals("Second", reloaded.single().displayName)
+        assertTrue(first.pkg.tilePath != second.pkg.tilePath, "reinstall reused the generation name")
+        assertFalse(Files.exists(firstTile), "the previous generation was left on disk")
+        assertEquals(8192L, reloaded.single().sizeBytes)
     }
 
     @Test
@@ -130,6 +150,130 @@ class OfflineBasemapStoreSecurityTest {
         assertTrue(installed is InstallResult.Installed)
         val reloaded = OfflineBasemapStore(store.rootForTest()).packages().single()
         assertEquals(awkward, reloaded.displayName)
+    }
+
+    // --- format validation: only a valid PMTiles v3 archive is accepted
+
+    @Test
+    fun mbtilesIsRejectedWithConversionGuidance() {
+        val store = store()
+        val mbtiles = PmtilesFixture.write(
+            Files.createTempFile("stage", ".mbtiles"),
+            PmtilesFixture.mbtiles(),
+        )
+        val rejected = store.install("metro", "Old archive", mbtiles.toString(), style)
+        assertTrue(rejected is InstallResult.Rejected)
+        assertTrue(rejected.reason.contains("MBTiles"), rejected.reason)
+        assertTrue(rejected.reason.contains("pmtiles convert"), rejected.reason)
+        assertTrue(!store.hasPackage())
+    }
+
+    @Test
+    fun unknownFormatIsRejected() {
+        val store = store()
+        val file = Files.createTempFile("stage", ".pmtiles")
+        Files.write(file, ByteArray(4096) { 0x42 })
+        val rejected = store.install("metro", "Junk", file.toString(), style)
+        assertTrue(rejected is InstallResult.Rejected)
+        assertTrue(rejected.reason.contains("Not a PMTiles v3 archive"), rejected.reason)
+    }
+
+    @Test
+    fun truncatedPmtilesIsRejectedBeforeInstalling() {
+        val store = store(minimumBytes = 1L)
+        val file = Files.createTempFile("stage", ".pmtiles")
+        // Magic present, but only 64 bytes: no room for a v3 header.
+        Files.write(file, PmtilesFixture.bytes().copyOf(64))
+        val rejected = store.install("metro", "Truncated", file.toString(), style)
+        assertTrue(rejected is InstallResult.Rejected)
+        assertTrue(rejected.reason.contains("too short"), rejected.reason)
+    }
+
+    @Test
+    fun invalidZoomRangeInTheHeaderIsRejected() {
+        val store = store()
+        val file = PmtilesFixture.write(
+            Files.createTempFile("stage", ".pmtiles"),
+            PmtilesFixture.bytes(minZoom = 14, maxZoom = 2),
+        )
+        val rejected = store.install("metro", "Bad zoom", file.toString(), style)
+        assertTrue(rejected is InstallResult.Rejected)
+        assertTrue(rejected.reason.contains("zoom range"), rejected.reason)
+    }
+
+    @Test
+    fun styleWithoutAPmtilesSourceIsRejected() {
+        val store = store()
+        val rejected = store.install(
+            "metro",
+            "Online only",
+            staged().toString(),
+            """{"version":8,"sources":{},"layers":[]}""",
+        )
+        assertTrue(rejected is InstallResult.Rejected)
+        assertTrue(rejected.reason.contains("pmtiles://"), rejected.reason)
+    }
+
+    @Test
+    fun malformedStyleIsRejected() {
+        val store = store()
+        val rejected = store.install(
+            "metro",
+            "Broken",
+            staged().toString(),
+            """{"version":8,"sources":{"offline":{"url":"pmtiles://x"}},"layers":[""",
+        )
+        assertTrue(rejected is InstallResult.Rejected)
+        assertTrue(rejected.reason.contains("not valid JSON"), rejected.reason)
+    }
+
+    @Test
+    fun styleWithEscapedSlashesIsAcceptedAndBound() {
+        val store = store()
+        val escaped = style.replace("/", "\\/")
+        val installed = store.install("metro", "Escaped", staged().toString(), escaped)
+        assertTrue(installed is InstallResult.Installed, "install failed: $installed")
+        val bound = assertNotNull(store.styleFor(installed.pkg))
+        assertTrue(bound.contains("pmtiles://file:"), bound)
+        assertFalse(bound.contains("\\/\\/"), "escaped slashes survived binding: $bound")
+    }
+
+    @Test
+    fun corruptedInstalledArchiveIsNotBoundForRendering() {
+        val store = store()
+        val installed = store.install("metro", "Corrupted", staged().toString(), style)
+            as InstallResult.Installed
+        Files.write(Paths.get(installed.pkg.tilePath), byteArrayOf(0, 1, 2))
+
+        assertNull(store.styleFor(installed.pkg))
+    }
+
+    @Test
+    fun editedInstalledStyleIsNotBoundForRendering() {
+        val store = store()
+        val installed = store.install("metro", "Edited", staged().toString(), style)
+            as InstallResult.Installed
+        val stylePath = Paths.get(installed.pkg.tilePath).resolveSibling(
+            Paths.get(installed.pkg.tilePath).fileName.toString() + ".style.json",
+        )
+        Files.writeString(stylePath, """{"version":8,"sources":{},"layers":[]}""")
+
+        assertNull(store.styleFor(installed.pkg))
+    }
+
+    @Test
+    fun zoomRangeAndBoundsComeFromTheArchiveHeader() {
+        val store = store()
+        val file = PmtilesFixture.write(
+            Files.createTempFile("stage", ".pmtiles"),
+            PmtilesFixture.bytes(minZoom = 4, maxZoom = 12),
+        )
+        val installed = store.install("metro", "Header metadata", file.toString(), style)
+        assertTrue(installed is InstallResult.Installed, "install failed: $installed")
+        assertEquals(4, installed.pkg.minZoom)
+        assertEquals(12, installed.pkg.maxZoom)
+        assertEquals(44.8, installed.pkg.bounds.minLat)
+        assertEquals(-93.4, installed.pkg.bounds.minLon)
     }
 
     // --- containment: untrusted ids must not escape the store root
@@ -189,20 +333,24 @@ class OfflineBasemapStoreSecurityTest {
         val store = store()
         val installed = store.install("good", "Good", staged().toString(), style)
         assertTrue(installed is InstallResult.Installed)
-        val sep = SEP
-        val good = listOf(
-            java.util.Base64.getEncoder().encodeToString(installed.pkg.id.toByteArray()),
-            java.util.Base64.getEncoder().encodeToString(installed.pkg.displayName.toByteArray()),
-            Paths.get(installed.pkg.tilePath).fileName.toString(),
-            installed.pkg.sizeBytes.toString(),
-            installed.pkg.minZoom.toString(),
-            installed.pkg.maxZoom.toString(),
-        ).joinToString(sep)
+        val manifest = Paths.get(store.rootForTest()).resolve("basemap-manifest.txt")
+        val good = Files.readAllLines(manifest).single()
 
         Files.writeString(
-            Paths.get(store.rootForTest()).resolve("basemap-manifest.txt"),
+            manifest,
             listOf(
-                listOf("ZXZpbA==", "RXZpbA==", "../../../../etc/passwd", "10", "0", "14").joinToString(sep),
+                listOf(
+                    "ZXZpbA==",
+                    "RXZpbA==",
+                    "../../../../etc/passwd",
+                    "10",
+                    "0",
+                    "14",
+                    "-180",
+                    "-90",
+                    "180",
+                    "90",
+                ).joinToString(SEP),
                 good,
             ).joinToString("\n"),
         )
@@ -216,6 +364,24 @@ class OfflineBasemapStoreSecurityTest {
     }
 
     @Test
+    fun manifestEntriesWithNestedPathsOrImpossibleZoomAreIgnored() {
+        val store = store()
+        val installed = store.install("good", "Good", staged().toString(), style)
+        assertTrue(installed is InstallResult.Installed)
+        val manifest = Paths.get(store.rootForTest()).resolve("basemap-manifest.txt")
+        val good = Files.readAllLines(manifest).single()
+        val fields = good.split(SEP).toMutableList()
+
+        val nested = fields.toMutableList().apply { this[2] = "nested/${fields[2]}" }
+        val badZoom = fields.toMutableList().apply { this[5] = "99" }
+        Files.writeString(manifest, listOf(nested.joinToString(SEP), badZoom.joinToString(SEP), good).joinToString("\n"))
+
+        val packages = OfflineBasemapStore(store.rootForTest()).packages()
+        assertEquals(1, packages.size)
+        assertEquals("good", packages.single().id)
+    }
+
+    @Test
     fun manifestEntryForAVanishedFileIsNotReportedInstalled() {
         val store = store()
         val installed = store.install("gone", "Gone", staged().toString(), style)
@@ -223,5 +389,15 @@ class OfflineBasemapStoreSecurityTest {
         Files.delete(Paths.get(installed.pkg.tilePath))
         assertTrue(store.packages().none { it.id == "gone" }, "deleted package still reported installed")
         assertTrue(!store.hasPackage())
+    }
+
+    @Test
+    fun manifestEntryWhoseStyleIsMissingIsNotReportedInstalled() {
+        val store = store()
+        val installed = store.install("gone", "Gone", staged().toString(), style)
+        assertTrue(installed is InstallResult.Installed)
+        val tile = Paths.get(installed.pkg.tilePath)
+        Files.delete(tile.resolveSibling(tile.fileName.toString() + ".style.json"))
+        assertTrue(store.packages().none { it.id == "gone" }, "package without a style was reported installed")
     }
 }

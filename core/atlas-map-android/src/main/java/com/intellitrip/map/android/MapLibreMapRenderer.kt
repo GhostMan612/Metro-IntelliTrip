@@ -184,6 +184,11 @@ class MapLibreMapRenderer(
             pendingStyle = style
             return
         }
+        val json = style.styleJson
+        if (json != null) {
+            target.setStyle(json) { onStyleLoaded() }
+            return
+        }
         val styleUri = style.styleUrl
         if (styleUri != null) {
             target.setStyle(styleUri) { onStyleLoaded() }
@@ -239,9 +244,7 @@ class MapLibreMapRenderer(
         val target = map ?: return
         target.getStyle { style ->
             style.removeLayer(RADAR_LAYER)
-            style.removeLayer(ALERTS_LAYER)
             style.removeSource(RADAR_SOURCE)
-            style.removeSource(ALERTS_SOURCE)
         }
     }
 
@@ -349,27 +352,6 @@ PropertyFactory.lineColor("#DC2626"),
     }
 
     fun clearUserLocation() = applyUserLocation(null)
-
-    /** Active weather alerts rendered as a bulk point source. */
-    fun applyAlerts(geoJson: String) {
-        val target = map ?: return
-        target.getStyle { style ->
-            val source = style.getSourceAs<GeoJsonSource>(ALERTS_SOURCE)
-                ?: GeoJsonSource(ALERTS_SOURCE).also { style.addSource(it) }
-            source.setGeoJson(geoJson)
-            if (style.getLayer(ALERTS_LAYER) == null) {
-                style.addLayer(
-                    CircleLayer(ALERTS_LAYER, ALERTS_SOURCE).withProperties(
-                        PropertyFactory.circleRadius(7f),
-                        PropertyFactory.circleColor(Expression.literal("#DC2626")),
-                        PropertyFactory.circleOpacity(0.9f),
-                        PropertyFactory.circleStrokeWidth(2f),
-                        PropertyFactory.circleStrokeColor(Expression.literal("#FFFFFF")),
-                    )
-                )
-            }
-        }
-    }
 
     override fun destroy() {
         mapView.onDestroy()
@@ -692,8 +674,6 @@ PropertyFactory.lineColor("#DC2626"),
         const val SHAPES_CASING_LAYER = "intellitrip-shape-casing-layer"
         const val RADAR_SOURCE = "intellitrip-radar"
         const val RADAR_LAYER = "intellitrip-radar-layer"
-        const val ALERTS_SOURCE = "intellitrip-weather-alerts"
-        const val ALERTS_LAYER = "intellitrip-weather-alert-layer"
         const val ROUTES_SOURCE = "intellitrip-routes"
         const val ROUTES_LAYER = "intellitrip-route-layer"
         const val ROUTES_CASING_LAYER = "intellitrip-route-casing-layer"

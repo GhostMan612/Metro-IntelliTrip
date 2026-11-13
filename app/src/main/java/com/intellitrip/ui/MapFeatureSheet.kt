@@ -69,6 +69,9 @@ fun MapFeatureSheet(
     onChooseCandidate: (MapFeature) -> Unit,
     userLocation: com.intellitrip.domain.GeoPoint? = null,
     onTrackVehicle: (com.intellitrip.domain.VehicleKey) -> Unit = {},
+    trackedVehicleKey: com.intellitrip.domain.VehicleKey? = null,
+    trackingStatus: String? = null,
+    onStopTrackingVehicle: () -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     ModalBottomSheet(
@@ -81,6 +84,7 @@ fun MapFeatureSheet(
                 is MapSelection.Single -> SingleFeatureBody(
                     selection.feature, stops, vehicles, journeys, departures, now,
                     onSaveStop, onSelectJourney, onZoomToCluster, userLocation, onTrackVehicle,
+                    trackedVehicleKey, trackingStatus, onStopTrackingVehicle,
                 )
 
                 is MapSelection.Ambiguous -> AmbiguousBody(
@@ -113,6 +117,9 @@ private fun SingleFeatureBody(
     onZoomToCluster: (MapFeature.VehicleCluster) -> Unit,
     userLocation: com.intellitrip.domain.GeoPoint? = null,
     onTrackVehicle: (com.intellitrip.domain.VehicleKey) -> Unit = {},
+    trackedVehicleKey: com.intellitrip.domain.VehicleKey? = null,
+    trackingStatus: String? = null,
+    onStopTrackingVehicle: () -> Unit = {},
 ) {
     when (feature) {
         is MapFeature.Stop -> {
@@ -131,7 +138,15 @@ private fun SingleFeatureBody(
 
         is MapFeature.Vehicle -> {
             val vehicle = vehicles[feature.vehicleId]
-            VehicleDetailBody(vehicle = vehicle, fallback = feature, now = now, onTrackVehicle = onTrackVehicle)
+            VehicleDetailBody(
+                vehicle = vehicle,
+                fallback = feature,
+                now = now,
+                onTrackVehicle = onTrackVehicle,
+                trackedVehicleKey = trackedVehicleKey,
+                trackingStatus = trackingStatus,
+                onStopTrackingVehicle = onStopTrackingVehicle,
+            )
         }
 
         is MapFeature.Journey -> {
@@ -147,6 +162,8 @@ private fun SingleFeatureBody(
             vehicles = vehicles,
             onZoomToCluster = onZoomToCluster,
             onTrackVehicle = onTrackVehicle,
+            trackedVehicleKey = trackedVehicleKey,
+            onStopTrackingVehicle = onStopTrackingVehicle,
         )
     }
 }
@@ -157,6 +174,8 @@ private fun ClusterDetailBody(
     vehicles: Map<String, Vehicle>,
     onZoomToCluster: (MapFeature.VehicleCluster) -> Unit,
     onTrackVehicle: (com.intellitrip.domain.VehicleKey) -> Unit,
+    trackedVehicleKey: com.intellitrip.domain.VehicleKey? = null,
+    onStopTrackingVehicle: () -> Unit = {},
 ) {
     Text(text = "${cluster.vehicleCount} vehicles here", style = MaterialTheme.typography.headlineMedium)
     Text(
@@ -177,7 +196,11 @@ private fun ClusterDetailBody(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = { onTrackVehicle(v.key) }) { Text("Track") }
+            TextButton(
+                onClick = {
+                    if (trackedVehicleKey == v.key) onStopTrackingVehicle() else onTrackVehicle(v.key)
+                },
+            ) { Text(if (trackedVehicleKey == v.key) "Stop" else "Track") }
         }
     }
     TextButton(onClick = { onZoomToCluster(cluster) }) { Text("Zoom in") }
@@ -201,9 +224,9 @@ private fun StopDetailBody(
     Text(text = stop?.name ?: fallbackName, style = MaterialTheme.typography.headlineMedium)
     if (stop != null && userLocation != null) {
         val dist = DepartureBoard.metersBetween(userLocation, stop.location)
-        val walk = (dist / 1.35 / 60).toInt().coerceAtLeast(1)
+        val walk = com.intellitrip.domain.GeoMath.walkMinutes(dist)
         Text(
-            text = "${dist.toInt()} m · $walk min walk",
+            text = "${dist.toInt()} m · $walk min walk (straight line)",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -243,9 +266,19 @@ private fun StopDetailBody(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = if (d.isLive) "Live" else "Schedule",
+                                text = when (d.status) {
+                                    DepartureStatus.LIVE -> "Live"
+                                    DepartureStatus.CANCELED -> "Canceled"
+                                    DepartureStatus.SKIPPED -> "Skipped"
+                                    DepartureStatus.SCHEDULED -> "Schedule"
+                                },
                                 style = MaterialTheme.typography.labelMedium,
-                                color = if (d.isLive) MaterialTheme.status.live else MaterialTheme.status.scheduled,
+                                color = when (d.status) {
+                                    DepartureStatus.LIVE -> MaterialTheme.status.live
+                                    DepartureStatus.CANCELED -> MaterialTheme.status.critical
+                                    DepartureStatus.SKIPPED -> MaterialTheme.status.warning
+                                    DepartureStatus.SCHEDULED -> MaterialTheme.status.scheduled
+                                },
                             )
                         }
                         Text(text = d.wait, style = MaterialTheme.typography.titleMedium)
@@ -271,6 +304,9 @@ private fun VehicleDetailBody(
     fallback: MapFeature.Vehicle,
     now: Instant,
     onTrackVehicle: (com.intellitrip.domain.VehicleKey) -> Unit = {},
+    trackedVehicleKey: com.intellitrip.domain.VehicleKey? = null,
+    trackingStatus: String? = null,
+    onStopTrackingVehicle: () -> Unit = {},
 ) {
     val route = vehicle?.routeKey?.routeId ?: fallback.routeShortName
     val headsign = vehicle?.tripKey?.let { _ -> fallback.headsign }
@@ -290,15 +326,31 @@ private fun VehicleDetailBody(
         else -> "Live position" to MaterialTheme.status.live
     }
     Text(text = label, style = MaterialTheme.typography.bodyMedium, color = color)
-    var tracking by remember { mutableStateOf(false) }
+    // Tracking is state, not a local switch: it must survive the sheet closing and
+    // must show "off" when a map pan has already stopped the follow.
+    val targetKey = vehicle?.key
+    val tracking = targetKey != null && targetKey == trackedVehicleKey
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("Track this", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Switch(
             checked = tracking,
-            onCheckedChange = {
-                tracking = it
-                if (it && vehicle != null) onTrackVehicle(vehicle.key)
+            enabled = targetKey != null,
+            onCheckedChange = { enabled ->
+                if (enabled) targetKey?.let(onTrackVehicle) else onStopTrackingVehicle()
             },
+        )
+    }
+    if (tracking) {
+        Text(
+            text = trackingStatus ?: "Following this vehicle",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    } else if (targetKey == null) {
+        Text(
+            text = "Tracking needs a live position for this vehicle.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

@@ -63,18 +63,29 @@ data class RtStopTimeUpdate(
     val stopId: String = "",
     val arrival: RtStopTimeEvent? = null,
     val departure: RtStopTimeEvent? = null,
+    /** Wire enum: SCHEDULED=0, SKIPPED=1, NO_DATA=2, UNSCHEDULED=3. */
+    val scheduleRelationship: Int = 0,
 )
 
 data class RtStopTimeEvent(
     /** Null when `hasDelay()` is false. */
     val delay: Int? = null,
+    /** Absolute event time (epoch seconds), null when `hasTime()` is false. */
+    val time: Long? = null,
 )
 
 data class RtAlert(
     val headerText: RtTranslatedString = RtTranslatedString(),
     val descriptionText: RtTranslatedString = RtTranslatedString(),
-    /** Raw `Alert.SeverityLevel` number (0 = `UNKNOWN_SEVERITY` default). */
-    val severityLevelNumber: Int = 0,
+    /**
+     * Raw `Alert.SeverityLevel` number.
+     *
+     * The official proto numbers the enum 1..4 (`UNKNOWN_SEVERITY = 1`), not
+     * 0..3; the generated bindings use the same default. Keeping the wire
+     * number here makes the portable decoder byte-for-byte comparable with
+     * the Java bindings.
+     */
+    val severityLevelNumber: Int = 1,
     val informedEntities: List<RtEntitySelector> = emptyList(),
 )
 
@@ -91,9 +102,10 @@ data class RtEntitySelector(
 /**
  * Decodes a GTFS-Realtime payload into the portable model.
  *
- * Platform implementations differ: JVM uses the Java protobuf bindings,
- * wasmJs has no protobuf runtime yet and its actual throws. Throwing any
- * [Exception] is treated by the polling client as a malformed payload.
+ * Platform implementations differ: JVM uses the generated Java protobuf
+ * bindings, wasmJs uses [PortableFeedDecoder]. Both must reject malformed
+ * bytes by throwing, which the polling client reports as a malformed
+ * response rather than an empty feed.
  */
 fun interface FeedDecoder {
     fun decode(bytes: ByteArray): RtFeedMessage

@@ -269,6 +269,11 @@ class WeatherProvidersTest {
         val composed = WeatherLayerComposer.compose(WeatherLayerState(radarEnabled = true, alertsEnabled = true), frame, alerts)
         assertEquals(listOf(LayerSlot.RADAR, LayerSlot.ALERTS), composed.layers.map { it.first })
         assertTrue(LayerSlot.RADAR.order < LayerSlot.TRANSIT_VEHICLES.order)
+
+        // Alerts are a list, not map geometry: the composer must never hand the
+        // renderer a point that the provider did not supply.
+        val alertLayer = composed.layers.first { it.first == LayerSlot.ALERTS }.second
+        assertEquals(WeatherLayer.AlertSummary(alerts), alertLayer)
     }
 
     @Test

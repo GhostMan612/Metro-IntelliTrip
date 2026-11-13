@@ -1,6 +1,6 @@
 # Privacy policy
 
-Last updated: 2026-10-12
+Last updated: 2026-11-11
 
 IntelliTrip is a transit map and trip planner. This policy describes what the app stores,
 what it sends, and what it deliberately does not do.
@@ -19,6 +19,7 @@ what it sends, and what it deliberately does not do.
 | Downloaded transit timetable | App private storage | Planning and departures work offline | You clear app data, or the app replaces it with a newer feed |
 | Saved stops | App private storage | So your saved places work offline with no account | You remove them in the app |
 | Last known location | Memory only, not written to disk | Centering the map | When the app process ends |
+| Imported offline basemap | App private storage | The map works without tile requests | You remove the basemap in More, or clear app data |
 
 None of this is readable by other apps. It lives in Android's app-private storage and
 is removed when you uninstall.
@@ -48,11 +49,16 @@ Only when you ask for it, and only to the provider that supplies the feature:
   on. Radar tiles are visible to RainViewer as ordinary image requests.
 - **Severe weather alerts** — a request to the US National Weather Service covering the
   area you are looking at.
-- **Basemap tiles** — tile requests to CARTO for the map itself.
+- **Basemap tiles** — tile requests to CARTO for the map itself, unless you have
+  imported an offline basemap and selected it. An imported basemap is served from
+  app-private storage and makes no tile requests.
 
-**Trip planning runs on your device.** When a journey is planned, your origin and
-destination stay on the phone. The app does not send them to a server to find you a
-route.
+**Trip planning runs on your device by default.** When a journey is planned, your
+origin and destination stay on the phone. A distributor may build the app with a
+self-hosted OpenTripPlanner endpoint for cross-agency trips; in that build, origin
+and destination are sent to that endpoint only when the on-device planner finds no
+journey. The stock build has no endpoint configured and makes no such request. The
+endpoint is not a public demo service, and no account or API key is involved.
 
 ## Sharing
 
@@ -66,6 +72,7 @@ None. IntelliTrip has no mechanism to share your location, saved places, or jour
 | CARTO | Basemap tiles | No | |
 | RainViewer | Precipitation radar | No | Radar data by RainViewer; still under review for production licensing |
 | US National Weather Service | Severe weather alerts | No | Public API |
+| Self-hosted OpenTripPlanner | Cross-agency trip planning | No | Only when the distributor configured an endpoint and the local planner found no journey |
 
 ## Children's privacy
 

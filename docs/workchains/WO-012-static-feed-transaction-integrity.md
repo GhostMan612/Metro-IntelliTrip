@@ -1,6 +1,6 @@
 # WO-012 — GTFS snapshot and offline transaction integrity
 
-**Severity:** P0 data correctness and retention. **Status:** SPECCED; not fixed or tested in this PR.  
+**Severity:** P0 data correctness and retention. **Status:** Transaction/staging implementation and JVM regression tests are present on the local branch; full recovery and platform verification remain open.
 **Target:** `master` commit `ccf662c7de6e9b0b34e20994366f5ecfec5d5d40`.  
 **Source:** `core/atlas-gtfs-static/src/commonMain/kotlin/com/intellitrip/gtfs/StaticFeedSnapshotStore.kt`; `StaticFeedRefresher.kt`; `GtfsStaticParser.kt`; `StaticFeedBinaryCache.kt`.
 
@@ -54,6 +54,6 @@
 - Real 29 MB Metro Transit archive, JVM suites, Android instrumented tests, lint, assembleDebug/release, offline BLU restart; report memory/time regressions.
 
 ## REVIEW / CLOSURE
-No functional change is made by this PR. Before implementation merge: independent review of transaction state machine, concurrent test determinism, no-reader-deletion guarantee, and actual executed test reports. Do not widen scope to unrelated renderer or visual work.
+**Local checkpoint:** refreshes use per-operation staging directories and serialized activation, with regression coverage in the JVM suite. The local `test lint` and `assembleDebug` gates passed. This does not establish process-crash recovery, cross-tab Wasm writer safety, real-feed behavior, device durability, or every fault-injection case above. Keep the workchain open for those proofs and independent review; do not widen scope to unrelated renderer or visual work.
 
 **Dependencies:** independent of WO-011; recommended before offline basemap and web durable rehydration. `W-12` extends existing workchain inventory.

@@ -10,6 +10,14 @@ data class BasemapStyle(
     val attribution: String,
     val minZoom: Double = 0.0,
     val maxZoom: Double = 22.0,
+    /**
+     * Inline style JSON, used by an installed offline package.
+     *
+     * A local style cannot be expressed as a URL without a bundled asset, and the
+     * installed archive path is only known at runtime, so the host passes the
+     * resolved JSON directly. When non-null this wins over [styleUrl].
+     */
+    val styleJson: String? = null,
 )
 
 interface BasemapProvider {

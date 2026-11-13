@@ -1,5 +1,6 @@
 package com.intellitrip
 
+import android.content.ContextWrapper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.intellitrip.gtfs.PlatformFileStore
@@ -22,6 +23,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import java.nio.file.Files
 
 /**
@@ -73,6 +75,38 @@ class AtlasHostInstrumentedTest {
         val capabilities = registry.capabilities(com.intellitrip.domain.FeedId(FEED_ID))
         assertTrue(!capabilities.staticNetworkUsable)
         assertTrue(capabilities.notes.isNotEmpty())
+    }
+
+    @Test
+    fun engineOfflineCapabilityRequiresUsableStaticSnapshot() {
+        val root = Files.createTempDirectory("device-engine-offline").toFile()
+        try {
+            val isolatedContext = object : ContextWrapper(context) {
+                override fun getFilesDir(): File = root
+            }
+            val host = AtlasHost(isolatedContext)
+            assertEquals(false, host.engine().capabilities().offline)
+
+            host.snapshotStore.activate(
+                host.feedId,
+                GtfsFixture().zip(),
+                com.intellitrip.domain.FeedMetadata(
+                    feedId = host.feedId,
+                    publisherName = null,
+                    publisherUrl = null,
+                    lang = null,
+                    version = "1",
+                    hash = "abc",
+                    fetchedAt = Clock.System.now(),
+                    validFrom = null,
+                    validTo = null,
+                    sourceUrl = null,
+                ),
+            )
+            assertEquals(true, host.engine().capabilities().offline)
+        } finally {
+            root.deleteRecursively()
+        }
     }
 
     /**

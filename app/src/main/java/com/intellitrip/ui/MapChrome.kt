@@ -56,13 +56,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.intellitrip.AppState
+import com.intellitrip.PlanningTimeMode
+import com.intellitrip.ScopePreset
+import com.intellitrip.TravelMode
+import com.intellitrip.WalkEstimator
 import com.intellitrip.activeJourneyId
 import com.intellitrip.DEFAULT_LAT
 import com.intellitrip.DEFAULT_LON
 import com.intellitrip.domain.Focus
+import com.intellitrip.label
+import com.intellitrip.offline.BasemapPackage
+import com.intellitrip.presetResolution
 import com.intellitrip.ui.theme.Radii
 import com.intellitrip.ui.theme.Space
 import com.intellitrip.domain.GeoPoint
+import kotlinx.datetime.Clock
 
 /** Which overlay sheet is showing. Only one at a time, or none. */
 /** Sheets the floating controls can raise. Public so navigation can request one. */
@@ -101,12 +109,19 @@ fun MapChrome(
     onLoadRadar: () -> Unit,
     onLoadAlerts: () -> Unit,
     onToggleAutoRefresh: () -> Unit,
+    onImportBasemap: () -> Unit,
+    onSelectBasemap: (String) -> Unit,
+    onRemoveBasemap: (String) -> Unit,
     onLocateMe: () -> Unit,
     locationPermissionGranted: Boolean,
     onSetOrigin: (GeoPoint) -> Unit,
     onSetDestination: (GeoPoint) -> Unit,
     onSwapEndpoints: () -> Unit,
     onPlan: () -> Unit,
+    onSetTravelMode: (TravelMode) -> Unit,
+    onSetPlanningTimeMode: (PlanningTimeMode) -> Unit,
+    onSetPlanningTime: (kotlinx.datetime.Instant?) -> Unit,
+    onStopTracking: () -> Unit,
     onSelectJourney: (String) -> Unit,
     onToggleDepartures: () -> Unit,
     /** Extra top offset for the scope chip, so it clears the search entry on Explore. */
@@ -133,6 +148,8 @@ fun MapChrome(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilterChipRow(
+                timeLabel = planningTimeShortLabel(state),
+                onTimeClick = { sheet = Sheet.Plan },
                 onTransitClick = { sheet = Sheet.Data },
                 onRadarClick = onLoadRadar,
             )
@@ -190,6 +207,34 @@ fun MapChrome(
             )
         }
 
+        // Following is a mode until the rider stops it. Keeping a visible,
+        // dismissible chip means tracking cannot be left running invisibly after
+        // the vehicle sheet closes.
+        state.trackingStatus?.let { status ->
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(top = 12.dp + scopeChipInset + 40.dp)
+                    .clickable(onClick = onStopTracking),
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                tonalElevation = 2.dp,
+            ) {
+                Row(
+                    modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = status,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(end = 4.dp),
+                    )
+                    TextButton(onClick = onStopTracking) { Text("Stop") }
+                }
+            }
+        }
+
         AnimatedVisibility(
             visible = sheet != Sheet.None,
             enter = fadeIn(tween(com.intellitrip.ui.theme.Motion.SelectionMillis)) +
@@ -207,6 +252,9 @@ fun MapChrome(
                         onLoadRadar = onLoadRadar,
                         onLoadAlerts = onLoadAlerts,
                         onToggleAutoRefresh = onToggleAutoRefresh,
+                        onImportBasemap = onImportBasemap,
+                        onSelectBasemap = onSelectBasemap,
+                        onRemoveBasemap = onRemoveBasemap,
                         onLocateMe = onLocateMe,
                         locationPermissionGranted = locationPermissionGranted,
                     )
@@ -217,6 +265,9 @@ fun MapChrome(
                         onSetDestination = onSetDestination,
                         onSwapEndpoints = onSwapEndpoints,
                         onPlan = onPlan,
+                        onSetTravelMode = onSetTravelMode,
+                        onSetPlanningTimeMode = onSetPlanningTimeMode,
+                        onSetPlanningTime = onSetPlanningTime,
                         onSelectJourney = onSelectJourney,
                     )
                     Sheet.None -> Unit
@@ -317,18 +368,97 @@ private fun DataSheet(
     onLoadRadar: () -> Unit,
     onLoadAlerts: () -> Unit,
     onToggleAutoRefresh: () -> Unit,
+    onImportBasemap: () -> Unit,
+    onSelectBasemap: (String) -> Unit,
+    onRemoveBasemap: (String) -> Unit,
     onLocateMe: () -> Unit,
     locationPermissionGranted: Boolean,
 ) {
     SheetHeader("Data")
     SheetRow("Static network", state.staticFeed?.let { "${it.routes.size} routes" } ?: "not loaded", onLoadStatic)
-    SheetRow("Live transit", state.status.takeIf { it.startsWith("Live vehicles") } ?: "tap to load", onLoadTransit)
+    SheetRow(
+        "Live transit",
+        if (state.vehicles.isNotEmpty()) "${state.vehicles.size} vehicles" else "tap to load",
+        onLoadTransit,
+    )
     SheetToggle("Auto refresh (15s)", state.autoRefresh, onToggleAutoRefresh)
     SheetToggle("Radar", state.radarEnabled, onLoadRadar)
     SheetRow(
         "Weather alerts",
         if (state.weatherAlerts.isEmpty()) "none loaded" else "${state.weatherAlerts.size}",
         onLoadAlerts,
+    )
+    if (state.weatherAlerts.isNotEmpty()) {
+        Text(
+            text = "Active alerts",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        state.weatherAlerts.take(5).forEach { alert ->
+            Column(modifier = Modifier.padding(top = 4.dp)) {
+                Text(
+                    text = "${alert.event} · ${alert.severity.name.lowercase()}",
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                Text(
+                    text = alert.headline,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (alert.areas.isNotEmpty()) {
+                    Text(
+                        text = alert.areas.take(3).joinToString(", "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Text(
+            text = "Alerts are area warnings. No alert shape is drawn on the map, so " +
+                "this list is the complete view.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+    val activeBasemap = state.basemapPackages.firstOrNull { it.id == state.activeBasemapId }
+    SheetRow(
+        "Offline basemap",
+        when {
+            activeBasemap != null ->
+                "${activeBasemap.displayName} · z${activeBasemap.minZoom}–${activeBasemap.maxZoom}"
+            state.basemapUnavailableReason != null -> "unavailable"
+            state.basemapPackages.isNotEmpty() ->
+                "${state.basemapPackages.size} installed, none active"
+            else -> "import .pmtiles + style"
+        },
+        onImportBasemap,
+    )
+    state.basemapUnavailableReason?.let { reason ->
+        Text(
+            text = reason,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+    }
+    state.basemapPackages.forEach { pkg ->
+        BasemapPackageRow(
+            pkg = pkg,
+            active = pkg.id == state.activeBasemapId,
+            onUse = { onSelectBasemap(pkg.id) },
+            onRemove = { onRemoveBasemap(pkg.id) },
+        )
+    }
+    Text(
+        text = "Offline basemaps are PMTiles v3 archives plus a MapLibre style JSON. " +
+            "MBTiles must be converted with `pmtiles convert` first. The style controls " +
+            "labels, colours and attribution.",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
     )
     SheetRow(
         "My location",
@@ -352,11 +482,51 @@ private fun DataSheet(
 }
 
 @Composable
+private fun BasemapPackageRow(
+    pkg: BasemapPackage,
+    active: Boolean,
+    onUse: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = pkg.displayName, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = "${formatBytes(pkg.sizeBytes)} · zoom ${pkg.minZoom}–${pkg.maxZoom}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = onUse, enabled = !active) {
+            Text(if (active) "Active" else "Use")
+        }
+        TextButton(onClick = onRemove) { Text("Remove") }
+    }
+}
+
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1_000_000_000L -> String.format(java.util.Locale.US, "%.1f GB", bytes / 1_000_000_000.0)
+    bytes >= 1_000_000L -> String.format(java.util.Locale.US, "%.0f MB", bytes / 1_000_000.0)
+    bytes >= 1_000L -> String.format(java.util.Locale.US, "%.0f KB", bytes / 1_000.0)
+    else -> "$bytes B"
+}
+
+@Composable
 private fun ScopeSheet(state: AppState, onScope: (String, Focus?) -> Unit) {
     SheetHeader("Scope")
-    val center = GeoPoint(DEFAULT_LAT, DEFAULT_LON)
-    SheetRow("Nearby (1/2 mile)", current(state, "Nearby"), { onScope("Nearby", Focus.Radius(center, 805.0)) })
-    SheetRow("Area (2 miles)", current(state, "Area"), { onScope("Area", Focus.Radius(center, 3218.0)) })
+    val now = Clock.System.now()
+    ScopePreset.entries.forEach { preset ->
+        val resolution = state.presetResolution(preset, now)
+        SheetRow(
+            "${preset.label} (${preset.radiusLabel})",
+            current(state, preset.label),
+        ) {
+            onScope(resolution.label(preset), resolution.focus)
+        }
+    }
     SheetRow("System", current(state, "System"), { onScope("System", Focus.System) })
     state.scope.let { scope ->
         Text(
@@ -367,7 +537,8 @@ private fun ScopeSheet(state: AppState, onScope: (String, Focus?) -> Unit) {
         )
     }
     Text(
-        text = "Panning the map also sets the scope.",
+        text = "Presets centre on your fresh location, then the map view. A stale " +
+            "fix is shown as last known but never moves the camera. Panning also sets the scope.",
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 4.dp),
@@ -395,11 +566,15 @@ private fun PlanSheet(
     onSetDestination: (GeoPoint) -> Unit,
     onSwapEndpoints: () -> Unit,
     onPlan: () -> Unit,
+    onSetTravelMode: (TravelMode) -> Unit,
+    onSetPlanningTimeMode: (PlanningTimeMode) -> Unit,
+    onSetPlanningTime: (kotlinx.datetime.Instant?) -> Unit,
     onSelectJourney: (String) -> Unit,
 ) {
     SheetHeader("Plan a trip")
+    val modeWalkOnly = state.travelMode == TravelMode.WALK_ONLY
 
-    if (state.staticFeed == null) {
+    if (state.staticFeed == null && state.travelMode == TravelMode.TRANSIT) {
         Text(
             "Download the local transit network first.",
             style = MaterialTheme.typography.bodyMedium,
@@ -407,21 +582,44 @@ private fun PlanSheet(
         return
     }
 
-    var modeWalkOnly by remember { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(selected = !modeWalkOnly, onClick = { modeWalkOnly = false }, label = { Text("Transit") })
-        FilterChip(selected = modeWalkOnly, onClick = { modeWalkOnly = true }, label = { Text("Walk only") })
+        FilterChip(
+            selected = state.travelMode == TravelMode.TRANSIT,
+            onClick = { onSetTravelMode(TravelMode.TRANSIT) },
+            label = { Text("Transit") },
+        )
+        FilterChip(
+            selected = state.travelMode == TravelMode.WALK_ONLY,
+            onClick = { onSetTravelMode(TravelMode.WALK_ONLY) },
+            label = { Text("Walk only") },
+        )
     }
-    if (modeWalkOnly) {
-        val dist = com.intellitrip.ui.DepartureBoard.metersBetween(state.origin, state.destination)
+    if (state.travelMode == TravelMode.WALK_ONLY) {
+        val estimate = state.walkEstimate
+            ?: WalkEstimator.estimate(state.origin, state.destination)
         Text(
-            text = if (dist <= 2000) {
-                "Walk ${dist.toInt()} m · ${(dist / 1.35 / 60).toInt()} min (straight line, no routing)"
+            text = if (estimate.withinCoverage) {
+                "Walk ${estimate.meters.toInt()} m · about ${estimate.minutes} min"
             } else {
-                "Outside walk coverage (${dist.toInt()} m). Try transit."
+                "Outside walk coverage (${estimate.meters.toInt()} m). Try transit."
             },
             style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(vertical = 8.dp),
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Text(
+            text = "Straight-line estimate at 1.35 m/s. This is not a routed path, so " +
+                "the map draws no walking line.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
+    }
+
+    if (!modeWalkOnly) {
+        PlanningTimeControls(
+            state = state,
+            onMode = onSetPlanningTimeMode,
+            onTime = onSetPlanningTime,
         )
     }
 
@@ -450,7 +648,13 @@ private fun PlanSheet(
             // Walk only is an explicitly unrouted distance estimate, not a
             // transit request. Disable the transit action rather than sending
             // a hidden transit plan under the walk selection.
-            enabled = canSubmitTransitPlan(modeWalkOnly, state.planning),
+            enabled = canSubmitTransitPlan(
+                modeWalkOnly,
+                state.planning || (
+                    state.planningTimeMode == PlanningTimeMode.ARRIVE_BY &&
+                        state.planningTime == null
+                    ),
+            ),
             modifier = Modifier.weight(2f),
         ) {
             Text(
@@ -659,14 +863,15 @@ private fun labelFor(point: GeoPoint): String =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FilterChipRow(
+    timeLabel: String,
+    onTimeClick: () -> Unit,
     onTransitClick: () -> Unit = {},
     onRadarClick: () -> Unit = {},
 ) {
-    var nowSelected by remember { mutableStateOf(true) }
     FilterChip(
-        selected = nowSelected,
-        onClick = { nowSelected = true },
-        label = { Text("Now") },
+        selected = false,
+        onClick = onTimeClick,
+        label = { Text(timeLabel) },
         trailingIcon = { Icon(Icons.Default.KeyboardArrowDown, contentDescription = null) },
     )
     FilterChip(selected = false, onClick = onTransitClick, label = { Text("Transit") })

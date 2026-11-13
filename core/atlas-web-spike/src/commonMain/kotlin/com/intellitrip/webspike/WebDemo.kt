@@ -39,6 +39,10 @@ import kotlinx.datetime.toLocalDateTime
  */
 object WebDemo {
 
+    init {
+        installPlatformTimeZones()
+    }
+
     val feedId: FeedId = FeedId("metro-transit-regional")
     val zone: TimeZone = TimeZone.of("America/Chicago")
     val departAt: Instant = LocalDateTime(2026, 10, 5, 7, 0).toInstant(zone)
@@ -74,18 +78,6 @@ object WebDemo {
     fun demoEngine(network: RoutingNetwork): AtlasEngine {
         val planner = StaticNetworkPlanner(network)
         return AtlasEngine(feedId, AtlasProviders(routing = planner), offlineAvailable = false)
-    }
-
-    /**
-     * Demo radar overlay (RainViewer tilecache, latest PAST frame). Mirrors
-     * `RadarFrame.tileUrlTemplate`; providers on the shell would convert a
-     * live `RadarFrame` directly.
-     */
-    fun demoRadarOverlay(): com.intellitrip.map.web.RadarOverlay {
-        val time = departAt.toEpochMilliseconds() / 1000L
-        return com.intellitrip.map.web.RadarOverlay(
-            "https://tilecache.rainviewer.com/v2/radar/$time/256/{z}/{x}/{y}/2/1_1.png",
-        )
     }
 
     /** Plan between two demo stops (shell origin/destination controls). */

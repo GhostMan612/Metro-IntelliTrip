@@ -7,7 +7,17 @@ import kotlinx.datetime.Instant
 sealed interface Focus {
     data class Trip(val key: TripKey) : Focus
     data class Route(val key: RouteKey) : Focus
-    data class Vehicle(val key: VehicleKey) : Focus
+    /**
+     * Follows one vehicle.
+     *
+     * [anchor] is the vehicle's last known position, when the host has one. The
+     * scope engine is otherwise position-free: a [VehicleKey] alone cannot say
+     * where to put the camera, so a resolver that framed `systemBounds` would
+     * show the whole metro instead of the bus the rider selected. Callers that
+     * track a live fix pass it here; callers that only have a key leave it null
+     * and the resolver falls back to the system extent.
+     */
+    data class Vehicle(val key: VehicleKey, val anchor: GeoPoint? = null) : Focus
     data class Radius(val center: GeoPoint, val meters: Double) : Focus
     data class Viewport(val bounds: LatLngBounds) : Focus
     data class Region(val agencyScopes: Set<AgencyId>, val bounds: LatLngBounds) : Focus

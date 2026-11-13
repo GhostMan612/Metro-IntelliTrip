@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.intellitrip.AppState
+import com.intellitrip.offline.BasemapPackage
 import com.intellitrip.ui.theme.Radii
 import com.intellitrip.ui.theme.Space
 import com.intellitrip.ui.theme.status
@@ -112,6 +113,9 @@ fun MoreScreen(
     onToggleAutoRefresh: () -> Unit,
     onLoadAlerts: () -> Unit,
     onLoadStatic: () -> Unit,
+    onImportBasemap: () -> Unit,
+    onSelectBasemap: (String) -> Unit,
+    onRemoveBasemap: (String) -> Unit,
     onOpenScope: () -> Unit,
     onOpenData: () -> Unit,
     onLocateMe: () -> Unit,
@@ -146,6 +150,41 @@ fun MoreScreen(
         item { ActionRow("Weather alerts", "Severe weather near the map", onLoadAlerts) }
         item { ActionRow("Download schedules", "Offline timetable for planning", onLoadStatic) }
         item { ActionRow("Use my location", "Center on your position", onLocateMe) }
+
+        item {
+            Spacer(Modifier.height(Space.md))
+            HorizontalDivider()
+            Spacer(Modifier.height(Space.md))
+        }
+
+        item { SectionLabel("Offline maps") }
+        item {
+            ActionRow(
+                "Import offline basemap",
+                "Select a PMTiles v3 archive and its MapLibre style JSON",
+                onImportBasemap,
+            )
+        }
+        state.basemapPackages.forEach { pkg ->
+            item {
+                BasemapRow(
+                    pkg = pkg,
+                    active = pkg.id == state.activeBasemapId,
+                    onUse = { onSelectBasemap(pkg.id) },
+                    onRemove = { onRemoveBasemap(pkg.id) },
+                )
+            }
+        }
+        item {
+            Text(
+                text = "PMTiles archives are read from local storage; no vendor key or " +
+                    "account is needed. MBTiles must be converted with `pmtiles convert` " +
+                    "first. The imported style controls labels, colours and attribution.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = Space.sm),
+            )
+        }
 
         item {
             Spacer(Modifier.height(Space.md))
@@ -213,6 +252,33 @@ private fun ToggleRow(
             )
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun BasemapRow(
+    pkg: BasemapPackage,
+    active: Boolean,
+    onUse: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = Space.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = pkg.displayName, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = "zoom ${pkg.minZoom}–${pkg.maxZoom} · " +
+                    "${pkg.sizeBytes / (1024 * 1024)} MB · ${if (active) "active" else "installed"}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (!active) {
+            TextButton(onClick = onUse) { Text("Use") }
+        }
+        TextButton(onClick = onRemove) { Text("Remove") }
     }
 }
 

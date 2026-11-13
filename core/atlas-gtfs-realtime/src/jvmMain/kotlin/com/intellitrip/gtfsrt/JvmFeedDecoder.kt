@@ -5,8 +5,9 @@ import com.google.protobuf.InvalidProtocolBufferException
 
 /**
  * JVM feed decoder: Java protobuf (Android-compatible GTFS-Realtime bindings)
- * converted into the portable model. This is the only file in the module
- * that touches the protobuf wire format.
+ * converted into the portable model. Android and JVM keep the generated
+ * bindings; wasmJs uses the common [PortableFeedDecoder]. A parity test
+ * decodes identical official bytes with both.
  */
 actual fun platformFeedDecoder(): FeedDecoder = FeedDecoder { bytes ->
     val feed = try {
@@ -64,14 +65,23 @@ private fun GtfsRealtime.TripUpdate.toRtTripUpdate(): RtTripUpdate = RtTripUpdat
             stopId = stopUpdate.stopId,
             arrival = stopUpdate.arrival.toRtStopTimeEventOrNull(),
             departure = stopUpdate.departure.toRtStopTimeEventOrNull(),
+            scheduleRelationship = stopUpdate.scheduleRelationship.number,
         )
     },
 )
 
 private fun GtfsRealtime.TripUpdate.StopTimeEvent.toRtStopTimeEventOrNull(): RtStopTimeEvent? =
     // `getArrival()`/`getDeparture()` return a default instance when the
-    // message field is absent; both absent and no-delay map to null.
-    if (hasDelay()) RtStopTimeEvent(delay = delay) else null
+    // message field is absent. Keep the event when either a delay or an
+    // absolute time is present; both are valid GTFS-Realtime encodings.
+    if (hasDelay() || hasTime()) {
+        RtStopTimeEvent(
+            delay = if (hasDelay()) delay else null,
+            time = if (hasTime()) time else null,
+        )
+    } else {
+        null
+    }
 
 private fun GtfsRealtime.Alert.toRtAlert(): RtAlert = RtAlert(
     headerText = headerText.toRtTranslatedString(),

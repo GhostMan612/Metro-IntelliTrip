@@ -37,9 +37,9 @@ Deliberately **not** published:
   it belongs to whichever host draws the map. Recovery for All has its own renderer
   or Flutter map; pulling MapLibre in through the engine would force a renderer
   choice on every consumer.
-- `atlas-transit` — the quarantined prototype (ADR-014). Publishing it would put
-  superseded code on a resolvable coordinate.
-- `app/`, `sample/host` — build-time-only.
+- `atlas-transit` - deleted by ADR-014. There is no module to publish.
+- `app/`, `sample/host`, `sample/sdk-consumer` - build-time-only. The consumer
+  deliberately resolves the published coordinates instead of project dependencies.
 
 ## 2. Point Recovery for All at the repo
 
@@ -127,6 +127,19 @@ capability at a time. It does not need to take the whole engine to start.
   it fires while you work, the fix belongs in the module, not in the guard.
 
 ## Verifying it worked
+
+A standalone consumer lives in `sample/sdk-consumer/`. It is not part of the root
+build, so it can only see the published Maven artifacts:
+
+```powershell
+.\gradlew.bat publishAtlasToLocalRepo
+.\gradlew.bat -p sample/sdk-consumer run
+```
+
+It fails if the engine POM is incomplete, if a portable module leaks an Android
+dependency, or if the public API requires an unpublished class. CI runs the same
+two commands. The consumer only exercises the engine facade; Android rendering
+and a Flutter platform channel remain host responsibilities.
 
 ```powershell
 # In Recovery for All

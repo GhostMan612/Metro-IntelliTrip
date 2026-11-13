@@ -39,14 +39,24 @@ kotlin {
                 implementation(project(":core:atlas-map"))
                 implementation(project(":core:atlas-map-web"))
                 implementation(project(":core:atlas-engine"))
+                implementation(project(":core:atlas-gtfs-static"))
+                implementation(project(":core:atlas-gtfs-realtime"))
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
             }
         }
         val jvmMain by getting
-        val wasmJsMain by getting
+        val wasmJsMain by getting {
+            dependencies {
+                // js-joda core (pulled in by kotlinx-datetime) ships UTC only.
+                // The transit feed is scheduled in America/Chicago, so the
+                // browser needs the IANA rules registered by this package.
+                implementation(npm("@js-joda/timezone", "2.26.0"))
+            }
+        }
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
             }
         }
     }
@@ -65,7 +75,7 @@ tasks.register<Copy>("vendorMapLibreDev") {
     description = "Copy vendored MapLibre GL dist next to the dev bundle."
     dependsOn("wasmJsBrowserDevelopmentWebpack")
     from(layout.projectDirectory.dir("src/wasmJsResources")) {
-        include("maplibre-gl.js", "maplibre-gl.css")
+        include("index.html", "maplibre-gl.js", "maplibre-gl.css")
     }
     into(layout.projectDirectory.dir("build/kotlin-webpack/wasmJs/developmentExecutable"))
 }
@@ -74,8 +84,7 @@ tasks.register<Copy>("vendorMapLibreProd") {
     description = "Copy vendored MapLibre GL dist next to the prod bundle."
     dependsOn("wasmJsBrowserProductionWebpack")
     from(layout.projectDirectory.dir("src/wasmJsResources")) {
-        include("maplibre-gl.js", "maplibre-gl.css")
+        include("index.html", "maplibre-gl.js", "maplibre-gl.css")
     }
     into(layout.projectDirectory.dir("build/kotlin-webpack/wasmJs/productionExecutable"))
 }
-

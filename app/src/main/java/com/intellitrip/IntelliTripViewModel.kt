@@ -3,6 +3,7 @@ package com.intellitrip
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
 import com.intellitrip.contracts.ProviderResult
 import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.Focus
@@ -21,9 +22,11 @@ import com.intellitrip.gtfs.RefreshOutcome
 import com.intellitrip.gtfs.StaticFeed
 import com.intellitrip.offline.BasemapAvailability
 import com.intellitrip.offline.CacheEntry
+import com.intellitrip.offline.InstallResult
 import com.intellitrip.offline.loadStaticFeed
 import com.intellitrip.routing.RoutingNetwork
 import com.intellitrip.routing.TransferIntelligenceService
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
@@ -34,6 +37,7 @@ import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,6 +58,9 @@ data class AppState(
     val scope: ScopeState = ScopeEngine().currentScope(Focus.System),
     val vehicles: List<Vehicle> = emptyList(),
     val vehiclesFetchedAt: Instant? = null,
+    /** Stop-specific GTFS-Realtime trip updates, kept separate from vehicles. */
+    val tripUpdates: List<com.intellitrip.domain.TripUpdate> = emptyList(),
+    val tripUpdatesFetchedAt: Instant? = null,
     val staticFeed: StaticFeed? = null,
     val radarFrame: RadarFrame? = null,
     val radarEnabled: Boolean = false,
@@ -66,6 +73,20 @@ data class AppState(
     val selectedJourneyId: String? = null,
     val journeyWarnings: List<String> = emptyList(),
     val planning: Boolean = false,
+    val planningTimeMode: PlanningTimeMode = PlanningTimeMode.DEPART_AT,
+    val planningTime: Instant? = null,
+    /** Transit is the default; walking is an explicit choice, never inferred. */
+    val travelMode: TravelMode = TravelMode.TRANSIT,
+    /** Present only in walk mode; a straight-line estimate, not a routed journey. */
+    val walkEstimate: WalkEstimate? = null,
+    /** Non-null while the rider is following one vehicle on the map. */
+    val trackedVehicleKey: com.intellitrip.domain.VehicleKey? = null,
+    /** Latest fresh position of [trackedVehicleKey]; null when paused or missing. */
+    val followTarget: GeoPoint? = null,
+    /** Why tracking is paused, or that it is active. Shown next to the toggle. */
+    val trackingStatus: String? = null,
+    /** True after the rider loaded alerts, even when the response was empty. */
+    val alertsEnabled: Boolean = false,
     val origin: GeoPoint = GeoPoint(DEFAULT_LAT, DEFAULT_LON),
     val destination: GeoPoint = GeoPoint(DEFAULT_DEST_LAT, DEFAULT_DEST_LON),
     val autoRefresh: Boolean = false,
@@ -79,6 +100,14 @@ data class AppState(
     val mapSelection: com.intellitrip.map.MapSelection = com.intellitrip.map.MapSelection.None,
     /** Saved stops, loaded from disk on startup and rewritten on every change. */
     val savedStops: List<com.intellitrip.ui.SavedStop> = emptyList(),
+    /** Offline basemap packages found in the app's private store. */
+    val basemapPackages: List<com.intellitrip.offline.BasemapPackage> = emptyList(),
+    /** The package whose style the map is currently using, if any. */
+    val activeBasemapId: String? = null,
+    /** Active style JSON with its pmtiles:// source bound to the installed file. */
+    val activeBasemapStyle: String? = null,
+    /** Explains why an installed package is not currently usable by the renderer. */
+    val basemapUnavailableReason: String? = null,
 )
 
 /**
@@ -95,10 +124,18 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     private val savedPlaces = com.intellitrip.ui.SavedPlacesStore(host.filesRoot())
 
     private var locationJob: Job? = null
-    /** One audible arrival cue per selected journey, not per GPS callback. */
+    /**
+     * One audible arrival cue per selected journey, not per GPS callback.
+     *
+     * Reset only when the rider starts or selects a different journey. The
+     * geofence can be entered repeatedly during one trip without ringing
+     * repeatedly.
+     */
     private var arrivalCuedJourneyId: String? = null
 
     private var refreshJob: Job? = null
+    private var alertsRefreshJob: Job? = null
+    private var planningJob: Job? = null
 
     init {
         // Saved places are rider-owned, so they load before anything touches the
@@ -106,6 +143,10 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         runCatching { savedPlaces.load() }.getOrNull()?.let { saved ->
             if (saved.isNotEmpty()) _state.update { it.copy(savedStops = saved) }
         }
+
+        // Load installed basemaps before the first map render so a rider who
+        // already imported a package does not briefly see the online basemap.
+        viewModelScope.launch { refreshBasemapState() }
 
         // Start from any previously stored snapshot so a cold launch has the
         // static network without touching the network.
@@ -153,6 +194,19 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
      * debounced and skips updates that would not change the scope meaningfully.
      */
     fun onViewportChanged(lat: Double, lon: Double, zoom: Double) {
+        // A rider's own pan means they are no longer following the vehicle. The
+        // renderer suppresses programmatic camera moves, so this only fires for a
+        // gesture; leaving follow on would fight the map on the next poll.
+        if (_state.value.trackedVehicleKey != null) {
+            _state.update {
+                it.copy(
+                    trackedVehicleKey = null,
+                    followTarget = null,
+                    trackingStatus = null,
+                    status = "Stopped following vehicle",
+                )
+            }
+        }
         // Inverse of DefaultScopeResolver.zoomForRadius, shared so
         // zoom -> meters -> zoom round-trips and MapCanvas's moveCamera back is
         // a no-op (no post-pinch snap). The previous web-mercator approximation
@@ -170,6 +224,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         viewportJob = viewModelScope.launch {
             delay(VIEWPORT_DEBOUNCE_MS)
             setScope("Map viewport", focus)
+            scheduleAlertRefresh()
         }
     }
 
@@ -181,12 +236,36 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
      * endpoints as though it answered the new question. The plan is dropped rather
      * than left stale; the user re-runs it explicitly.
      */
-    fun setOrigin(point: GeoPoint) = update { it.withEndpoints(origin = point) }
+    fun setOrigin(point: GeoPoint) {
+        if (_state.value.origin == point) return
+        invalidatePlan()
+        update { it.withEndpoints(origin = point) }
+    }
 
-    fun setDestination(point: GeoPoint) = update { it.withEndpoints(destination = point) }
+    fun setDestination(point: GeoPoint) {
+        if (_state.value.destination == point) return
+        invalidatePlan()
+        update { it.withEndpoints(destination = point) }
+    }
 
-    fun swapEndpoints() = update {
-        it.withEndpoints(origin = it.destination, destination = it.origin)
+    fun swapEndpoints() {
+        if (_state.value.origin == _state.value.destination) return
+        invalidatePlan()
+        update {
+            it.withEndpoints(origin = it.destination, destination = it.origin)
+        }
+    }
+
+    fun setPlanningTimeMode(mode: PlanningTimeMode) {
+        if (_state.value.planningTimeMode == mode) return
+        invalidatePlan()
+        update { it.withPlanningTime(mode, it.planningTime) }
+    }
+
+    fun setPlanningTime(time: Instant?) {
+        if (_state.value.planningTime == time) return
+        invalidatePlan()
+        update { it.withPlanningTime(it.planningTimeMode, time) }
     }
 
     fun loadStaticNetwork() {
@@ -217,11 +296,173 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     fun loadLiveTransit() {
         update { it.copy(status = "Loading live transit…") }
         viewModelScope.launch {
-            when (val result = host.realtime.vehiclePositions().first()) {
+            // Vehicles and trip updates are independent feeds. Fetch both at
+            // once so a slow prediction endpoint cannot delay vehicle markers,
+            // and keep their provenance separate: a vehicle is not an ETA.
+            val vehiclesDeferred = async { host.realtime.vehiclePositions().first() }
+            val updatesDeferred = async { host.realtime.tripUpdates().first() }
+            when (val result = vehiclesDeferred.await()) {
                 is ProviderResult.Success -> onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.inWholeSeconds)
                 is ProviderResult.StaleSuccess -> onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.inWholeSeconds)
                 else -> update { it.copy(status = "Live transit unavailable: ${describe(result)}") }
             }
+            when (val result = updatesDeferred.await()) {
+                is ProviderResult.Success -> onTripUpdates(result.data, result.freshness.fetchedAt)
+                is ProviderResult.StaleSuccess -> onTripUpdates(result.data, result.freshness.fetchedAt)
+                else -> update { it.copy(status = "Live predictions unavailable: ${describe(result)}") }
+            }
+        }
+    }
+
+    /**
+     * Imports a PMTiles archive and its MapLibre style JSON chosen together in
+     * one SAF picker. The pair is validated as a unit: a style that does not
+     * reference a PMTiles source is rejected rather than leaving the map on the
+     * online basemap while claiming an offline install.
+     */
+    fun importBasemap(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        update { it.copy(status = "Importing offline basemap…") }
+        viewModelScope.launch {
+            try {
+                when (val result = withContext(Dispatchers.IO) { performBasemapImport(uris) }) {
+                    is InstallResult.Installed -> {
+                        refreshBasemapState(result.pkg.id)
+                        update {
+                            it.copy(
+                                status = "Offline basemap installed: ${result.pkg.displayName} " +
+                                    "(zoom ${result.pkg.minZoom}–${result.pkg.maxZoom})",
+                            )
+                        }
+                    }
+
+                    is InstallResult.Rejected -> update {
+                        it.copy(status = "Basemap import rejected: ${result.reason}")
+                    }
+                }
+            } catch (error: Exception) {
+                update {
+                    it.copy(status = "Basemap import failed: ${error.message ?: "I/O error"}")
+                }
+            }
+        }
+    }
+
+    /** Makes an installed package the map's basemap. */
+    fun selectBasemap(id: String) {
+        viewModelScope.launch {
+            refreshBasemapState(id)
+            val state = _state.value
+            val active = state.basemapPackages.firstOrNull { it.id == state.activeBasemapId }
+            update {
+                it.copy(
+                    status = active?.let { pkg -> "Offline basemap: ${pkg.displayName}" }
+                        ?: state.basemapUnavailableReason
+                        ?: "Offline basemap not found",
+                )
+            }
+        }
+    }
+
+    fun removeBasemap(id: String) {
+        viewModelScope.launch {
+            val removed = withContext(Dispatchers.IO) {
+                runCatching { host.basemapStore.remove(id) }.getOrDefault(false)
+            }
+            refreshBasemapState()
+            update {
+                it.copy(
+                    status = if (removed) "Offline basemap removed"
+                    else "Could not remove the offline basemap",
+                )
+            }
+        }
+    }
+
+    /**
+     * Re-reads installed packages and the active style from disk. Disk work is
+     * off the main thread; the state update is atomic so a concurrent refresh
+     * cannot restore a stale active id.
+     */
+    private suspend fun refreshBasemapState(preferredId: String? = null) {
+        val packages = withContext(Dispatchers.IO) {
+            runCatching { host.basemapStore.packages() }.getOrDefault(emptyList())
+        }
+        val requested = preferredId ?: _state.value.activeBasemapId
+        val active = packages.firstOrNull { it.id == requested } ?: packages.firstOrNull()
+        val style = active?.let { pkg ->
+            withContext(Dispatchers.IO) {
+                runCatching { host.basemapStore.styleFor(pkg) }.getOrNull()
+            }
+        }
+        val unavailableReason = if (active != null && style == null) {
+            "Offline basemap unavailable: its archive or style is missing or invalid. " +
+                "The online basemap is shown."
+        } else {
+            null
+        }
+        update {
+            it.copy(
+                basemapPackages = packages,
+                activeBasemapId = active?.id?.takeIf { style != null },
+                activeBasemapStyle = style,
+                basemapUnavailableReason = unavailableReason,
+            )
+        }
+    }
+
+    private fun performBasemapImport(uris: List<Uri>): InstallResult {
+        val staged = mutableListOf<BasemapImport.StagedFile>()
+        try {
+            uris.forEach { uri -> staged += BasemapImport.stage(host.context, uri) }
+            val archives = staged.filter { it.kind == BasemapImport.Kind.PMTILES }
+            val styles = staged.filter { it.kind == BasemapImport.Kind.STYLE }
+            val mbtiles = staged.filter { it.kind == BasemapImport.Kind.MBTILES }
+            val unknown = staged.filter { it.kind == BasemapImport.Kind.UNKNOWN }
+
+            if (mbtiles.isNotEmpty()) {
+                return InstallResult.Rejected(
+                    "MBTiles is not supported. Convert it with " +
+                        "`pmtiles convert input.mbtiles output.pmtiles`, then select the " +
+                        ".pmtiles archive and its .json style.",
+                )
+            }
+            if (unknown.isNotEmpty()) {
+                return InstallResult.Rejected(
+                    "Could not identify ${unknown.joinToString { it.displayName }}. " +
+                        "Select one .pmtiles archive and one MapLibre .json style.",
+                )
+            }
+            if (archives.size != 1 || styles.size != 1) {
+                return InstallResult.Rejected(
+                    "Select exactly one .pmtiles archive and one .json style " +
+                        "(found ${archives.size} archive(s) and ${styles.size} style(s)).",
+                )
+            }
+
+            val archive = archives.single()
+            val style = styles.single()
+            if (style.sizeBytes > BasemapImport.MAX_STYLE_BYTES) {
+                return InstallResult.Rejected(
+                    "style is ${style.sizeBytes} bytes; the maximum is " +
+                        "${BasemapImport.MAX_STYLE_BYTES} bytes",
+                )
+            }
+            if (archive.sizeBytes > host.context.filesDir.usableSpace) {
+                return InstallResult.Rejected(
+                    "not enough internal storage for this archive " +
+                        "(${archive.sizeBytes / (1024 * 1024)} MiB)",
+                )
+            }
+            val baseName = archive.displayName.substringBeforeLast('.', archive.displayName)
+            return host.basemapStore.install(
+                id = archive.sha256,
+                displayName = baseName.trim().ifBlank { "Offline basemap" }.take(120),
+                stagedPath = archive.file.absolutePath,
+                styleJson = style.file.readText(Charsets.UTF_8),
+            )
+        } finally {
+            staged.forEach { runCatching { it.file.delete() } }
         }
     }
 
@@ -246,7 +487,11 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     }
 
     fun loadWeatherAlerts() {
-        update { it.copy(status = "Loading weather alerts…") }
+        update { it.copy(status = "Loading weather alerts…", alertsEnabled = true) }
+        refreshWeatherAlerts()
+    }
+
+    private fun refreshWeatherAlerts() {
         viewModelScope.launch {
             // The viewport is passed through deliberately. An earlier version called
             // alerts() with no bounds, which asked for the national active set and then
@@ -270,27 +515,103 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         }
     }
 
+    /**
+     * Re-queries alerts after the map settles, not on every animation frame.
+     *
+     * Alerts are area warnings; panning to a new county can change the set. The
+     * delay is deliberately longer than the scope debounce so a continuous pan
+     * issues one request, not one per viewport update.
+     */
+    private fun scheduleAlertRefresh() {
+        if (!_state.value.alertsEnabled) return
+        alertsRefreshJob?.cancel()
+        alertsRefreshJob = viewModelScope.launch {
+            delay(ALERTS_VIEWPORT_DEBOUNCE_MS)
+            refreshWeatherAlerts()
+        }
+    }
+
+    /**
+     * Switches between transit planning and a straight-line walk estimate.
+     *
+     * The previous sheet kept the mode in local Compose state, so tapping "Walk
+     * only" changed a chip but Plan still ran the transit planner. The mode now
+     * lives in the single state object and invalidates transit results.
+     */
+    fun setTravelMode(mode: TravelMode) {
+        if (_state.value.travelMode == mode) return
+        invalidatePlan()
+        _state.update { state ->
+            state.copy(
+                travelMode = mode,
+                walkEstimate = if (mode == TravelMode.WALK_ONLY) {
+                    WalkEstimator.estimate(state.origin, state.destination)
+                } else {
+                    null
+                },
+                journeys = emptyList(),
+                journeyWarnings = emptyList(),
+                selectedJourneyId = null,
+                planning = false,
+                status = when (mode) {
+                    TravelMode.TRANSIT -> "Transit mode"
+                    TravelMode.WALK_ONLY -> "Walk mode: straight-line estimate, no routed path"
+                },
+            )
+        }
+    }
+
     fun planJourney() {
         val current = _state.value
+        val request = current.toTripPlanRequest(Clock.System.now())
+        if (current.travelMode == TravelMode.TRANSIT && request == null) {
+            update { it.copy(status = "Choose an arrival time before planning") }
+            return
+        }
+        // A new plan is a new arrival opportunity. Reset the one-shot cue so
+        // the next selected journey can announce its own destination once.
+        arrivalCuedJourneyId = null
+        if (current.travelMode == TravelMode.WALK_ONLY) {
+            val estimate = WalkEstimator.estimate(current.origin, current.destination)
+            update {
+                it.copy(
+                    planning = false,
+                    journeys = emptyList(),
+                    journeyWarnings = emptyList(),
+                    selectedJourneyId = null,
+                    walkEstimate = estimate,
+                    status = if (estimate.withinCoverage) {
+                        "Walk estimate: ${estimate.meters.toInt()} m, about ${estimate.minutes} min"
+                    } else {
+                        "Outside walk coverage (${estimate.meters.toInt()} m); try transit"
+                    },
+                )
+            }
+            return
+        }
         val network = current.staticFeed?.let { feed -> host.routingNetwork(feed) }
         if (network == null) {
             update { it.copy(status = "Load the static network before planning") }
             return
         }
         val engine = host.engineForRouting(network)
-        update { it.copy(planning = true, status = "Planning…", journeys = emptyList(), journeyWarnings = emptyList()) }
-        viewModelScope.launch {
+        update {
+            it.copy(
+                planning = true,
+                status = "Planning…",
+                walkEstimate = null,
+                journeys = emptyList(),
+                journeyWarnings = emptyList(),
+            )
+        }
+        invalidatePlan()
+        planningJob = viewModelScope.launch {
             // Planning searches the network and reads the stop-time index, so it
             // must not run on the main thread. AtlasEngine is the single path:
             // the ViewModel no longer owns transfer scoring.
-            val request = TripPlanRequest(
-                origin = current.origin,
-                destination = current.destination,
-                departAt = Clock.System.now() + 120.seconds,
-                arriveBy = null,
-                maxTransfers = 2,
-            )
-            val outcome = withContext(Dispatchers.Default) { engine.planJourney(request) }
+            val outcome = withContext(Dispatchers.Default) {
+                engine.planJourney(requireNotNull(request))
+            }
             when (outcome) {
                 is com.intellitrip.engine.JourneyOutcome.Planned -> {
                     val report = engine.evaluateTransfers(outcome.journeys)
@@ -323,7 +644,9 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
             var failures = 0
             while (isActive) {
                 delay(backoffMs(failures))
-                when (val result = host.realtime.vehiclePositions().first()) {
+                val vehiclesDeferred = async { host.realtime.vehiclePositions().first() }
+                val updatesDeferred = async { host.realtime.tripUpdates().first() }
+                when (val result = vehiclesDeferred.await()) {
                     is ProviderResult.Success -> { failures = 0; onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.inWholeSeconds) }
                     is ProviderResult.StaleSuccess -> { failures = 0; onVehicles(result.data, result.freshness.fetchedAt, result.freshness.age.inWholeSeconds) }
                     is ProviderResult.RateLimited -> {
@@ -333,6 +656,15 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                     else -> {
                         failures++
                         update { it.copy(status = "Refresh failed: ${describe(result)}") }
+                    }
+                }
+                when (val result = updatesDeferred.await()) {
+                    is ProviderResult.Success ->
+                        onTripUpdates(result.data, result.freshness.fetchedAt)
+                    is ProviderResult.StaleSuccess ->
+                        onTripUpdates(result.data, result.freshness.fetchedAt)
+                    else -> update {
+                        it.copy(status = "Live predictions unavailable: ${describe(result)}")
                     }
                 }
             }
@@ -460,7 +792,37 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
 
     /** Follows a vehicle on the map. */
     fun trackVehicle(vehicleKey: com.intellitrip.domain.VehicleKey) {
-        setScope("Vehicle", com.intellitrip.domain.Focus.Vehicle(vehicleKey))
+        val follow = VehicleFollow.update(vehicleKey, _state.value.vehicles, Clock.System.now())
+        val focus = Focus.Vehicle(vehicleKey, follow.target)
+        _state.update {
+            it.copy(
+                scopeLabel = "Vehicle",
+                focus = focus,
+                scope = host.scopeEngine.currentScope(focus),
+                trackedVehicleKey = vehicleKey,
+                followTarget = follow.target,
+                trackingStatus = follow.status,
+                status = follow.status,
+            )
+        }
+    }
+
+    /**
+     * Stops following without changing the camera.
+     *
+     * The rider may still want to look at the vehicle's last position; the map
+     * simply stops moving with it.
+     */
+    fun stopTrackingVehicle() {
+        if (_state.value.trackedVehicleKey == null) return
+        _state.update {
+            it.copy(
+                trackedVehicleKey = null,
+                followTarget = null,
+                trackingStatus = null,
+                status = "Stopped following vehicle",
+            )
+        }
     }
 
     /** Moves the map to a saved stop and selects it. */
@@ -482,6 +844,9 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         }
 
     fun routeGeometry(): List<RouteLine> {
+        // A walk-only answer is an estimate, not a routed line. Drawing a straight
+        // line would read as a street route the app cannot produce.
+        if (_state.value.travelMode != TravelMode.TRANSIT) return emptyList()
         val feed = _state.value.staticFeed ?: return emptyList()
         val journey = selectedJourney ?: return emptyList()
         return RouteGeometry.build(
@@ -504,9 +869,10 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
      * retained. Returns an empty list when there is no feed or no index yet, which
      * the UI presents as "download schedules" rather than as a blank list.
      *
-     * Only trips with a current vehicle report are marked live. Everything else keeps
-     * its scheduled time and is labelled "Schedule", because an estimated arrival with
-     * no data behind it is worse than admitting the time comes from the timetable.
+     * A departure is marked live only when a fresh, stop-specific GTFS-Realtime
+     * prediction matches its trip, stop and service date. A reporting vehicle
+     * with no stop ETA is shown as Schedule; an estimated arrival with no data
+     * behind it is worse than admitting the time comes from the timetable.
      *
      * Frequency-based trips are expanded at headway intervals (capped, 2 h
      * horizon) the same way the planner expands them, so the board shows the
@@ -568,58 +934,52 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                         val trip = tripsByKey[stopTime.tripKey.tripId] ?: return@flatMap emptyList()
                         val scheduled = stopTime.departureTime ?: stopTime.arrivalTime
                             ?: return@flatMap emptyList()
-                        // An occurrence is valid only when its *own* originating service
-                        // date is active. Do not test one date and resolve a different one.
                         val activeDates = candidateDates.filter { date ->
                             com.intellitrip.ui.DepartureBoard.isServiceActive(
                                 feed.calendars, feed.calendarDates, trip.serviceKey, date,
                             )
                         }
                         if (activeDates.isEmpty()) return@flatMap emptyList()
-                        val freqs = frequenciesByTrip[stopTime.tripKey.tripId]
-                        if (freqs.isNullOrEmpty()) {
-                            activeDates.mapNotNull { date ->
-                                val instant = date.atStartOfDayIn(agencyZone) +
-                                    scheduled.secondsSinceServiceDayStart.toLong().seconds
-                                if (instant <= now - 60.seconds || instant > now + 7200.seconds) null
-                                else com.intellitrip.ui.DepartureBoard.ScheduledDeparture(
-                                    tripId = stopTime.tripKey.tripId,
-                                    departure = instant,
-                                )
-                            }
+                        val frequencies = frequenciesByTrip[stopTime.tripKey.tripId].orEmpty()
+                        val firstSec = if (frequencies.isEmpty()) {
+                            null
                         } else {
-                            val firstSec = firstDepartureSec.getOrPut(stopTime.tripKey.tripId) {
+                            firstDepartureSec.getOrPut(stopTime.tripKey.tripId) {
                                 index.stopTimesFor(stopTime.tripKey) { stopId ->
                                     com.intellitrip.domain.StopKey(feed.feedId, stopId)
-                                }.firstOrNull()?.departureTime?.secondsSinceServiceDayStart
+                                }.minByOrNull { it.stopSequence }
+                                    ?.let { it.departureTime ?: it.arrivalTime }
+                                    ?.secondsSinceServiceDayStart
                                     ?: scheduled.secondsSinceServiceDayStart
                             }
-                            val out = mutableListOf<com.intellitrip.ui.DepartureBoard.ScheduledDeparture>()
-                            for (date in activeDates) {
-                                for (freq in freqs) {
-                                    if (freq.headwaySeconds <= 0) continue
-                                    var runStart = freq.startTime.secondsSinceServiceDayStart
-                                    var count = 0
-                                    while (runStart <= freq.endTime.secondsSinceServiceDayStart && count < 300) {
-                                        val secondsFromMidnight = scheduled.secondsSinceServiceDayStart +
-                                            runStart - firstSec
-                                        if (secondsFromMidnight >= 0) {
-                                            val instant = date.atStartOfDayIn(agencyZone) +
-                                                secondsFromMidnight.toLong().seconds
-                                            if (instant > now - 60.seconds && instant <= now + 7200.seconds) {
-                                                out += com.intellitrip.ui.DepartureBoard.ScheduledDeparture(
-                                                    tripId = stopTime.tripKey.tripId,
-                                                    departure = instant,
-                                                )
-                                            }
-                                            if (instant > now + 7200.seconds) break
-                                        }
-                                        runStart += freq.headwaySeconds
-                                        count++
-                                    }
-                                }
-                            }
-                            out.distinctBy { it.tripId to it.departure }
+                        }
+                        com.intellitrip.ui.DepartureBoard.occurrences(
+                            tripId = stopTime.tripKey.tripId,
+                            stopId = stopTime.stopKey.stopId,
+                            serviceTime = scheduled,
+                            activeDates = activeDates,
+                            zone = agencyZone,
+                            now = now,
+                            frequencies = frequencies,
+                            firstDepartureSeconds = firstSec,
+                        ).map { occurrence ->
+                            val date = occurrence.serviceDate ?: return@map occurrence
+                            val prediction = DepartureRealtime.resolve(
+                                updates = current.tripUpdates,
+                                tripId = occurrence.tripId,
+                                stopId = occurrence.stopId ?: stopTime.stopKey.stopId,
+                                serviceDate = date,
+                                scheduled = occurrence.departure,
+                                now = now,
+                                fetchedAt = current.tripUpdatesFetchedAt,
+                                frequencyRunStartSeconds = occurrence.frequencyRunStartSeconds,
+                            )
+                            occurrence.copy(
+                                reportedTime = prediction?.time,
+                                reportedAt = prediction?.reportedAt,
+                                status = prediction?.status
+                                    ?: com.intellitrip.ui.DepartureStatus.SCHEDULED,
+                            )
                         }
                     }.sortedBy { it.departure }
                 },
@@ -670,10 +1030,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                         }
                         if (dest != null) {
                             val dist = com.intellitrip.ui.DepartureBoard.metersBetween(fix.position, dest)
-                            if (dist < 100 && fix.isHighAccuracy() && arrivalCuedJourneyId != journey.id) {
-                                arrivalCuedJourneyId = journey.id
-                                com.intellitrip.ui.ArrivalCue.playIfAllowed(host.context, true)
-                            }
+                            if (dist < 100) com.intellitrip.ui.ArrivalCue.playIfAllowed(host.context, true)
                         }
                     }
                 }
@@ -714,6 +1071,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
 
     /** Selects a journey, draws it on the map, and frames it. */
     fun selectJourney(id: String) {
+        if (_state.value.selectedJourneyId != id) arrivalCuedJourneyId = null
         _state.update { it.copy(selectedJourneyId = id) }
         val focus = focusJourney(id) ?: return
         setScope("Selected journey", focus)
@@ -742,12 +1100,36 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         ).availability(),
     )
 
-    private fun onVehicles(vehicles: List<Vehicle>, fetchedAt: Instant, ageSeconds: Long) {
-        update {
+    private fun onTripUpdates(updates: List<com.intellitrip.domain.TripUpdate>, fetchedAt: Instant) {
+        _state.update {
             it.copy(
+                tripUpdates = updates,
+                tripUpdatesFetchedAt = fetchedAt,
+            )
+        }
+    }
+
+    private fun onVehicles(vehicles: List<Vehicle>, fetchedAt: Instant, ageSeconds: Long) {
+        val now = Clock.System.now()
+        _state.update { state ->
+            val tracked = state.trackedVehicleKey
+            val follow = tracked?.let { VehicleFollow.update(it, vehicles, now) }
+            // Keep the data scope around the latest fix as well, so the followed
+            // vehicle cannot drive out of its own render bounds. The camera effect
+            // deliberately ignores Focus.Vehicle; followTarget owns the camera.
+            val focus = if (tracked != null && follow?.target != null) {
+                Focus.Vehicle(tracked, follow.target)
+            } else {
+                state.focus
+            }
+            state.copy(
                 vehicles = vehicles,
                 vehiclesFetchedAt = fetchedAt,
-                status = "Live vehicles: ${vehicles.size} (${ageSeconds}s old)",
+                focus = focus,
+                scope = if (focus != state.focus) host.scopeEngine.currentScope(focus) else state.scope,
+                followTarget = follow?.target,
+                trackingStatus = follow?.status ?: state.trackingStatus,
+                status = follow?.status ?: "Live vehicles: ${vehicles.size} (${ageSeconds}s old)",
             )
         }
     }
@@ -756,6 +1138,11 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         // Atomic CAS so concurrent launches (plan, radar, polls) cannot clobber
         // each other's status via a read-modify-write race on _state.value.
         _state.update(block)
+    }
+
+    private fun invalidatePlan() {
+        planningJob?.cancel()
+        planningJob = null
     }
 
     /** Whether a vehicle report is recent enough to represent a live service. */
@@ -804,6 +1191,9 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
 
         /** Settles a camera gesture before it changes scope, so panning stays smooth. */
         private const val VIEWPORT_DEBOUNCE_MS = 250L
+
+        /** One alert request per settled pan, not one per frame. */
+        private const val ALERTS_VIEWPORT_DEBOUNCE_MS = 2_000L
 
         /** Above this the camera stops following, so System view stays put. */
         private const val FOLLOW_METERS = 5_000.0
@@ -854,8 +1244,51 @@ internal fun AppState.withEndpoints(
         journeys = emptyList(),
         journeyWarnings = emptyList(),
         selectedJourneyId = null,
+        // The estimate is derived from the endpoints, so new endpoints must
+        // produce a new estimate rather than leaving the old distance on screen.
+        walkEstimate = if (travelMode == TravelMode.WALK_ONLY) {
+            WalkEstimator.estimate(origin, destination)
+        } else {
+            null
+        },
     )
 }
+
+internal fun AppState.withPlanningTime(
+    mode: PlanningTimeMode,
+    time: Instant?,
+): AppState = if (mode == planningTimeMode && time == planningTime) {
+    this
+} else {
+    copy(
+        planningTimeMode = mode,
+        planningTime = time,
+        journeys = emptyList(),
+        journeyWarnings = emptyList(),
+        selectedJourneyId = null,
+        planning = false,
+    )
+}
+
+internal fun AppState.toTripPlanRequest(now: Instant): TripPlanRequest? =
+    when (planningTimeMode) {
+        PlanningTimeMode.DEPART_AT -> TripPlanRequest(
+            origin = origin,
+            destination = destination,
+            departAt = planningTime ?: now + 2.minutes,
+            arriveBy = null,
+            maxTransfers = 2,
+        )
+        PlanningTimeMode.ARRIVE_BY -> planningTime?.let { time ->
+            TripPlanRequest(
+                origin = origin,
+                destination = destination,
+                departAt = null,
+                arriveBy = time,
+                maxTransfers = 2,
+            )
+        }
+    }
 
 /**
  * The single journey drawn on the map, or null when there is no plan.
