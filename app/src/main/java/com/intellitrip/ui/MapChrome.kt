@@ -429,12 +429,21 @@ private fun DataSheet(
         when {
             activeBasemap != null ->
                 "${activeBasemap.displayName} · z${activeBasemap.minZoom}–${activeBasemap.maxZoom}"
+            state.basemapUnavailableReason != null -> "unavailable"
             state.basemapPackages.isNotEmpty() ->
                 "${state.basemapPackages.size} installed, none active"
             else -> "import .pmtiles + style"
         },
         onImportBasemap,
     )
+    state.basemapUnavailableReason?.let { reason ->
+        Text(
+            text = reason,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+    }
     state.basemapPackages.forEach { pkg ->
         BasemapPackageRow(
             pkg = pkg,

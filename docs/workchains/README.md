@@ -57,7 +57,7 @@ release verification.
 | ID | Work order | Definition of done / evidence |
 | --- | --- | --- |
 | W-01 | Vehicle follow and unsubscribe lifecycle | Latest selected `VehicleKey` maps to a fresh matching fix; camera follows while selected, handles stale/missing vehicle, stops on toggle-off/manual pan; UI+device tests |
-| W-02 | Offline basemap install and binding | Document provider/license; SAF picker validates `.mbtiles`/style/size/digest/coverage, atomic store, renderer uses installed style, offline map restarts intact; security tests |
+| W-02 | Offline basemap install and binding | Document provider/license; SAF picker validates PMTiles v3/style/size/digest/coverage, atomic store, renderer uses installed style, offline map restarts intact; security tests |
 | W-03 | wasm GTFS-RT protobuf | Real portable wire decoder, fixture parity with JVM, bound errors, real browser decode; no synthetic fallback |
 | W-04 | wasm durable snapshots/offline files | Rehydrate validated payload from IndexedDB on reload with staleness and integrity checks; no promise of offline basemap until tile store is durable; reload tests |
 | W-05 | Walking mode | Choose either implemented street-network walk routing or clear read-only straight-line estimate with no route claim; Plan control respects mode; tests |
@@ -75,7 +75,7 @@ evidence of a GitHub merge, release approval, or closure of a workchain.
 | ID | Source implementation status | Remaining proof or known gap |
 | --- | --- | --- |
 | W-01 | Partial | Selected-vehicle follow, fresh-fix updates, stale/missing pauses, manual-pan stop, and explicit stop are wired in source; map-camera/device lifecycle verification remains open. |
-| W-02 | Partial | Basemap registry/import code exists; licensed archive validation, offline renderer binding, and device restart proof remain open. |
+| W-02 | Partial | Android SAF imports PMTiles v3 plus style JSON; header/style validation, atomic package storage, local file URI binding, and renderer style handoff exist. Startup revalidates the installed header/style and reports unusable packages instead of marking them active. Permitted archive provenance, true offline rendering/restart, coverage fallback, and physical-device proof remain open. |
 | W-03 | Implemented; targeted Wasm tests passed locally | Portable decoder and browser transport exist; real-feed/CORS and end-to-end rendering still need browser verification. |
 | W-04 | Partial | GTFS static payload persistence/rehydration now waits for IndexedDB transaction completion and cleans canceled continuations; `OfflineFileStore.wasmJs.kt` remains process-memory-only, so offline basemap files are not durable. |
 | W-05 | Implemented in source | Walk-only UI and planner behavior have regression tests; device interaction proof remains open. |
@@ -92,7 +92,7 @@ Work-order follow-ups in this branch:
 | WO-011 | Partial implementation; `test lint` and `assembleDebug` passed locally | Real-feed, Android-device, accessibility, and independent-review receipts. |
 | WO-012 | Transaction staging and JVM regression coverage implemented; local build gates passed | Crash/fault recovery matrix, multi-tab/process policy, real-feed/device durability, and independent review. |
 | WO-016 | Decoder and static-feed IndexedDB rehydration implemented; put/get await transaction completion and canceled operations release pending continuations; targeted Wasm tests passed locally | Browser live-feed/CORS/render test and offline reload/corruption/quota coverage. Wasm `OfflineFileStore` remains memory-only. |
-| WO-017 | Partial basemap registry/storage implementation; Android engine reports offline capability only when a usable static snapshot exists | Licensed archive, complete MapLibre offline binding, durable restart, and physical-device verification. Snapshot availability does not prove offline basemap rendering. |
+| WO-017 | Partial: SAF PMTiles v3/style import, header/style validation, atomic package storage, local archive binding, MapLibre style handoff, and startup invalid-package reporting are implemented | Permitted archive provenance, no-network rendering/restart, viewport coverage behavior, and physical-device verification. Static schedule snapshot availability does not prove offline basemap rendering. |
 | WO-018 | OTP adapter and local SDK publication/sample path exist | Version-pinned live OTP, independent external consumer, signing, licensing, privacy, and owner release gates. |
 
 ## Suggested execution order

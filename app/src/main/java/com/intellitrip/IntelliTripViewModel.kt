@@ -106,6 +106,8 @@ data class AppState(
     val activeBasemapId: String? = null,
     /** Active style JSON with its pmtiles:// source bound to the installed file. */
     val activeBasemapStyle: String? = null,
+    /** Explains why an installed package is not currently usable by the renderer. */
+    val basemapUnavailableReason: String? = null,
 )
 
 /**
@@ -350,10 +352,12 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     fun selectBasemap(id: String) {
         viewModelScope.launch {
             refreshBasemapState(id)
-            val active = _state.value.basemapPackages.firstOrNull { it.id == id }
+            val state = _state.value
+            val active = state.basemapPackages.firstOrNull { it.id == state.activeBasemapId }
             update {
                 it.copy(
                     status = active?.let { pkg -> "Offline basemap: ${pkg.displayName}" }
+                        ?: state.basemapUnavailableReason
                         ?: "Offline basemap not found",
                 )
             }
@@ -391,11 +395,18 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                 runCatching { host.basemapStore.styleFor(pkg) }.getOrNull()
             }
         }
+        val unavailableReason = if (active != null && style == null) {
+            "Offline basemap unavailable: its archive or style is missing or invalid. " +
+                "The online basemap is shown."
+        } else {
+            null
+        }
         update {
             it.copy(
                 basemapPackages = packages,
-                activeBasemapId = active?.id,
+                activeBasemapId = active?.id?.takeIf { style != null },
                 activeBasemapStyle = style,
+                basemapUnavailableReason = unavailableReason,
             )
         }
     }

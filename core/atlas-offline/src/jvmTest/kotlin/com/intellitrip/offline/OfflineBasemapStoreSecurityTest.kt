@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -235,6 +236,29 @@ class OfflineBasemapStoreSecurityTest {
         val bound = assertNotNull(store.styleFor(installed.pkg))
         assertTrue(bound.contains("pmtiles://file:"), bound)
         assertFalse(bound.contains("\\/\\/"), "escaped slashes survived binding: $bound")
+    }
+
+    @Test
+    fun corruptedInstalledArchiveIsNotBoundForRendering() {
+        val store = store()
+        val installed = store.install("metro", "Corrupted", staged().toString(), style)
+            as InstallResult.Installed
+        Files.write(Paths.get(installed.pkg.tilePath), byteArrayOf(0, 1, 2))
+
+        assertNull(store.styleFor(installed.pkg))
+    }
+
+    @Test
+    fun editedInstalledStyleIsNotBoundForRendering() {
+        val store = store()
+        val installed = store.install("metro", "Edited", staged().toString(), style)
+            as InstallResult.Installed
+        val stylePath = Paths.get(installed.pkg.tilePath).resolveSibling(
+            Paths.get(installed.pkg.tilePath).fileName.toString() + ".style.json",
+        )
+        Files.writeString(stylePath, """{"version":8,"sources":{},"layers":[]}""")
+
+        assertNull(store.styleFor(installed.pkg))
     }
 
     @Test

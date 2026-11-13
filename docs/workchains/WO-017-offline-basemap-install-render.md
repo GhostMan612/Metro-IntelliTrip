@@ -1,23 +1,23 @@
 # WO-017 — Offline basemap packages: secure import and MapLibre rendering
 
-**Priority:** P2 platform completion; high severity when advertised as an installed/offline map. **Status:** Partial source implementation; offline rendering, durability, and device proof remain open.
+**Priority:** P2 platform completion; high severity when advertised as an installed/offline map. **Status:** Partial source implementation; permitted archive provenance, offline rendering/restart, coverage behavior, and device proof remain open.
 **Baseline:** `ccf662c7de6e9b0b34e20994366f5ecfec5d5d40` / `master`. **Existing workchain:** W-02.  
 **Source:** `core/atlas-offline/src/commonMain/kotlin/com/intellitrip/offline/OfflineBasemapStore.kt`; `OfflineFileStore.kt`; `BasemapPolicy.kt`; `core/atlas-map/src/commonMain/kotlin/com/intellitrip/map/BasemapProvider.kt`; `core/atlas-map-android/src/main/java/com/intellitrip/map/android/MapLibreMapRenderer.kt`; `app/.../MapCanvas.kt`.
 
 ## SEED
 - Store accepts staged file path, package ID, style JSON, size and metadata; it can list packages and report `hasPackage()`. This is a registry, not evidence that tile bytes are valid or that MapLibre has a tile source.
 - Host instantiates the basemap store, but there is no complete rider-driven SAF picker/importer, local tile protocol handler, MapLibre style binding and no-network restart acceptance.
-- Store currently expects `.mbtiles` archive extension; other project docs discuss PMTiles as a future alternative. Formats are **not interchangeable**; do not label one as supported until renderer and validation are implemented.
+- Current source supports PMTiles v3 plus a MapLibre style JSON, not MBTiles. Formats are **not interchangeable**; MBTiles must be converted before import. This replaces the original audit's MBTiles-only proposal.
 - A corrupt or attacker-controlled archive/style could create path traversal, unsafe external URL requests, excessive disk use or malicious/offline dependency surprises.
 
 ## SPEC
-**Supported input:** documented MBTiles format and metadata schema; SQLite validation of required tiles, scheme XYZ/TMS transform, supported PNG/JPEG/vector tile data, reasonable zoom/bounds, tile count and archive size. Reject unknown/unsupported format with visible reason. Never infer file validity from `.mbtiles` suffix alone.
+**Supported input:** PMTiles v3 archive plus a MapLibre style JSON. Validate archive header and style structure/source requirements; reject MBTiles, unknown formats, and invalid inputs with visible reasons. Do not infer file validity from an extension.
 
 **SAF and file custody:** picker opens user-chosen content URI; persist only permission needed for copy; stream to an app-private transaction-stage file, enforce byte-count limit and timeout, hash as copied, reject symlinks/path escape/untrusted filenames. No untrusted ID flows into filesystem paths. Clean partial files on cancel/failure; active package remains intact.
 
 **Style security:** accept only a validated MapLibre style schema tied to package source/layer definitions, rewrite tile URLs to a strictly local tile source, prohibit unconsented third-party asset/telemetry calls, and provide font/sprite fallbacks that do not silently fetch online. Attribution/license stored and displayed.
 
-**MapLibre Android binding:** implement a dedicated local MBTiles tile provider/protocol (not file:// injection into remote style); decode tiles off main thread, maintain bounded LRU caches, support backpressure/cancel on pans, disable online tile fallbacks in the Offline map mode. Layer stack reattaches after style switch and app restore.
+**MapLibre Android binding:** current source binds PMTiles sources to the installed local archive URI and passes the imported style to MapLibre Native. Verify that every supported style asset (including glyphs and sprites) stays offline; an archive source alone does not establish that the style has no network fallback. Layer stack reattaches after style switch, but runtime and restart behavior remain unverified.
 
 **Atomic package lifecycle:** install or update one immutable package at a time; manifest activation only after archive and style validation, rollback when reader fails. On deletion, unbind first and remove underlying package/style and matching manifest entry. Detect missing/corrupt package on startup, show accurate "Offline map unavailable" without losing transit schedule data.
 
@@ -26,28 +26,29 @@
 **License:** don't bundle provider data unless distribution rights are confirmed. A user-imported archive requires documented third-party attribution and legitimate acquisition; reject unauthorized product claim of full region offline by default.
 
 ## PLAN
-1. Select and document MBTiles-only minimum deliverable, tile matrix conversion and supported map styles; separately evaluate PMTiles as a later format, not a combined speculative implementation.
-2. Build pure validator and secure import staging/manifest transaction with injected SQLite/byte source seams; security & corruption tests.
-3. Add Android SAF picker and progress/cancel/error UI in More/Map layers; keep map usable during import.
-4. Implement MapLibre native local-tile protocol style integration with bounded decoding/cache, maintain correct renderer lifecycle; wire basemap policy.
+1. Keep PMTiles v3 as the implemented format; document supported style resources and verify styles cannot silently depend on external assets or tile sources.
+2. Maintain the pure archive/style validator and secure import staging/manifest transaction; extend corruption and security coverage as runtime evidence reveals gaps.
+3. Audit the existing Android SAF picker and import progress/cancel/error paths; close remaining gaps while keeping the map usable during import.
+4. Verify MapLibre Native's local PMTiles source behavior, including style assets, bounded resource use, and coverage fallback; wire basemap policy.
 5. Verify a small licensed test archive and one real permitted Twin Cities package in airplane mode, including restart and out-of-coverage fallback.
 6. After implementation complete, execute integrated CI and device gate, attach screenshot/memory/tile receipts.
 
 ## Files expected
-- `core/atlas-offline/src/commonMain/kotlin/com/intellitrip/offline/OfflineBasemapStore.kt` and storage/seams
-- New Android MBTiles validator/tile provider in `core/atlas-map-android` (or separate Android adapter module)
-- `app/src/main/java/com/intellitrip/AtlasHost.kt`, `ui/MapCanvas.kt`, `ui/MapChrome.kt`, `ui/SecondaryScreens.kt`
-- `docs/OFFLINE_MODEL.md`, `docs/SECURITY.md`, `docs/PLAY_TRACK.md` and license attribution; test fixtures and security tests
+- `core/atlas-offline/src/commonMain/kotlin/com/intellitrip/offline/OfflineBasemapStore.kt` and PMTiles/style validators
+- `core/atlas-map-android/src/main/java/com/intellitrip/map/android/MapLibreMapRenderer.kt` for the local PMTiles source handoff
+- `app/src/main/java/com/intellitrip/IntelliTripViewModel.kt` and `ui/MapChrome.kt` for active-package state and invalid-package reporting
+- `core/atlas-offline/src/jvmTest/kotlin/com/intellitrip/offline/OfflineBasemapStoreSecurityTest.kt` for store and startup-validation coverage
+- Remaining work: offline archive/style resource validation, viewport coverage behavior, licensed fixture attribution, and device/runtime verification
 
 ## VERIFICATION
-- Import valid licensed MBTiles, terminate network, pan/zoom/restart: matching tiles still render; schedules and journey overlays unaffected; reboot, resume and rapid map style switches work.
-- Wrong extension, truncated SQLite, invalid metadata, unsupported layers, huge archive/quota failure, process kill mid-import, bad URI, invalid style URL and path traversal all fail closed with old package preserved.
+- Import a legitimately sourced PMTiles archive, terminate network, pan/zoom/restart: matching tiles still render; schedules and journey overlays unaffected; reboot, resume and rapid map style switches work.
+- Wrong extension, truncated/corrupt PMTiles header, invalid style, unsupported layers, huge archive/quota failure, process kill mid-import, bad URI, invalid style URL and path traversal all fail closed with old package preserved.
 - Removing package reverts map to "basemap unavailable" offline (or online if connected) and clears disk files; no stale falsely "installed" status.
 - Zoom in/out, rotation/tilt, stress memory on BLU, Android file permissions, TalkBack and real attribution verified. Attach screenshot and logcat proof.
 - Release config cannot leak mock tile packages, network fallback or forbidden archive assets without consent.
 
 ## LOCAL CHECKPOINT
-The basemap registry/storage seams are present, but an installed package is not yet demonstrated to render reliably offline across restart. The Android host now reports the engine's offline capability only when its static network has a usable snapshot; that flag does not claim that a basemap is installed or renderable. The Wasm `OfflineFileStore` remains memory-only. Keep this workchain open until the licensed archive and end-to-end/device evidence exist.
+Android SAF import, atomic PMTiles package storage, local style binding, and MapLibre handoff are present. On startup or selection, the store now revalidates the installed PMTiles header and style before exposing the package to the renderer; invalid or missing content is marked unavailable and the UI explains that the online basemap is shown when available. This is not a full archive-integrity check and does not prove offline rendering, style-asset isolation, restart behavior, or out-of-coverage handling. The Android host reports engine offline capability only when its static network has a usable snapshot; that flag does not claim a basemap is installed or renderable. The Wasm `OfflineFileStore` remains memory-only. Keep this workchain open until licensed archive and end-to-end/device evidence exist.
 
 ## OUT OF SCOPE
-Live OTP, geocoder, Wasm IndexedDB tile persistence, PMTiles format unless separately decided, and any basemap whose redistribution terms are unknown. Status remains BLOCKED on licensed sample/source until evidence.
+Live OTP, geocoder, Wasm IndexedDB tile persistence, MBTiles rendering, and any basemap whose redistribution terms are unknown. Status remains BLOCKED on permitted sample/source and offline runtime evidence.

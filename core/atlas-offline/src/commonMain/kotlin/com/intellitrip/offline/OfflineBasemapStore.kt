@@ -252,6 +252,12 @@ class OfflineBasemapStore(
     fun styleFor(pkg: BasemapPackage): String? {
         val stylePath = stylePathFor(pkg.tilePath) ?: return null
         val style = runCatching { fileStore.readText(stylePath) }.getOrNull() ?: return null
+        if (BasemapStyleValidator.validate(style) !is BasemapStyleValidator.Result.Valid) return null
+        val archiveSize = runCatching { fileStore.size(pkg.tilePath) }.getOrNull() ?: return null
+        val header = runCatching {
+            fileStore.readRange(pkg.tilePath, 0L, PmtilesFormat.HEADER_BYTES)
+        }.getOrNull() ?: return null
+        if (PmtilesFormat.validate(header, archiveSize) !is PmtilesValidation.Valid) return null
         val archiveUri = fileStore.fileUri(pkg.tilePath) ?: return null
         return BasemapStyleValidator.bindArchive(style, archiveUri)
     }
