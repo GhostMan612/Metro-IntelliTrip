@@ -47,9 +47,16 @@ private fun startIdbPut(id: Int, key: String, hex: String): JsAny =
         dbp.onsuccess = () => {
             const db = dbp.result;
             const tx = db.transaction('files', 'readwrite');
-            const req = tx.objectStore('files').put(arr, key);
-            req.onsuccess = () => atlasIdbDone(id, true, null);
-            req.onerror = () => atlasIdbDone(id, false, String(req.error && req.error.message ? req.error.message : 'put failed'));
+            tx.objectStore('files').put(arr, key);
+            tx.oncomplete = () => {
+                db.close();
+                atlasIdbDone(id, true, null);
+            };
+            tx.onabort = tx.onerror = () => {
+                const error = tx.error && tx.error.message ? tx.error.message : 'put failed';
+                db.close();
+                atlasIdbDone(id, false, String(error));
+            };
         };
         dbp.onerror = () => atlasIdbDone(id, false, String(dbp.error && dbp.error.message ? dbp.error.message : 'open failed'));
         return dbp;
@@ -66,13 +73,22 @@ private fun startIdbGet(id: Int, key: String): JsAny =
         };
         dbp.onsuccess = () => {
             const db = dbp.result;
-            const req = db.transaction('files', 'readonly').objectStore('files').get(key);
+            const tx = db.transaction('files', 'readonly');
+            const req = tx.objectStore('files').get(key);
+            let result = null;
             req.onsuccess = () => {
                 const v = req.result;
-                if (v === undefined || v === null) atlasIdbDone(id, true, null);
-                else atlasIdbDone(id, true, Array.from(v));
+                if (v !== undefined && v !== null) result = Array.from(v);
             };
-            req.onerror = () => atlasIdbDone(id, false, String(req.error && req.error.message ? req.error.message : 'get failed'));
+            tx.oncomplete = () => {
+                db.close();
+                atlasIdbDone(id, true, result);
+            };
+            tx.onabort = tx.onerror = () => {
+                const error = tx.error && tx.error.message ? tx.error.message : 'get failed';
+                db.close();
+                atlasIdbDone(id, false, String(error));
+            };
         };
         dbp.onerror = () => atlasIdbDone(id, false, String(dbp.error && dbp.error.message ? dbp.error.message : 'open failed'));
         return dbp;
@@ -92,6 +108,7 @@ actual suspend fun platformDurablePut(key: String, bytes: ByteArray) {
     }
     suspendCancellableCoroutine { cont ->
         pendingIdb[id] = cont
+        cont.invokeOnCancellation { pendingIdb.remove(id) }
         startIdbPut(id, key, hex)
     }
 }
@@ -100,6 +117,7 @@ actual suspend fun platformDurableGet(key: String): ByteArray? {
     val id = nextIdbId++
     return suspendCancellableCoroutine { cont ->
         pendingIdb[id] = cont
+        cont.invokeOnCancellation { pendingIdb.remove(id) }
         startIdbGet(id, key)
     }
 }

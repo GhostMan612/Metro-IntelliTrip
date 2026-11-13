@@ -8,7 +8,7 @@
 - `PlatformFileStore.wasm.kt` and `OfflineFileStore.wasmJs.kt` still use in-memory maps for ordinary file operations. Durable IndexedDB put/get and static-feed rehydration exist separately; this does not make offline basemap files durable.
 - Startup rehydrates static-feed payload state through the durable store, but complete offline-map file restoration and all quota/corruption/recovery cases are not established.
 - The Android host now derives the engine's offline capability from the static feed's usable-snapshot state; this does not establish durable browser basemap storage or offline map rendering.
-- `PlatformDurable.wasm.kt` reports successful put on request success, not explicit transaction `oncomplete`, and pending coroutine maps need cancellation cleanup. Browser HTTP `PlatformFetch.wasm.kt` hand-assembles JSON header strings without escaping and does not document forbidden headers or CORS failures.
+- `PlatformDurable.wasm.kt` now reports success after transaction `oncomplete`, reports transaction abort/error, closes database handles, and removes canceled operations from the pending continuation map. Browser HTTP `PlatformFetch.wasm.kt` header construction and transport cancellation/response-size bounds remain separate hardening gaps.
 - `WebDemo`/`Platform.kt` create a fixed 3-stop synthetic network and moving demonstration vehicle. Demo is not a production Metro Transit application.
 
 ## SPEC — full browser data lifecycle
@@ -39,7 +39,7 @@
 ## PLAN / sequencing
 1. Define portability/parity fixture matrix (real valid, unknown fields, malformed, large payload, absent identity), independent from browser UI.
 2. Build safe decoder; wire `PollingGtfsRealtimeClient` to asynchronous fetch while preserving JVM adapter behavior.
-3. Harden browser fetch and IndexedDB continuation/cancellation semantics, then implement durable manifest activation/read recovery.
+3. Harden browser fetch and IndexedDB continuation/cancellation semantics, then implement durable manifest activation/read recovery. IndexedDB transaction completion and continuation cleanup are implemented; fetch bounds and manifest-based generation recovery remain open.
 4. Wire a real-production browser shell behind explicit build mode, preserve demo only as isolated example.
 5. Integrate renderer only after WO-015; no cross-source changes to Android presentation except shared contract adjustments.
 6. Run complete integration/negative gate only after phase code is complete.
@@ -63,3 +63,5 @@
 
 ## REVIEW / CLOSURE
 Targeted local Wasm tests for `atlas-gtfs-realtime`, `atlas-web-spike`, and `atlas-map-web` passed after fixing common-test portability and timezone initialization. These tests are not proof of live browser/CORS or offline-reload behavior. No claim of full web realtime or offline parity before real-feed fetch/decode/render and offline reload verification. Independent review must examine malformed input, storage atomicity and privacy. **Dependencies:** WO-015 for map integration and WO-012 for consistent snapshot-generation semantics. No new Android UI overhaul or Play signing.
+
+The IndexedDB implementation now waits for transaction completion on both reads and writes and releases pending coroutine entries on cancellation. `atlas-contracts:wasmJsTest` and `atlas-map-web:wasmJsTest` pass locally; this does not close offline-file durability, quota/corruption recovery, browser transport, or end-to-end gates.

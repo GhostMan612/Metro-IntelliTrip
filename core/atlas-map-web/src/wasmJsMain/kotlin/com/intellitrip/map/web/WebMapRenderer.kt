@@ -46,7 +46,7 @@ class WebMapRenderer : WebRenderer {
 
     override fun setSources(payloads: List<SourcePayload>, centerLon: Double, centerLat: Double, zoom: Double) {
         val current = map ?: error("WebMapRenderer.setStyle() must be called before setSources()")
-        payloads.forEach { payload ->
+        completeSources(payloads).forEach { payload ->
             queueSource(
                 map = current,
                 sourceId = payload.layer.name,
@@ -98,6 +98,7 @@ private fun restyle(map: JsAny, styleUrl: String): JsAny =
         // setStyle drops every source and layer; replay the last payloads when
         // the replacement style is usable.
         m.__atlasNeedReplay = true;
+        m.__atlasRadarDirty = true;
         m.setStyle(styleUrl);
         return m;
     })()"""
@@ -155,10 +156,14 @@ private fun atlasInitLifecycle(map: JsAny): JsAny =
                 if (m.getSource('radar')) m.removeSource('radar');
                 return;
             }
-            if (m.getLayer('radar-layer')) {
+            const style = m.getStyle();
+            const sourceSpec = style && style.sources && style.sources.radar;
+            if (m.getLayer('radar-layer') && sourceSpec &&
+                sourceSpec.tiles && sourceSpec.tiles[0] === overlay.tileUrl) {
                 m.setPaintProperty('radar-layer', 'raster-opacity', overlay.opacity);
                 return;
             }
+            if (m.getLayer('radar-layer')) m.removeLayer('radar-layer');
             if (m.getSource('radar')) m.removeSource('radar');
             m.addSource('radar', { type: 'raster', tiles: [overlay.tileUrl], tileSize: 256 });
             m.addLayer({
@@ -206,6 +211,8 @@ private fun queueSource(map: JsAny, sourceId: String, geoJson: String, isLine: B
         """(() => {
         const m = map;
         const payload = { geoJson: geoJson, isLine: isLine };
+        const previous = m.__atlasLastSources[sourceId];
+        if (previous && previous.geoJson === geoJson && previous.isLine === isLine) return m;
         m.__atlasLastSources[sourceId] = payload;
         m.__atlasPendingSources[sourceId] = payload;
         m.__atlasFlush();
@@ -232,7 +239,12 @@ private fun queueRadar(
     js(
         """(() => {
         const m = map;
-        m.__atlasLastRadar = present ? { tileUrl: tileUrl, opacity: opacity } : null;
+        const next = present ? { tileUrl: tileUrl, opacity: opacity } : null;
+        const previous = m.__atlasLastRadar;
+        if (!m.__atlasRadarDirty && previous && next &&
+            previous.tileUrl === next.tileUrl && previous.opacity === next.opacity) return m;
+        if (!m.__atlasRadarDirty && !previous && !next) return m;
+        m.__atlasLastRadar = next;
         m.__atlasRadarDirty = true;
         m.__atlasFlush();
         return m;

@@ -77,12 +77,12 @@ evidence of a GitHub merge, release approval, or closure of a workchain.
 | W-01 | Partial | Selected-vehicle follow, fresh-fix updates, stale/missing pauses, manual-pan stop, and explicit stop are wired in source; map-camera/device lifecycle verification remains open. |
 | W-02 | Partial | Basemap registry/import code exists; licensed archive validation, offline renderer binding, and device restart proof remain open. |
 | W-03 | Implemented; targeted Wasm tests passed locally | Portable decoder and browser transport exist; real-feed/CORS and end-to-end rendering still need browser verification. |
-| W-04 | Partial | GTFS static payload persistence/rehydration exists; `OfflineFileStore.wasmJs.kt` is still process-memory-only, so offline basemap files are not durable. |
+| W-04 | Partial | GTFS static payload persistence/rehydration now waits for IndexedDB transaction completion and cleans canceled continuations; `OfflineFileStore.wasmJs.kt` remains process-memory-only, so offline basemap files are not durable. |
 | W-05 | Implemented in source | Walk-only UI and planner behavior have regression tests; device interaction proof remains open. |
 | W-06 | Partial | Coverage handling exists; Android alert geometry is not drawn on the map. |
 | W-07 | Adapter only | No version-pinned live OTP service, verified identity mapping, or real integration receipt. |
 | W-08 | Implemented in source | Presets use a deliberate map viewport before a fresh location, with current map scope and system fallback; resolver tests cover precedence. Gesture/camera behavior still needs device verification. |
-| W-09 | Partial | Production browser entry/data path and renderer lifecycle code exist; Chromium end-to-end verification is still required. |
+| W-09 | Partial | Production browser entry/data path and renderer lifecycle code exist; radar frame replacement, restyle replay, omitted-layer clearing, and unchanged-source suppression are implemented. Chromium end-to-end and packaging verification are still required. |
 | W-10 | Partial | Local Maven publication and JVM sample host exist; an independent consumer and Play/release gates remain open. |
 
 Work-order follow-ups in this branch:
@@ -91,7 +91,7 @@ Work-order follow-ups in this branch:
 | --- | --- | --- |
 | WO-011 | Partial implementation; `test lint` and `assembleDebug` passed locally | Real-feed, Android-device, accessibility, and independent-review receipts. |
 | WO-012 | Transaction staging and JVM regression coverage implemented; local build gates passed | Crash/fault recovery matrix, multi-tab/process policy, real-feed/device durability, and independent review. |
-| WO-016 | Decoder and static-feed IndexedDB rehydration implemented; targeted Wasm tests passed locally | Browser live-feed/CORS/render test and offline reload/corruption/quota coverage. Wasm `OfflineFileStore` remains memory-only. |
+| WO-016 | Decoder and static-feed IndexedDB rehydration implemented; put/get await transaction completion and canceled operations release pending continuations; targeted Wasm tests passed locally | Browser live-feed/CORS/render test and offline reload/corruption/quota coverage. Wasm `OfflineFileStore` remains memory-only. |
 | WO-017 | Partial basemap registry/storage implementation; Android engine reports offline capability only when a usable static snapshot exists | Licensed archive, complete MapLibre offline binding, durable restart, and physical-device verification. Snapshot availability does not prove offline basemap rendering. |
 | WO-018 | OTP adapter and local SDK publication/sample path exist | Version-pinned live OTP, independent external consumer, signing, licensing, privacy, and owner release gates. |
 

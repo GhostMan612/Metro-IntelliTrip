@@ -47,6 +47,19 @@ fun snapshotToSources(snapshot: RenderSnapshot): List<SourcePayload> = listOf(
     SourcePayload(WebLayer.SHAPES, GeoJsonWriter.shapes(snapshot)),
 )
 
+/**
+ * Completes a caller's source set so omitted layers explicitly clear stale data.
+ * The renderer treats every call as a full desired-state snapshot.
+ */
+fun completeSources(payloads: List<SourcePayload>): List<SourcePayload> {
+    val byLayer = payloads.associateBy { it.layer }
+    return WebLayer.entries.map { layer ->
+        byLayer[layer] ?: SourcePayload(layer, EMPTY_FEATURE_COLLECTION)
+    }
+}
+
+private const val EMPTY_FEATURE_COLLECTION = """{"type":"FeatureCollection","features":[]}"""
+
 /** Style URL to hand the widget (null = bundled asset, unsupported on web). */
 fun webStyleUrl(style: BasemapStyle): String? = style.styleUrl
 

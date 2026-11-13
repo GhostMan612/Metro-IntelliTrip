@@ -64,4 +64,17 @@ class WebRenderBridgeTest {
         assertEquals("https://example.test/style.json", webStyleUrl(style))
         assertEquals(null, webStyleUrl(BasemapStyle(null, "basemap/offline-style.json", "attribution")))
     }
+
+    @Test
+    fun omittedSourcesAreExplicitlyCleared() {
+        val payload = SourcePayload(WebLayer.VEHICLES, """{"type":"FeatureCollection","features":[{"type":"Feature"}]}""")
+
+        val completed = completeSources(listOf(payload))
+
+        assertEquals(WebLayer.entries.toList(), completed.map { it.layer })
+        assertEquals(payload, completed.first())
+        completed.drop(1).forEach {
+            assertEquals("""{"type":"FeatureCollection","features":[]}""", it.geoJson)
+        }
+    }
 }
