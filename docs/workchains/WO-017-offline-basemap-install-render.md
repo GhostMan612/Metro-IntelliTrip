@@ -1,6 +1,6 @@
 # WO-017 — Offline basemap packages: secure import and MapLibre rendering
 
-**Priority:** P2 platform completion; high severity when advertised as an installed/offline map. **Status:** SPECCED only.  
+**Priority:** P2 platform completion; high severity when advertised as an installed/offline map. **Status:** Partial source implementation; offline rendering, durability, and device proof remain open.
 **Baseline:** `ccf662c7de6e9b0b34e20994366f5ecfec5d5d40` / `master`. **Existing workchain:** W-02.  
 **Source:** `core/atlas-offline/src/commonMain/kotlin/com/intellitrip/offline/OfflineBasemapStore.kt`; `OfflineFileStore.kt`; `BasemapPolicy.kt`; `core/atlas-map/src/commonMain/kotlin/com/intellitrip/map/BasemapProvider.kt`; `core/atlas-map-android/src/main/java/com/intellitrip/map/android/MapLibreMapRenderer.kt`; `app/.../MapCanvas.kt`.
 
@@ -45,6 +45,9 @@
 - Removing package reverts map to "basemap unavailable" offline (or online if connected) and clears disk files; no stale falsely "installed" status.
 - Zoom in/out, rotation/tilt, stress memory on BLU, Android file permissions, TalkBack and real attribution verified. Attach screenshot and logcat proof.
 - Release config cannot leak mock tile packages, network fallback or forbidden archive assets without consent.
+
+## LOCAL CHECKPOINT
+The basemap registry/storage seams are present, but an installed package is not yet demonstrated to render reliably offline across restart. The Android host now reports the engine's offline capability only when its static network has a usable snapshot; that flag does not claim that a basemap is installed or renderable. The Wasm `OfflineFileStore` remains memory-only. Keep this workchain open until the licensed archive and end-to-end/device evidence exist.
 
 ## OUT OF SCOPE
 Live OTP, geocoder, Wasm IndexedDB tile persistence, PMTiles format unless separately decided, and any basemap whose redistribution terms are unknown. Status remains BLOCKED on licensed sample/source until evidence.

@@ -1,6 +1,6 @@
 # WO-018 — OTP, external SDK consumer and Play boundary evidence
 
-**Priority:** P2 external dependencies; release NO-GO until relevant owner gates pass. **Status:** SPECCED / BLOCKED on live service and owner release decisions.  
+**Priority:** P2 external dependencies; release NO-GO until relevant owner gates pass. **Status:** Partial adapter/publication implementation; live-service, independent-consumer, and owner release gates remain blocked.
 **Baseline:** `ccf662c7de6e9b0b34e20994366f5ecfec5d5d40` / `master`. **Existing workchains:** W-07 OTP/identity, W-10 SDK/CI/release.
 **Source:** `app/src/main/java/com/intellitrip/AtlasHost.kt`, `core/atlas-routing/.../OpenTripPlannerRoutingProvider.kt` / `HybridRoutingProvider.kt`, `docs/OTP_DEPLOYMENT.md`, `docs/SDK_INTEGRATION.md`, `app/build.gradle.kts`, `docs/PLAY_TRACK.md`.
 
@@ -55,3 +55,6 @@
 
 ## OUT OF SCOPE
 Changing canonical GitHub default branch automatically, provisioning cloud infrastructure, changing user subscription/billing, or committing secrets. Treat stale/unsupported OTP endpoint as BLOCKED until actual API shape is verified.
+
+## LOCAL CHECKPOINT
+The OTP adapter and local Maven publication/sample-host path exist in source. No verified live OTP deployment or standalone external-consumer receipt is established by the local build; Play signing, licensing, privacy, and physical-device gates remain owner-controlled. Keep this workchain open and release NO-GO until each gate has its own evidence.

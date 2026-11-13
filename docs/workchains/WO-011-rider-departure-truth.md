@@ -1,6 +1,6 @@
 # WO-011 — Rider-truth and arrival notification integrity
 
-**Severity:** P0 rider correctness. **Status:** SPECCED; implementation and runtime verification NOT STARTED.  
+**Severity:** P0 rider correctness. **Status:** PARTIALLY IMPLEMENTED on the local branch; runtime verification and independent review remain open.
 **Target baseline:** `ccf662c7de6e9b0b34e20994366f5ecfec5d5d40` on `master`.  
 **Source:** 2026-11-11 audit, `app/src/main/java/com/intellitrip/IntelliTripViewModel.kt`, `ui/DepartureBoard.kt`, `ui/ArrivalCue.kt`, `core/atlas-domain/.../ServiceCalendar.kt`.
 
@@ -54,7 +54,7 @@
 - Gate reports must identify tests actually executed. No skipped/absent real-feed fixture counted as pass.
 
 ## REVIEW / CLOSURE
-**Current:** no implementation diff, no new verification. An independent reviewer must inspect badge claims, boundary dates, cancellation semantics and location consent before marking PASS. Release remains NO-GO if any departure time is presented as predicted without supporting data.
+**Local checkpoint:** implementation and regression tests now cover service-date-bound departures, realtime provenance, arrival-cue state, and planning-time controls. The repository's `test lint` and `assembleDebug` gates passed locally. This does not satisfy the required real-feed, device, accessibility, or independent-review receipts. Keep this workchain open until those receipts exist; release remains NO-GO if any departure is presented as predicted without supporting data.
 
 **Out of scope:** redesigning the planner algorithm, speculative rider ETA, OTP integration, background location permission and full visual overhaul.
 
