@@ -105,6 +105,27 @@ class OfflineBasemapStoreSecurityTest {
     }
 
     @Test
+    fun removalDeletesTileArchiveAndPairedStyleWithoutTouchingAnotherPackage() {
+        val store = store()
+        val drop = store.install("drop", "Drop", staged().toString(), style) as InstallResult.Installed
+        val keep = store.install("keep", "Keep", staged().toString(), style) as InstallResult.Installed
+        val droppedTile = Paths.get(drop.pkg.tilePath)
+        val droppedStyle = Paths.get(drop.pkg.tilePath + ".style.json")
+        val keptTile = Paths.get(keep.pkg.tilePath)
+        val keptStyle = Paths.get(keep.pkg.tilePath + ".style.json")
+        assertTrue(Files.exists(droppedTile))
+        assertTrue(Files.exists(droppedStyle))
+
+        assertTrue(store.remove("drop"))
+        assertTrue(!Files.exists(droppedTile), "tile archive leaked on removal")
+        assertTrue(!Files.exists(droppedStyle), "style file leaked on removal")
+        assertTrue(Files.exists(keptTile), "unrelated tile archive was deleted")
+        assertTrue(Files.exists(keptStyle), "unrelated style was deleted")
+        assertEquals(listOf("keep"), OfflineBasemapStore(store.rootForTest()).packages().map { it.id })
+        assertTrue(!store.remove("drop"), "removing an absent package must not claim success")
+    }
+
+    @Test
     fun reinstallOfTheSameIdReplacesRatherThanDuplicatesAndDeletesTheOldGeneration() {
         val store = store()
         val first = store.install("metro", "First", staged().toString(), style) as InstallResult.Installed

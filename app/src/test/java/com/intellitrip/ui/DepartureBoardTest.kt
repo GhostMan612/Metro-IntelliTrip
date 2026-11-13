@@ -230,6 +230,50 @@ class DepartureBoardTest {
     }
 
     @Test
+    fun perStopCapKeepsTheEarliestDeparturesInsteadOfIndexOrder() {
+        val platform = stop("S1", "Platform", 44.97, -93.26)
+        val actual = DepartureBoard.build(
+            now = now,
+            origin = platform.location,
+            stops = listOf(platform),
+            radiusMeters = 1_000.0,
+            departuresFor = {
+                listOf(30, 9, 3, 17, 6).map { mins ->
+                    DepartureBoard.ScheduledDeparture("T1", now + (mins * 60).seconds)
+                }
+            },
+            liveTrips = emptySet(),
+            routesByKey = emptyMap(),
+            tripsByKey = emptyMap(),
+            perStop = 3,
+        )
+        assertEquals(listOf(3, 6, 9), actual.map { it.minutesUntil })
+    }
+
+    @Test
+    fun reportedDepartureChangesWhichTripsSurviveTheCap() {
+        val platform = stop("S1", "Platform", 44.97, -93.26)
+        val actual = DepartureBoard.build(
+            now = now,
+            origin = platform.location,
+            stops = listOf(platform),
+            radiusMeters = 1_000.0,
+            departuresFor = {
+                listOf(
+                    DepartureBoard.ScheduledDeparture("T1", now + 1800.seconds, now + 120.seconds),
+                    DepartureBoard.ScheduledDeparture("T1", now + 300.seconds),
+                    DepartureBoard.ScheduledDeparture("T1", now + 600.seconds),
+                )
+            },
+            liveTrips = setOf("T1"),
+            routesByKey = emptyMap(),
+            tripsByKey = emptyMap(),
+            perStop = 2,
+        )
+        assertEquals(listOf(2, 5), actual.map { it.minutesUntil })
+    }
+
+    @Test
     fun stopsOutsideTheRadiusAreExcluded() {
         val near = stop("S1", "Near", 44.970, -93.260)
         val far = stop("S2", "Far", 45.500, -93.900)
@@ -339,7 +383,16 @@ class DepartureBoardTest {
         val stop = stop("S1", "First & Main", 44.97, -93.26)
         val live = board(
             listOf(stop),
-            mapOf("S1" to listOf(DepartureBoard.ScheduledDeparture("T1", now + 240.seconds))),
+            mapOf(
+                "S1" to listOf(
+                    DepartureBoard.ScheduledDeparture(
+                        "T1",
+                        now + 240.seconds,
+                        reportedTime = now + 180.seconds,
+                        reportedAt = now - 10.seconds,
+                    ),
+                ),
+            ),
             liveTrips = setOf("T1"),
         ).single()
         val spoken = live.accessibilityLabel()

@@ -219,12 +219,19 @@ class OfflineBasemapStore(
     }
 
     fun remove(id: String): Boolean {
-        val pkg = packages().firstOrNull { it.id == id } ?: return false
-        return runCatching {
+        val installed = packages()
+        val pkg = installed.firstOrNull { it.id == id } ?: return false
+        val stylePath = stylePathFor(pkg.tilePath) ?: return false
+        // Deleting the tile alone leaks the paired style on every uninstall.
+        // Never report success when either delete or manifest persistence fails.
+        return try {
             fileStore.deleteIfExists(pkg.tilePath)
-            stylePathFor(pkg.tilePath)?.let { fileStore.deleteIfExists(it) }
-            rewriteManifest(packages().filterNot { it.id == id })
-        }.isSuccess
+            fileStore.deleteIfExists(stylePath)
+            rewriteManifest(installed.filterNot { it.id == id })
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /** Total installed size, for the storage line in the UI. */

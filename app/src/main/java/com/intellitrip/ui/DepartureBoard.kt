@@ -154,7 +154,20 @@ object DepartureBoard {
 
         return nearby.flatMap { stop ->
             departuresFor(stop).asSequence()
+                // Compare the *effective* time before applying the per-stop cap.
+                // An index's iteration order is not a departure-time ordering,
+                // and a reported update may move a trip ahead of another.
                 .map { scheduled ->
+                    val predicted = when (scheduled.status) {
+                        DepartureStatus.CANCELED, DepartureStatus.SKIPPED -> null
+                        else -> scheduled.reportedTime
+                    }
+                    scheduled to (predicted ?: scheduled.departure)
+                }
+                .filter { (_, departure) -> departure > now - 60.seconds }
+                .sortedBy { (_, departure) -> departure }
+                .take(perStop)
+                .map { (scheduled, effectiveTime) ->
                     val trip = tripsByKey[scheduled.tripId]
                     val route = trip?.let { routesByKey[it.routeKey.routeId] }
                     val live = liveTrips.contains(scheduled.tripId)
@@ -164,12 +177,8 @@ object DepartureBoard {
                         scheduled.reportedTime != null -> DepartureStatus.LIVE
                         else -> DepartureStatus.SCHEDULED
                     }
-                    // A vehicle report alone is not a stop-specific prediction.
-                    val when_ = if (status == DepartureStatus.LIVE) {
-                        scheduled.reportedTime ?: scheduled.departure
-                    } else {
-                        scheduled.departure
-                    }
+                    // Reported time is stop-specific; vehicle presence only annotates the trip.
+                    val when_ = effectiveTime
                     val dist = origin?.let { metersBetween(it, stop.location) }
                     Departure(
                         stopName = stop.name,

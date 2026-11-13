@@ -11,6 +11,7 @@ import com.intellitrip.domain.WeatherAlert
 import kotlinx.datetime.Instant
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -77,6 +78,8 @@ class NwsWeatherAlertProvider(
             return try {
                 val payload = http.getAsync(alertUrl(null), context.headers()).decodeToString()
                 ProviderResult.Success(parseAlerts(payload), context.freshness(parseUpdated(payload)))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: WeatherNetworkException) {
                 ProviderResult.NetworkFailure(ProviderError("NWS alerts unavailable", e))
             } catch (e: Exception) {
@@ -95,6 +98,9 @@ class NwsWeatherAlertProvider(
                 val payload = http.getAsync(pointUrl(lat, lon), context.headers()).decodeToString()
                 if (updated == null) updated = parseUpdated(payload)
                 parseAlerts(payload).forEach { alert -> byId.getOrPut(alert.id) { alert } }
+            } catch (e: CancellationException) {
+                // Never swallow cancellation as a partial weather response.
+                throw e
             } catch (e: Exception) {
                 failures++
             }
@@ -107,14 +113,20 @@ class NwsWeatherAlertProvider(
                 ProviderResult.NetworkFailure(ProviderError("NWS alerts unavailable for this area"))
 
             else -> {
-                // Spatial filter on top of the sweep. Box overlap rather than polygon
-                // intersection, and alerts with an unparsable box are kept: for a severe
-                // weather warning, showing one slightly out of area beats hiding one that
-                // was real.
-                ProviderResult.Success(
-                    byId.values.filter { it.mayAffect(bounds) },
-                    context.freshness(updated),
-                )
+                // A partial sweep cannot truthfully assert there are no warnings in
+                // the unqueried cells. Preserve the alerts that were found and expose
+                // the coverage gap to the rider instead of returning Success.
+                val visible = byId.values.filter { it.mayAffect(bounds) }
+                val freshness = context.freshness(updated)
+                if (failures > 0) {
+                    ProviderResult.PartialResult(
+                        visible,
+                        listOf("$failures of ${samples.size} NWS sample points unavailable"),
+                        freshness,
+                    )
+                } else {
+                    ProviderResult.Success(visible, freshness)
+                }
             }
         }
     }

@@ -554,6 +554,7 @@ private fun PlanSheet(
     onSelectJourney: (String) -> Unit,
 ) {
     SheetHeader("Plan a trip")
+    val modeWalkOnly = state.travelMode == TravelMode.WALK_ONLY
 
     if (state.staticFeed == null && state.travelMode == TravelMode.TRANSIT) {
         Text(
@@ -618,25 +619,28 @@ private fun PlanSheet(
         ) { Text("Swap") }
         Button(
             onClick = onPlan,
-            enabled = !state.planning,
+            // Walk only is an explicitly unrouted distance estimate, not a
+            // transit request. Disable the transit action rather than sending
+            // a hidden transit plan under the walk selection.
+            enabled = canSubmitTransitPlan(modeWalkOnly, state.planning),
             modifier = Modifier.weight(2f),
         ) {
-            if (state.planning) {
-                Text("Planning…")
-            } else if (state.travelMode == TravelMode.WALK_ONLY) {
-                Text("Show walk estimate")
-            } else {
-                Text("Plan trip")
-            }
+            Text(
+                when {
+                    modeWalkOnly -> "Walk estimate only"
+                    state.planning -> "Planning…"
+                    else -> "Plan trip"
+                },
+            )
         }
     }
-    if (state.planning) {
+    if (!modeWalkOnly && state.planning) {
         androidx.compose.material3.LinearProgressIndicator(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
     }
 
-    if (state.journeyWarnings.isNotEmpty()) {
+    if (!modeWalkOnly && state.journeyWarnings.isNotEmpty()) {
         state.journeyWarnings.forEach { warning ->
             Text(
                 text = "! $warning",
@@ -650,14 +654,14 @@ private fun PlanSheet(
     // Same rule the map uses to decide what to draw, so the highlighted card and the
     // drawn route can never disagree.
     val activeId = state.activeJourneyId()
-    if (!state.planning && state.journeys.isEmpty() && state.staticFeed != null) {
+    if (!modeWalkOnly && !state.planning && state.journeys.isEmpty() && state.staticFeed != null) {
         Text(
             text = riderEmptyPlanMessage(state),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(vertical = 8.dp),
         )
     }
-    state.journeys.take(MAX_RESULTS).forEach { journey ->
+    if (!modeWalkOnly) state.journeys.take(MAX_RESULTS).forEach { journey ->
         val selected = journey.id == activeId
         val transfersText = if (journey.transferCount == 0) "Direct" else "${journey.transferCount} transfer${if (journey.transferCount > 1) "s" else ""}"
         Surface(
@@ -721,6 +725,13 @@ private fun PlanSheet(
         }
     }
 }
+
+/**
+ * A walk-only estimate must never call the transit planner. Kept pure so
+ * regressions can be caught without requiring an emulator.
+ */
+internal fun canSubmitTransitPlan(walkEstimateOnly: Boolean, planning: Boolean): Boolean =
+    !walkEstimateOnly && !planning
 
 private fun riderEmptyPlanMessage(state: AppState): String {
     val s = state.status.lowercase()

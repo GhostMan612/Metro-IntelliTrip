@@ -15,6 +15,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 import kotlinx.coroutines.runBlocking
 
 class StaticFeedRefreshTest {
@@ -47,7 +48,7 @@ class StaticFeedRefreshTest {
     }
 
     @Test
-    fun orphanNotModifiedIsRejectedInsteadOfCreatingAFeedlessActiveState() {
+    fun notModifiedWithoutSnapshotIsRejected() {
         val root = createTempDirectory("gtfs-store")
         val transport = GtfsFeedAcquirer.HttpTransport { GtfsFeedAcquirer.HttpResponse(304, ByteArray(0), emptyMap()) }
         val outcome = runBlocking {
@@ -173,6 +174,26 @@ class StaticFeedRefreshTest {
     }
 
     @Test
+    fun hostileFeedIdsCannotEscapeSnapshotStorageRoot() {
+        val root = createTempDirectory("gtfs-containment")
+        val store = storeAt(root)
+        val hostile = listOf("../escape", "..", ".", "nested/escape", "..\\escape", "bad\u0000name")
+        hostile.forEach { value ->
+            val id = FeedId(value)
+            assertFailsWith<IllegalArgumentException>("accepted unsafe feed id: $value") {
+                store.recordValidators(id, FeedValidators(etag = "attacker"))
+            }
+            assertFailsWith<IllegalArgumentException>("read escaped root: $value") {
+                store.activeSnapshot(id)
+            }
+        }
+        // A normal feed remains fully usable and receives its validators.
+        store.recordValidators(feedId, FeedValidators(etag = "safe"))
+        assertEquals("safe", store.validators(feedId).etag)
+        assertFalse(Files.exists(root.parent.resolve("escape").resolve("validators.properties")))
+    }
+
+    @Test
     fun missingStopTimeIndexIsRebuiltFromTheStoredArchive() {
         val root = createTempDirectory("gtfs-store")
         val store = storeAt(root)
@@ -190,5 +211,68 @@ class StaticFeedRefreshTest {
         val rows = reader.stopTimesFor(TripKey(feedId, "1001")) { id -> StopKey(feedId, id) }
         assertEquals(listOf(1, 2), rows.map { it.stopSequence })
         assertEquals(listOf("34", "39"), rows.map { it.stopKey.stopId })
+    }
+
+    @Test
+    fun overlappingRefreshStagesKeepPayloadAndStopTimeIndexPaired() {
+        val root = createTempDirectory("gtfs-overlapping-stages")
+        val firstStore = storeAt(root)
+        val secondStore = storeAt(root)
+        val firstPayload = GtfsFixtures.zipOf(GtfsFixtures.minimalFeed)
+        val secondFeed = GtfsFixtures.minimalFeed.toMutableMap().apply {
+            this["stop_times.txt"] = """
+                trip_id,arrival_time,departure_time,stop_id,stop_sequence
+                1001,23:45:00,23:50:00,39,1
+                1001,25:10:00,25:15:00,34,2
+            """.trimIndent() + "\n"
+        }
+        val secondPayload = GtfsFixtures.zipOf(secondFeed)
+        val firstStage = firstStore.beginRefresh()
+        val secondStage = secondStore.beginRefresh()
+        val firstMetadata = FeedMetadata(
+            feedId, null, null, null, "first", "first-hash",
+            Instant.parse("2026-10-07T00:00:00Z"), null, null, "src",
+        )
+        val secondMetadata = firstMetadata.copy(
+            version = "second",
+            hash = "second-hash",
+            fetchedAt = Instant.parse("2026-10-07T00:00:01Z"),
+        )
+
+        fun stage(
+            store: StaticFeedSnapshotStore,
+            refreshStage: StaticFeedSnapshotStore.RefreshStage,
+            payload: ByteArray,
+            metadata: FeedMetadata,
+        ) {
+            store.writeStagedPayload(payload, refreshStage)
+            val sink = store.newStopTimeSink(refreshStage)
+            try {
+                GtfsStaticParser.parseFromZip(feedId, payload, metadata, sink)
+            } finally {
+                sink.close()
+            }
+        }
+
+        stage(firstStore, firstStage, firstPayload, firstMetadata)
+        stage(secondStore, secondStage, secondPayload, secondMetadata)
+
+        secondStore.activateStaged(feedId, secondStage, secondMetadata)
+        assertTrue(secondPayload.contentEquals(secondStore.readPayload(feedId)))
+        assertEquals(
+            listOf("39", "34"),
+            secondStore.stopTimeReader(feedId)!!.stopTimesFor(TripKey(feedId, "1001")) { id ->
+                StopKey(feedId, id)
+            }.map { it.stopKey.stopId },
+        )
+
+        firstStore.activateStaged(feedId, firstStage, firstMetadata)
+        assertTrue(firstPayload.contentEquals(firstStore.readPayload(feedId)))
+        assertEquals(
+            listOf("34", "39"),
+            firstStore.stopTimeReader(feedId)!!.stopTimesFor(TripKey(feedId, "1001")) { id ->
+                StopKey(feedId, id)
+            }.map { it.stopKey.stopId },
+        )
     }
 }

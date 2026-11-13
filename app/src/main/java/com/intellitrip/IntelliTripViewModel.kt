@@ -72,6 +72,8 @@ data class AppState(
     val selectedJourneyId: String? = null,
     val journeyWarnings: List<String> = emptyList(),
     val planning: Boolean = false,
+    val planningTimeMode: PlanningTimeMode = PlanningTimeMode.DEPART_AT,
+    val planningTime: Instant? = null,
     /** Transit is the default; walking is an explicit choice, never inferred. */
     val travelMode: TravelMode = TravelMode.TRANSIT,
     /** Present only in walk mode; a straight-line estimate, not a routed journey. */
@@ -463,6 +465,12 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
             when (val result = host.weatherAlerts.alerts(bounds).first()) {
                 is ProviderResult.Success -> update {
                     it.copy(weatherAlerts = result.data, status = "Weather alerts: ${result.data.size}")
+                }
+                is ProviderResult.PartialResult -> update {
+                    it.copy(
+                        weatherAlerts = result.data,
+                        status = "Weather alerts: ${result.data.size} (partial coverage: ${result.missing.joinToString("; ")})",
+                    )
                 }
 
                 else -> update { it.copy(status = "Weather alerts unavailable: ${describe(result)}") }
