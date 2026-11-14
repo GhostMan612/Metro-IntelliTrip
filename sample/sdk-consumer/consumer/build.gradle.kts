@@ -7,7 +7,7 @@ kotlin {
     jvmToolchain(17)
 }
 
-val atlasVersion = providers.gradleProperty("atlasVersion").getOrElse("0.3.1")
+val atlasVersion = providers.gradleProperty("atlasVersion").getOrElse("0.3.2")
 
 dependencies {
     // The only Atlas dependency. Everything else is transitive, which proves

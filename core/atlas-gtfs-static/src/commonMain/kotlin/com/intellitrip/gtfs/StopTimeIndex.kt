@@ -21,9 +21,14 @@ import com.intellitrip.domain.TripKey
  *   boarding points.
  * - `STIDX003` stores both restrictions and the data-file length, so a
  *   data/index pair from different generations is rejected instead of
- *   misparsed. The reader still understands `002` (with null restrictions),
- *   so an app upgrade keeps serving departures until the index is rebuilt
- *   into the current format.
+ *   misparsed.
+ * - `STIDX004` encodes the reverse stop index (`stopId -> trips`) using
+ *   4-byte integer trip ordinals referencing the forward trip table rather than
+ *   repeating UTF-8 `"feed|tripId"` keys for every stop_time (~80% smaller index
+ *   and zero per-entry string allocations on load). The reader still accepts
+ *   `002` (with null restrictions) and `003` (string reverse keys), while
+ *   `isCurrentFormat` identifies `004` so hosts upgrade existing snapshots in
+ *   place via [StaticFeedSnapshotStore.reindexStopTimes].
  */
 class StopTimeIndexWriter {
 
@@ -92,7 +97,10 @@ class StopTimeIndexWriter {
         index.writeLong(dataBytes.size.toLong())
         index.writeInt(segments.size)
         index.writeLong(written)
+        val tripOrdinalByKey = HashMap<TripKey, Int>(((segments.size / 0.75f).toInt() + 1).coerceAtLeast(16))
+        var nextOrdinal = 0
         segments.forEach { (trip, ranges) ->
+            tripOrdinalByKey[trip] = nextOrdinal++
             val tripBytes = keyOf(trip).encodeToByteArray()
             index.writeShort(tripBytes.size)
             index.writeBytes(tripBytes)
@@ -102,7 +110,7 @@ class StopTimeIndexWriter {
                 index.writeInt(range.count)
             }
         }
-        // Reverse index section: stopId -> trips
+        // Reverse index section: stopId -> trip ordinals into the forward trip table
         index.writeInt(tripsByStop.size)
         tripsByStop.forEach { (stopId, trips) ->
             val stopBytes = stopId.encodeToByteArray()
@@ -110,9 +118,9 @@ class StopTimeIndexWriter {
             index.writeBytes(stopBytes)
             index.writeInt(trips.size)
             trips.forEach { trip ->
-                val tripBytes = keyOf(trip).encodeToByteArray()
-                index.writeShort(tripBytes.size)
-                index.writeBytes(tripBytes)
+                val ordinal = tripOrdinalByKey[trip]
+                    ?: error("stop-time reverse index references unindexed trip: $trip")
+                index.writeInt(ordinal)
             }
         }
         return dataBytes to index.toByteArray()
@@ -136,7 +144,8 @@ class StopTimeIndexWriter {
 
         /** Stable, delimiter-separated identity so keys survive class changes. */
         fun keyOf(trip: TripKey): String = trip.feedId.value + "|" + trip.tripId
-        internal val INDEX_MAGIC = "STIDX003".encodeToByteArray()
+        internal val INDEX_MAGIC = "STIDX004".encodeToByteArray()
+        internal val INDEX_MAGIC_V3 = "STIDX003".encodeToByteArray()
         internal val INDEX_MAGIC_V2 = "STIDX002".encodeToByteArray()
     }
 }
@@ -148,10 +157,10 @@ class StopTimeIndexFormatException(message: String) : IllegalStateException(mess
  * Random access to stop times by trip, parsed from the in-memory [dataBytes]
  * file image built by [StopTimeIndexWriter.finish].
  *
- * Accepts both the current `STIDX003` layout and the legacy `STIDX002` one.
- * Legacy rows carry no boarding/alighting restrictions, so callers should
- * rebuild through [StaticFeedSnapshotStore.reindexStopTimes] before relying
- * on them for routing.
+ * Accepts the current `STIDX004` layout as well as legacy `STIDX003` and
+ * `STIDX002` ones. `STIDX002` rows carry no boarding/alighting restrictions, and
+ * `STIDX003` uses slower string keys in its reverse index, so callers should
+ * rebuild non-current indexes through [StaticFeedSnapshotStore.reindexStopTimes].
  */
 class StopTimeIndexReader(
     indexBytes: ByteArray,
@@ -174,8 +183,8 @@ class StopTimeIndexReader(
     private var pendingIndexBytes: ByteArray? = indexBytes
     private val format: IndexFormat = detectFormat(indexBytes)
 
-    /** True when this index carries pickup/drop-off restrictions. */
-    val isCurrentFormat: Boolean get() = format == IndexFormat.V3
+    /** True when this index is in the current `STIDX004` format. */
+    val isCurrentFormat: Boolean get() = format == IndexFormat.V4
 
     // Load once for both segments and stopIndex, then release raw indexBytes.
     private val loadedIndex: LoadedIndex by lazy {
@@ -235,7 +244,7 @@ class StopTimeIndexReader(
                     val departure = cursor.readInt().takeIf { it >= 0 }?.let { GtfsServiceTime.ofSeconds(it) }
                     val pickup: Int?
                     val dropOff: Int?
-                    if (format == IndexFormat.V3) {
+                    if (format != IndexFormat.V2) {
                         pickup = cursor.readByte().takeIf { it != StopTimeIndexWriter.NO_VALUE }
                         dropOff = cursor.readByte().takeIf { it != StopTimeIndexWriter.NO_VALUE }
                     } else {
@@ -277,7 +286,7 @@ class StopTimeIndexReader(
             return LoadedIndex(emptyMap(), emptyMap())
         }
         val cursor = ByteArrayCursor(rawIndex, StopTimeIndexWriter.INDEX_MAGIC.size)
-        if (format == IndexFormat.V3) {
+        if (format != IndexFormat.V2) {
             val dataLength = cursor.readLong()
             if (dataLength != dataBytes.size.toLong()) {
                 throw StopTimeIndexFormatException(
@@ -290,8 +299,9 @@ class StopTimeIndexReader(
         val feedPool = HashMap<String, FeedId>(4)
         val tripCapacity = ((tripCount / 0.75f).toInt() + 1).coerceAtLeast(16)
         val result = HashMap<TripKey, List<Segment>>(tripCapacity)
-        val tripPool = HashMap<String, TripKey>(tripCapacity)
-        repeat(tripCount) {
+        val tripPool = if (format == IndexFormat.V4) null else HashMap<String, TripKey>(tripCapacity)
+        val tripsByOrdinal = if (format == IndexFormat.V4) arrayOfNulls<TripKey>(tripCount) else null
+        repeat(tripCount) { ordinal ->
             val name = cursor.readBytes(cursor.readShort()).decodeToString()
             val segmentCount = cursor.readInt()
             val segments: List<Segment> = if (segmentCount == 1) {
@@ -310,7 +320,11 @@ class StopTimeIndexReader(
             val (feedId, tripId) = parseKey(name, feedPool)
             val tripKey = TripKey(feedId, tripId)
             result[tripKey] = segments
-            tripPool[name] = tripKey
+            if (tripsByOrdinal != null) {
+                tripsByOrdinal[ordinal] = tripKey
+            } else {
+                tripPool?.set(name, tripKey)
+            }
         }
 
         val stopCount = cursor.readInt()
@@ -324,16 +338,14 @@ class StopTimeIndexReader(
             when (tripsInStop) {
                 0 -> stops[stopId] = emptySet()
                 1 -> {
-                    val tripName = cursor.readBytes(cursor.readShort()).decodeToString()
-                    val key = resolveTripKey(tripName, tripPool, feedPool)
+                    val key = readReverseTripKey(cursor, tripCount, tripsByOrdinal, tripPool, feedPool)
                     stops[stopId] = setOf(key)
                 }
                 else -> {
                     seenTrips.clear()
                     scratchTrips.clear()
                     repeat(tripsInStop) {
-                        val tripName = cursor.readBytes(cursor.readShort()).decodeToString()
-                        val key = resolveTripKey(tripName, tripPool, feedPool)
+                        val key = readReverseTripKey(cursor, tripCount, tripsByOrdinal, tripPool, feedPool)
                         if (seenTrips.add(key)) {
                             scratchTrips.add(key)
                         }
@@ -347,6 +359,27 @@ class StopTimeIndexReader(
             }
         }
         return LoadedIndex(result, stops)
+    }
+
+    private fun readReverseTripKey(
+        cursor: ByteArrayCursor,
+        tripCount: Int,
+        tripsByOrdinal: Array<TripKey?>?,
+        tripPool: HashMap<String, TripKey>?,
+        feedPool: HashMap<String, FeedId>,
+    ): TripKey {
+        if (tripsByOrdinal != null) {
+            val ordinal = cursor.readInt()
+            if (ordinal < 0 || ordinal >= tripCount) {
+                throw StopTimeIndexFormatException(
+                    "stop-time index trip ordinal $ordinal out of range (0 until $tripCount)",
+                )
+            }
+            return tripsByOrdinal[ordinal]
+                ?: throw StopTimeIndexFormatException("missing trip at ordinal $ordinal")
+        }
+        val tripName = cursor.readBytes(cursor.readShort()).decodeToString()
+        return resolveTripKey(tripName, requireNotNull(tripPool), feedPool)
     }
 
     private fun resolveTripKey(
@@ -370,9 +403,13 @@ class StopTimeIndexReader(
     }
 
     companion object {
-        /** True when [indexBytes] is the current format (restrictions present). */
+        /** True when [indexBytes] is the current `STIDX004` format. */
         fun isCurrentFormat(indexBytes: ByteArray): Boolean =
             matches(indexBytes, StopTimeIndexWriter.INDEX_MAGIC)
+
+        /** True when [indexBytes] uses the intermediate `STIDX003` string reverse index. */
+        internal fun isV3Format(indexBytes: ByteArray): Boolean =
+            matches(indexBytes, StopTimeIndexWriter.INDEX_MAGIC_V3)
 
         /** True when [indexBytes] is the legacy format (no restrictions). */
         fun isLegacyFormat(indexBytes: ByteArray): Boolean =
@@ -388,15 +425,16 @@ class StopTimeIndexReader(
     }
 }
 
-private enum class IndexFormat { V2, V3 }
+private enum class IndexFormat { V2, V3, V4 }
 
 private fun detectFormat(indexBytes: ByteArray): IndexFormat {
-    if (indexBytes.isEmpty()) return IndexFormat.V3
+    if (indexBytes.isEmpty()) return IndexFormat.V4
     return when {
-        StopTimeIndexReader.isCurrentFormat(indexBytes) -> IndexFormat.V3
+        StopTimeIndexReader.isCurrentFormat(indexBytes) -> IndexFormat.V4
+        StopTimeIndexReader.isV3Format(indexBytes) -> IndexFormat.V3
         StopTimeIndexReader.isLegacyFormat(indexBytes) -> IndexFormat.V2
         else -> throw StopTimeIndexFormatException(
-            "unrecognized stop-time index format (expected STIDX002 or STIDX003)",
+            "unrecognized stop-time index format (expected STIDX002, STIDX003, or STIDX004)",
         )
     }
 }
