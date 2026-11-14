@@ -1,0 +1,116 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../atlas-domain/0.3.0/atlas-domain-0.3.0.module",
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-domain",
+    "version": "0.3.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-domain-wasm-js.klib",
+          "url": "atlas-domain-wasm-js-0.3.0.klib",
+          "size": 122065,
+          "sha512": "9bea80caadd0b8beef04ac3bf76aa2ca01ba5f983962ee044cac241283d62e27aa389a019acfa2af22917e8ee8acf054791928bf52c17163fc52e8b06794436f",
+          "sha256": "650aa2636717c565abc0c1a3dab61347063de334059de3cd320e0c8f20ef95f3",
+          "sha1": "cdbc6addfa7db6fcd2bf5cd1d9387e0c3204e189",
+          "md5": "661e47cf1817ce843066fe22acde588f"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-domain-wasm-js.klib",
+          "url": "atlas-domain-wasm-js-0.3.0.klib",
+          "size": 122065,
+          "sha512": "9bea80caadd0b8beef04ac3bf76aa2ca01ba5f983962ee044cac241283d62e27aa389a019acfa2af22917e8ee8acf054791928bf52c17163fc52e8b06794436f",
+          "sha256": "650aa2636717c565abc0c1a3dab61347063de334059de3cd320e0c8f20ef95f3",
+          "sha1": "cdbc6addfa7db6fcd2bf5cd1d9387e0c3204e189",
+          "md5": "661e47cf1817ce843066fe22acde588f"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "files": [
+        {
+          "name": "atlas-domain-wasm-js-sources.jar",
+          "url": "atlas-domain-wasm-js-0.3.0-sources.jar",
+          "size": 12689,
+          "sha512": "c1893d5c087f6c987efbafc60cc0375b98baaf00743069592e3ace5573cbe5355363adad09af247b9a3d59b22a5d9d6bac3a38a97d223033e02209d9f0c894cc",
+          "sha256": "9e11147ba85abfb68fb37dfb19523bac9969ddb85db815efd47c19c2bad3f683",
+          "sha1": "2e3bd330c39dd5438cfbd9c30eeb0926baa3926b",
+          "md5": "4082e8b1f50a027b41e359fd0ce06ddc"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,169 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-routing",
+    "version": "0.3.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-routing-metadata.jar",
+          "url": "atlas-routing-0.3.0.jar",
+          "size": 11055,
+          "sha512": "f7392265f9a2f7b71bffce4b2619174419c9e66572d7ab0fb69b5f0f920cba1708f00fff35710afffc7bb176b6fb1b5ad261d4d185eafe73708e2b7e035ca4a7",
+          "sha256": "163ec4a217af7ba68f0dacd192523d1a0d86488c94169bf8dbe91469fdaabc58",
+          "sha1": "b824538c28660bd7f5218714baad077e714088eb",
+          "md5": "b5db114c8e17d08ec824f5c843a8ba52"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "files": [
+        {
+          "name": "atlas-routing-kotlin-sources.jar",
+          "url": "atlas-routing-0.3.0-sources.jar",
+          "size": 26145,
+          "sha512": "a8d66a5db1d08e19784a7a54427a51329f14819bed180ec8b0bf9cb9e70be353a22bc9dd41a94149b3b93ca658e6d0ddab1c7fab22c0209bc0a0406c2e3b3fb6",
+          "sha256": "d6ef09ebaa00910489a73b10eb5388a1bee262fa35714fdbe83ba51eacb574ce",
+          "sha1": "6ae4bb0c33c1f8c247ad3fc14cd796684c1889b2",
+          "md5": "a4dfefef9cd6ae81db6a9bdd3d98a26c"
+        }
+      ]
+    },
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-routing-jvm/0.3.0/atlas-routing-jvm-0.3.0.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-routing-jvm",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-routing-jvm/0.3.0/atlas-routing-jvm-0.3.0.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-routing-jvm",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-routing-jvm/0.3.0/atlas-routing-jvm-0.3.0.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-routing-jvm",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-routing-wasm-js/0.3.0/atlas-routing-wasm-js-0.3.0.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-routing-wasm-js",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-routing-wasm-js/0.3.0/atlas-routing-wasm-js-0.3.0.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-routing-wasm-js",
+        "version": "0.3.0"
+      }
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-routing-wasm-js/0.3.0/atlas-routing-wasm-js-0.3.0.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-routing-wasm-js",
+        "version": "0.3.0"
+      }
+    }
+  ]
+}
