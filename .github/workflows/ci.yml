@@ -34,16 +34,14 @@ jobs:
       # does not honor it) fails with exit 126 "Permission denied" before Gradle
       # starts, which silently skips every later step. Invoking bash explicitly
       # makes the workflow independent of file mode.
-      - name: Unit tests
-        run: bash ./gradlew test jvmTest --console=plain
-
-      - name: Real-feed verification (Metro Transit GTFS)
+      - name: Fetch real-feed GTFS fixture
         run: |
           curl -sSf -o gtfs-metro-transit.zip https://svc.metrotransit.org/mtgtfs/gtfs.zip
           test -s gtfs-metro-transit.zip  # a missing/empty fixture must fail the gate
           ls -lh gtfs-metro-transit.zip
-          bash ./gradlew -Dintellitrip.gtfs.fixture="$GITHUB_WORKSPACE/gtfs-metro-transit.zip" :core:atlas-gtfs-static:jvmTest --tests "*RealFeedSmokeTest" --rerun-tasks --console=plain
-          bash ./gradlew -Dintellitrip.gtfs.fixture="$GITHUB_WORKSPACE/gtfs-metro-transit.zip" :core:atlas-routing:jvmTest --tests "*RealFeedPlanTimeTest" --rerun-tasks --console=plain
+
+      - name: Unit tests and real-feed verification
+        run: bash ./gradlew -Dintellitrip.gtfs.fixture="$GITHUB_WORKSPACE/gtfs-metro-transit.zip" test jvmTest --console=plain
 
       - name: Android lint
         run: bash ./gradlew lint --console=plain
