@@ -1,0 +1,197 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-weather",
+    "version": "0.3.3",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-weather-metadata.jar",
+          "url": "atlas-weather-0.3.3.jar",
+          "size": 6925,
+          "sha512": "f85724045fa2bb64c72df68c426d8b9a10ffd450659e8c4239db57d6f092d4b54fb5f0800c718af088aff89f77c32e112d1ec96f5c5bfc2c0588d470f09f768d",
+          "sha256": "a72896d9507f23fd8ea091b3576af1202d87008701b4cc4590e229e29e83eaad",
+          "sha1": "8a3f198fb9195001aafd0ffe0bd3b53914ef6d47",
+          "md5": "341828870744ab9577a867b4d9347441"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "files": [
+        {
+          "name": "atlas-weather-kotlin-sources.jar",
+          "url": "atlas-weather-0.3.3-sources.jar",
+          "size": 11176,
+          "sha512": "8e9f9bc2d46aaf10bd1e03f64ea18e8a246090a6c1b051819d3c4d4f9c63d5804518e2a6dbeced86f8e19f342a677f586edf6e4897414251d7ebf3fb057322d5",
+          "sha256": "386b533c1d896dec38eadc3d5247f585821dc1d42b500ff61f65d39a8b8f58e8",
+          "sha1": "f0b9e088660fd0a9c95bf6219f4c89310afd02bb",
+          "md5": "aa3ffecf26da61d655f28dc7775aa3e1"
+        }
+      ]
+    },
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-weather-jvm/0.3.3/atlas-weather-jvm-0.3.3.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-weather-jvm",
+        "version": "0.3.3"
+      }
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-weather-jvm/0.3.3/atlas-weather-jvm-0.3.3.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-weather-jvm",
+        "version": "0.3.3"
+      }
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-weather-jvm/0.3.3/atlas-weather-jvm-0.3.3.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-weather-jvm",
+        "version": "0.3.3"
+      }
+    },
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-weather-wasm-js/0.3.3/atlas-weather-wasm-js-0.3.3.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-weather-wasm-js",
+        "version": "0.3.3"
+      }
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-weather-wasm-js/0.3.3/atlas-weather-wasm-js-0.3.3.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-weather-wasm-js",
+        "version": "0.3.3"
+      }
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-weather-wasm-js/0.3.3/atlas-weather-wasm-js-0.3.3.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-weather-wasm-js",
+        "version": "0.3.3"
+      }
+    }
+  ]
+}

@@ -1,0 +1,221 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../atlas-engine/0.3.3/atlas-engine-0.3.3.module",
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-engine",
+    "version": "0.3.3",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-scope",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-routing",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-map",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-engine-jvm.jar",
+          "url": "atlas-engine-jvm-0.3.3.jar",
+          "size": 20118,
+          "sha512": "933cd2c15ddfb20edcc98f86cd056377743c116454c55ead2f2745ad884a594fcce416d48443f90e4f9c2af6b0d96b50077c7d455aece2fab5d4b5d259e7fb6b",
+          "sha256": "3fef0462c096d377cc712ca77203690c50649e4fed23296088ea7d00bc3afa0d",
+          "sha1": "6600e7f4a16ae6e3e8b0c3cd9552e5c178d42d98",
+          "md5": "eecbb49570dd4847701927f6c2446520"
+        }
+      ]
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-scope",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-routing",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-map",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-gtfs-static",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-gtfs-realtime",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-weather",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-engine-jvm.jar",
+          "url": "atlas-engine-jvm-0.3.3.jar",
+          "size": 20118,
+          "sha512": "933cd2c15ddfb20edcc98f86cd056377743c116454c55ead2f2745ad884a594fcce416d48443f90e4f9c2af6b0d96b50077c7d455aece2fab5d4b5d259e7fb6b",
+          "sha256": "3fef0462c096d377cc712ca77203690c50649e4fed23296088ea7d00bc3afa0d",
+          "sha1": "6600e7f4a16ae6e3e8b0c3cd9552e5c178d42d98",
+          "md5": "eecbb49570dd4847701927f6c2446520"
+        }
+      ]
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "atlas-engine-jvm-sources.jar",
+          "url": "atlas-engine-jvm-0.3.3-sources.jar",
+          "size": 3297,
+          "sha512": "3722e7af24f9791cadba3a70865981a1d089d3aac30b1752c24e396ed09eac67011f1742b5f2dcfcc8365c368c2bf2b91f7013d6003e8a0d94edeef3490b0871",
+          "sha256": "aee757494632fa0188d18cec4bd1a23a1bf8360cf0fb7712e96412ffec857c66",
+          "sha1": "32e43b5a8b58583c5ec396a4afff23086d3e579a",
+          "md5": "8d8a475abb7009853ca462db19f79370"
+        }
+      ]
+    }
+  ]
+}

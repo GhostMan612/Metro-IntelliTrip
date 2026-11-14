@@ -1,0 +1,186 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../atlas-engine/0.3.3/atlas-engine-0.3.3.module",
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-engine",
+    "version": "0.3.3",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-scope",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-routing",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-map",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-engine-wasm-js.klib",
+          "url": "atlas-engine-wasm-js-0.3.3.klib",
+          "size": 19600,
+          "sha512": "0a888702ca732b14dfe2228478c9a01205830fc019f221dfb4845de92f04d99fae92253fc79c4c5c2cf76cd791dcfc5265d858008e3ad74f69483ba84a6fc405",
+          "sha256": "e55f466c48a92da9a794b524ca74583811714734188cb3468734def3f20dae52",
+          "sha1": "81f76cd49b42f4310bd429e748d6c60643a479ef",
+          "md5": "7ca6145bb0300eace613e5ac0ebdfbe4"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-scope",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-routing",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-map",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-engine-wasm-js.klib",
+          "url": "atlas-engine-wasm-js-0.3.3.klib",
+          "size": 19600,
+          "sha512": "0a888702ca732b14dfe2228478c9a01205830fc019f221dfb4845de92f04d99fae92253fc79c4c5c2cf76cd791dcfc5265d858008e3ad74f69483ba84a6fc405",
+          "sha256": "e55f466c48a92da9a794b524ca74583811714734188cb3468734def3f20dae52",
+          "sha1": "81f76cd49b42f4310bd429e748d6c60643a479ef",
+          "md5": "7ca6145bb0300eace613e5ac0ebdfbe4"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "files": [
+        {
+          "name": "atlas-engine-wasm-js-sources.jar",
+          "url": "atlas-engine-wasm-js-0.3.3-sources.jar",
+          "size": 3297,
+          "sha512": "3722e7af24f9791cadba3a70865981a1d089d3aac30b1752c24e396ed09eac67011f1742b5f2dcfcc8365c368c2bf2b91f7013d6003e8a0d94edeef3490b0871",
+          "sha256": "aee757494632fa0188d18cec4bd1a23a1bf8360cf0fb7712e96412ffec857c66",
+          "sha1": "32e43b5a8b58583c5ec396a4afff23086d3e579a",
+          "md5": "8d8a475abb7009853ca462db19f79370"
+        }
+      ]
+    }
+  ]
+}

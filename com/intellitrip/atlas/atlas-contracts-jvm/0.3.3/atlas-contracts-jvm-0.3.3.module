@@ -1,0 +1,158 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../atlas-contracts/0.3.3/atlas-contracts-0.3.3.module",
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-contracts",
+    "version": "0.3.3",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-contracts-jvm.jar",
+          "url": "atlas-contracts-jvm-0.3.3.jar",
+          "size": 44988,
+          "sha512": "363ce6a61014fd2e2f0836e75c8895f9ffd0c266c43e42960e6ea7360b20015237fdaf3fb204704e9767680480f11c1c549a605979c95344731ac353b8f5d244",
+          "sha256": "96736364c12e61b73eb82c1ee1881f8407d8f81aff8149d28e42d4c7847c26f8",
+          "sha1": "22803ac7ad2a181d33638c998d39e943b308e11d",
+          "md5": "ebb156f08ee61890a15ab6d6279a94cf"
+        }
+      ]
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-contracts-jvm.jar",
+          "url": "atlas-contracts-jvm-0.3.3.jar",
+          "size": 44988,
+          "sha512": "363ce6a61014fd2e2f0836e75c8895f9ffd0c266c43e42960e6ea7360b20015237fdaf3fb204704e9767680480f11c1c549a605979c95344731ac353b8f5d244",
+          "sha256": "96736364c12e61b73eb82c1ee1881f8407d8f81aff8149d28e42d4c7847c26f8",
+          "sha1": "22803ac7ad2a181d33638c998d39e943b308e11d",
+          "md5": "ebb156f08ee61890a15ab6d6279a94cf"
+        }
+      ]
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "atlas-contracts-jvm-sources.jar",
+          "url": "atlas-contracts-jvm-0.3.3-sources.jar",
+          "size": 7904,
+          "sha512": "4ee617058d83f1379e0cdccf86e959a6ad755321b7a881f1c0ac389b065afc0a24e987a329b8f7ef2bce1aae9906f4802f03c2350c9971c8fb6f478e394a2ea5",
+          "sha256": "72baf5dda613019e2cb450048888e7a09963be4d9a47e0155671b1eb19aa2ffc",
+          "sha1": "e6f8c2b7b3fd5b077b1c3ec9a7d9c14d46c42390",
+          "md5": "25bac0e004b9992b25f8f4e52831f86f"
+        }
+      ]
+    }
+  ]
+}

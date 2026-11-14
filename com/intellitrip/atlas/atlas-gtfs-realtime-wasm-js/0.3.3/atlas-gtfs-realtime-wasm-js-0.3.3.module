@@ -1,0 +1,158 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../atlas-gtfs-realtime/0.3.3/atlas-gtfs-realtime-0.3.3.module",
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-gtfs-realtime",
+    "version": "0.3.3",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-gtfs-realtime-wasm-js.klib",
+          "url": "atlas-gtfs-realtime-wasm-js-0.3.3.klib",
+          "size": 75342,
+          "sha512": "cd9ac2de72690895d60f07fe1feff0bef2d1dcb4536bf1edfe1ee0cf95fbfcc28d32eac0ac517643a2f568565d2f741c7745db88a19eb9aa993337ae924dfe88",
+          "sha256": "a94740cdc2dcba3cddf83d5a1c59595d8ce87240c5a41afe5f5c1d7a4a6861ea",
+          "sha1": "09632b45e276ef93c7c553da8f675a7af3f39d2a",
+          "md5": "76427f9e0ecf06b5d3942e9c3e5a756c"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-gtfs-realtime-wasm-js.klib",
+          "url": "atlas-gtfs-realtime-wasm-js-0.3.3.klib",
+          "size": 75342,
+          "sha512": "cd9ac2de72690895d60f07fe1feff0bef2d1dcb4536bf1edfe1ee0cf95fbfcc28d32eac0ac517643a2f568565d2f741c7745db88a19eb9aa993337ae924dfe88",
+          "sha256": "a94740cdc2dcba3cddf83d5a1c59595d8ce87240c5a41afe5f5c1d7a4a6861ea",
+          "sha1": "09632b45e276ef93c7c553da8f675a7af3f39d2a",
+          "md5": "76427f9e0ecf06b5d3942e9c3e5a756c"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "files": [
+        {
+          "name": "atlas-gtfs-realtime-wasm-js-sources.jar",
+          "url": "atlas-gtfs-realtime-wasm-js-0.3.3-sources.jar",
+          "size": 12786,
+          "sha512": "2f68397f304fe4eb416a7a0de23d6145cb7a3e46fb084a0195bad89ac0f32875eb4f9acd2ba2237fcfa49c6b058f57d608b31fce5f42c3d13e8d657d1c9a0a4d",
+          "sha256": "52bbab6cb7b3cbe35f7f28553e59858b6b429cb849303e55a4c62fcb7a74c869",
+          "sha1": "12c8af4f1c2c10fce9bf769e07d6c7064af688e5",
+          "md5": "247cc1cc484ee79134f85d5554eab2c1"
+        }
+      ]
+    }
+  ]
+}

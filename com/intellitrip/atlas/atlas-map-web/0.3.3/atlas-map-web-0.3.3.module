@@ -1,0 +1,183 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-map-web",
+    "version": "0.3.3",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-map",
+          "version": {
+            "requires": "0.3.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-map-web-metadata.jar",
+          "url": "atlas-map-web-0.3.3.jar",
+          "size": 2907,
+          "sha512": "942bea090ac1d448e9a40e4fb33a6df3f9d586aca7f6829f18649dd54a43ccec0cdf8c30b18df3b40038f0087103f115086d8bda8b5490e21775760d088ffa76",
+          "sha256": "2756332fdbd7bf3df798400b5a309be8610bb8b8e3225cf4a100e09c532d2a5b",
+          "sha1": "e4dd2fe0a6e716512019e04d25494f0b0b83563e",
+          "md5": "8a87a997530d29c61d989b8028ca84f1"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "files": [
+        {
+          "name": "atlas-map-web-kotlin-sources.jar",
+          "url": "atlas-map-web-0.3.3-sources.jar",
+          "size": 2331,
+          "sha512": "c961dc6b1d672318b984246e715cadcb4347ffcbf9b26d356ecdd10df893ea6f41a7bfd6aef61b7e0200134db0c6f17eae40824d08ba017c7683746bb7b599c6",
+          "sha256": "963d39ed9c313968228573e13651632c7f7c7b4f2c94bad15a2fcedb9cf05358",
+          "sha1": "67b8953a448a0b93e1e155cd078986e2839f8004",
+          "md5": "dff27fbb5220a4ce19280decd60b05cb"
+        }
+      ]
+    },
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-map-web-jvm/0.3.3/atlas-map-web-jvm-0.3.3.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-map-web-jvm",
+        "version": "0.3.3"
+      }
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-map-web-jvm/0.3.3/atlas-map-web-jvm-0.3.3.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-map-web-jvm",
+        "version": "0.3.3"
+      }
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-map-web-jvm/0.3.3/atlas-map-web-jvm-0.3.3.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-map-web-jvm",
+        "version": "0.3.3"
+      }
+    },
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-map-web-wasm-js/0.3.3/atlas-map-web-wasm-js-0.3.3.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-map-web-wasm-js",
+        "version": "0.3.3"
+      }
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-map-web-wasm-js/0.3.3/atlas-map-web-wasm-js-0.3.3.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-map-web-wasm-js",
+        "version": "0.3.3"
+      }
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-map-web-wasm-js/0.3.3/atlas-map-web-wasm-js-0.3.3.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-map-web-wasm-js",
+        "version": "0.3.3"
+      }
+    }
+  ]
+}
