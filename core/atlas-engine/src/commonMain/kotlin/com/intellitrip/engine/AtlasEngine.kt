@@ -20,6 +20,11 @@ import com.intellitrip.map.TransitRenderPipeline
 import com.intellitrip.routing.TransferIntelligenceService
 import com.intellitrip.routing.TransferIntelligenceService.JourneyReport
 import com.intellitrip.scope.ScopeEngine
+import kotlin.coroutines.coroutineContext
+import kotlin.time.Duration
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withTimeout
 // NOTE: the engine deliberately does NOT depend on `atlas-offline`
 // (facade boundary, not platform: the offline module is KMP since M3c).
 // Offline capability is a portable Boolean; detail (staleness, basemap) is
@@ -93,6 +98,7 @@ class AtlasEngine(
         request: TripPlanRequest,
         realtimeUpdates: List<com.intellitrip.domain.TripUpdate> = emptyList(),
     ): JourneyOutcome {
+        coroutineContext.ensureActive()
         val provider = providers.routing
             ?: return JourneyOutcome.Unavailable("No routing provider configured")
         return when (val result = provider.plan(request)) {
@@ -100,7 +106,46 @@ class AtlasEngine(
                 transferIntelligence.evaluate(result.data, realtimeUpdates, emptyList()).map { it.journey }
             )
 
-            else -> JourneyOutcome.Unavailable(describe(result))
+            is ProviderResult.PartialResult -> {
+                if (result.data.isNotEmpty()) {
+                    JourneyOutcome.Planned(
+                        transferIntelligence.evaluate(result.data, realtimeUpdates, emptyList()).map { it.journey }
+                    )
+                } else {
+                    JourneyOutcome.Unavailable(
+                        reason = describePartial(result.missing),
+                        missing = result.missing,
+                    )
+                }
+            }
+
+            else -> JourneyOutcome.Unavailable(
+                reason = describe(result),
+                missing = describeFallbackMissing(result),
+            )
+        }
+    }
+
+    /**
+     * Plans a journey within [timeout], converting an elapsed local deadline into
+     * an unavailable timeout outcome while still propagating caller cancellation.
+     */
+    suspend fun planJourney(
+        request: TripPlanRequest,
+        timeout: Duration,
+        realtimeUpdates: List<com.intellitrip.domain.TripUpdate> = emptyList(),
+    ): JourneyOutcome {
+        coroutineContext.ensureActive()
+        return try {
+            withTimeout(timeout) {
+                planJourney(request, realtimeUpdates)
+            }
+        } catch (e: TimeoutCancellationException) {
+            coroutineContext.ensureActive()
+            JourneyOutcome.Unavailable(
+                reason = "Planning timed out after $timeout",
+                missing = listOf("timeout"),
+            )
         }
     }
 
@@ -117,14 +162,36 @@ class AtlasEngine(
         is ProviderResult.RateLimited -> "rate limited"
         is ProviderResult.AuthFailure -> result.error.message ?: "authentication failure"
         is ProviderResult.Timeout -> result.error.message ?: "timeout"
+        is ProviderResult.PartialResult -> describePartial(result.missing)
         else -> "no result"
+    }
+
+    private fun describePartial(missing: List<String>): String = when {
+        "stops-within-walk-limit" in missing -> "No transit stops within walk limit"
+        "arrive-by-unachievable" in missing -> "No transit trip arrives by requested time"
+        missing.isNotEmpty() -> missing.joinToString(", ")
+        else -> "no result"
+    }
+
+    private fun describeFallbackMissing(result: ProviderResult<*>): List<String> = when (result) {
+        is ProviderResult.Timeout -> listOf("timeout")
+        is ProviderResult.RateLimited -> listOf("rate-limited")
+        is ProviderResult.NetworkFailure -> listOf("network-failure")
+        is ProviderResult.Unavailable -> listOf("provider-unavailable")
+        is ProviderResult.MalformedResponse -> listOf("malformed-response")
+        is ProviderResult.AuthFailure -> listOf("auth-failure")
+        is ProviderResult.PartialResult -> result.missing
+        else -> emptyList()
     }
 }
 
 sealed interface JourneyOutcome {
     data class Planned(val journeys: List<JourneyOption>) : JourneyOutcome
 
-    data class Unavailable(val reason: String) : JourneyOutcome
+    data class Unavailable(
+        val reason: String,
+        val missing: List<String> = emptyList(),
+    ) : JourneyOutcome
 }
 
 /** Convenience accessor for realtime vehicle snapshots from the configured feed. */
