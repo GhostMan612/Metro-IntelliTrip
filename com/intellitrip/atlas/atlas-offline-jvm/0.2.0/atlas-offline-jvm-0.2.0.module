@@ -1,0 +1,151 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../atlas-offline/0.2.0/atlas-offline-0.2.0.module",
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-offline",
+    "version": "0.2.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.2.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-offline-jvm.jar",
+          "url": "atlas-offline-jvm-0.2.0.jar",
+          "size": 74878,
+          "sha512": "91d1b9f9e4339a59479a704cf9e299b912aab2c119f70cab5ac1ab29379eb0fcee26378b1cc28b4743d96026dd2fed8447104edb31582fbee71dece4143c3d1a",
+          "sha256": "ae97c79392437ece1652a0f91591655188edaaceea7881a83c93a9a3ae1a8281",
+          "sha1": "10b4f3c06615a4a30e2ddbf08dc79ba78cc3d1b9",
+          "md5": "76147b0965507d153d4310788bef7bfa"
+        }
+      ]
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.2.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-gtfs-static",
+          "version": {
+            "requires": "0.2.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-offline-jvm.jar",
+          "url": "atlas-offline-jvm-0.2.0.jar",
+          "size": 74878,
+          "sha512": "91d1b9f9e4339a59479a704cf9e299b912aab2c119f70cab5ac1ab29379eb0fcee26378b1cc28b4743d96026dd2fed8447104edb31582fbee71dece4143c3d1a",
+          "sha256": "ae97c79392437ece1652a0f91591655188edaaceea7881a83c93a9a3ae1a8281",
+          "sha1": "10b4f3c06615a4a30e2ddbf08dc79ba78cc3d1b9",
+          "md5": "76147b0965507d153d4310788bef7bfa"
+        }
+      ]
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "atlas-offline-jvm-sources.jar",
+          "url": "atlas-offline-jvm-0.2.0-sources.jar",
+          "size": 22187,
+          "sha512": "97d6fec0c263f934f903a54922661f39a2bf3ed7019a01646415f15de9cff0cfa19b214fdd86237bcb50c8ffc82cf956ad774f4a025146ce6fc0c8fa65c69821",
+          "sha256": "ba6e7d73ffc064f0c63caa0330858696e0b0c5d0c589fc34ab432317b5c3bc9c",
+          "sha1": "672ad12e872c8b9b4a5d08836d94fd58343cbc86",
+          "md5": "91c66142f935896db93e293c25df5870"
+        }
+      ]
+    }
+  ]
+}

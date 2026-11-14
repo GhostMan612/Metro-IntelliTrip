@@ -1,0 +1,733 @@
+{
+  "artifacts": [
+    {
+      "path": "com/intellitrip/atlas/atlas-contracts/0.2.0/atlas-contracts-0.2.0-kotlin-tooling-metadata.json",
+      "sha256": "ed6c277634b5bf141a9c3f6977865e066d46d53943a88a70254537c1511f1b01",
+      "size": 977
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-contracts/0.2.0/atlas-contracts-0.2.0-sources.jar",
+      "sha256": "ebeb2c7e57d355e6a1eef3265682efd1ef607bc4fe7e4ede9643fb3fe88f5e0a",
+      "size": 6250
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-contracts/0.2.0/atlas-contracts-0.2.0.jar",
+      "sha256": "4bbdbdc8321e816bedc2fc101ef1be280af1b2547af697efb8bd291424e82256",
+      "size": 8239
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-contracts/0.2.0/atlas-contracts-0.2.0.module",
+      "sha256": "9df2ad5c771d5ab8304d4effc2f1fef09ab5f0ae5a1afcab4fda5bff21fe3dd5",
+      "size": 6276
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-contracts/0.2.0/atlas-contracts-0.2.0.pom",
+      "sha256": "8f90bf6e721fcc77bd2067086abf1f43f5dd4de340d82033bbc833c5013286e4",
+      "size": 2418
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-contracts-jvm/0.2.0/atlas-contracts-jvm-0.2.0-sources.jar",
+      "sha256": "72baf5dda613019e2cb450048888e7a09963be4d9a47e0155671b1eb19aa2ffc",
+      "size": 7904
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-contracts-jvm/0.2.0/atlas-contracts-jvm-0.2.0.jar",
+      "sha256": "96736364c12e61b73eb82c1ee1881f8407d8f81aff8149d28e42d4c7847c26f8",
+      "size": 44988
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-contracts-jvm/0.2.0/atlas-contracts-jvm-0.2.0.module",
+      "sha256": "b77c45ec623d808532ac031e100831d908226b27dbd73d28f5d91d7c874b65cd",
+      "size": 4819
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-contracts-jvm/0.2.0/atlas-contracts-jvm-0.2.0.pom",
+      "sha256": "2aa7de8a985e05ff40647f85eac933076c4cc963b9989fa2afd1e6d1da0f6f8f",
+      "size": 2634
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-contracts-wasm-js/0.2.0/atlas-contracts-wasm-js-0.2.0-sources.jar",
+      "sha256": "2f170d86fca8bc24ab3d9802a17330b791b86544b2fabbada4bbd8f4fa9248e7",
+      "size": 10772
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-contracts-wasm-js/0.2.0/atlas-contracts-wasm-js-0.2.0.klib",
+      "sha256": "214e6542677f8c4cb3ea010f504d77cf5e12222150868da860d955953dc18916",
+      "size": 47096
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-contracts-wasm-js/0.2.0/atlas-contracts-wasm-js-0.2.0.module",
+      "sha256": "6e5bd9e9e59c0116b8be64ef2cc9a27db6b85c09507a1b9f80e7145d84297a2c",
+      "size": 4502
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-contracts-wasm-js/0.2.0/atlas-contracts-wasm-js-0.2.0.pom",
+      "sha256": "96e4db95c9049ba1f9c7e47f4b00df699bd9cbb95ce2cfed69e09d987e98eb13",
+      "size": 2484
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-domain/0.2.0/atlas-domain-0.2.0-kotlin-tooling-metadata.json",
+      "sha256": "ed6c277634b5bf141a9c3f6977865e066d46d53943a88a70254537c1511f1b01",
+      "size": 977
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-domain/0.2.0/atlas-domain-0.2.0-sources.jar",
+      "sha256": "9e11147ba85abfb68fb37dfb19523bac9969ddb85db815efd47c19c2bad3f683",
+      "size": 12689
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-domain/0.2.0/atlas-domain-0.2.0.jar",
+      "sha256": "755616a2dc10f5b3b0cc22f6809933382f423028f7e4103c8c9c0ad063e5b923",
+      "size": 16451
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-domain/0.2.0/atlas-domain-0.2.0.module",
+      "sha256": "98af435c0a4b22e0867077b17038c372ae7a90b701ff9074bc2899d24b7968dc",
+      "size": 5862
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-domain/0.2.0/atlas-domain-0.2.0.pom",
+      "sha256": "1bb371f71e8be83ba605ca793a37077455392c84c510418c03b346d6f088e6cc",
+      "size": 2032
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-domain-jvm/0.2.0/atlas-domain-jvm-0.2.0-sources.jar",
+      "sha256": "9e11147ba85abfb68fb37dfb19523bac9969ddb85db815efd47c19c2bad3f683",
+      "size": 12689
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-domain-jvm/0.2.0/atlas-domain-jvm-0.2.0.jar",
+      "sha256": "40aea5976b0ddc2e5b1eb705025e596a2e8d92b281789f22e9592c977dda39eb",
+      "size": 132280
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-domain-jvm/0.2.0/atlas-domain-jvm-0.2.0.module",
+      "sha256": "ebcc5ea5c2cf5897db60558361c022cd6e1890c2e6ad3c9858d0f2e3dd6b55e7",
+      "size": 4101
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-domain-jvm/0.2.0/atlas-domain-jvm-0.2.0.pom",
+      "sha256": "c8abb0382ea82a59a0a96eacd3d170e08281db6f022caea1ef27135c1a903dd4",
+      "size": 2240
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-domain-wasm-js/0.2.0/atlas-domain-wasm-js-0.2.0-sources.jar",
+      "sha256": "9e11147ba85abfb68fb37dfb19523bac9969ddb85db815efd47c19c2bad3f683",
+      "size": 12689
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-domain-wasm-js/0.2.0/atlas-domain-wasm-js-0.2.0.klib",
+      "sha256": "650aa2636717c565abc0c1a3dab61347063de334059de3cd320e0c8f20ef95f3",
+      "size": 122065
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-domain-wasm-js/0.2.0/atlas-domain-wasm-js-0.2.0.module",
+      "sha256": "440d89041b5c24f741588ecf1bd3ae347b89ca453a03c9a1cdb2f28c5690b847",
+      "size": 3783
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-domain-wasm-js/0.2.0/atlas-domain-wasm-js-0.2.0.pom",
+      "sha256": "7fd571536ef7c73d8d2502fb684efbde8458ec64b299a65c157a7ecb12e95374",
+      "size": 2082
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-engine/0.2.0/atlas-engine-0.2.0-kotlin-tooling-metadata.json",
+      "sha256": "ed6c277634b5bf141a9c3f6977865e066d46d53943a88a70254537c1511f1b01",
+      "size": 977
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-engine/0.2.0/atlas-engine-0.2.0-sources.jar",
+      "sha256": "06775b910ebdc1b610916e1f51a4cd8ae08bf8a077b16e993cacbcbd7a225f69",
+      "size": 2743
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-engine/0.2.0/atlas-engine-0.2.0.jar",
+      "sha256": "7d1eeb759cfcbe671062ac68fe7b162edbccdb373e96323cfe0687118c804933",
+      "size": 3460
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-engine/0.2.0/atlas-engine-0.2.0.module",
+      "sha256": "e766ecb3dddb8b6a096e05f5a59ad22adec40d376840760f853d0ebaff701695",
+      "size": 6528
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-engine/0.2.0/atlas-engine-0.2.0.pom",
+      "sha256": "ae677b4248086aed4a61e8e51ab73c9d296f93720d93df7dd50e782ef2350111",
+      "size": 2772
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-engine-jvm/0.2.0/atlas-engine-jvm-0.2.0-sources.jar",
+      "sha256": "06775b910ebdc1b610916e1f51a4cd8ae08bf8a077b16e993cacbcbd7a225f69",
+      "size": 2743
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-engine-jvm/0.2.0/atlas-engine-jvm-0.2.0.jar",
+      "sha256": "e9f131877554322684b9ac6691247977d9dd05f877e4a4ded8e1f68d47aa8c33",
+      "size": 15306
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-engine-jvm/0.2.0/atlas-engine-jvm-0.2.0.module",
+      "sha256": "439b019b9fa5642debf3bd7609a9a31eff32c828eddda92a02acc42865e982d3",
+      "size": 6302
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-engine-jvm/0.2.0/atlas-engine-jvm-0.2.0.pom",
+      "sha256": "876eea655feae3e5bab7a76e0423c0e6cee6e6be1c7ccc3be196bc32360a6cfc",
+      "size": 3974
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-engine-wasm-js/0.2.0/atlas-engine-wasm-js-0.2.0-sources.jar",
+      "sha256": "06775b910ebdc1b610916e1f51a4cd8ae08bf8a077b16e993cacbcbd7a225f69",
+      "size": 2743
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-engine-wasm-js/0.2.0/atlas-engine-wasm-js-0.2.0.klib",
+      "sha256": "7e205f9fdad779f184c207173db8665174a3b560f55063ef39bb241a487a7a33",
+      "size": 16692
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-engine-wasm-js/0.2.0/atlas-engine-wasm-js-0.2.0.module",
+      "sha256": "473b0d72110962b845e781164b8710cf63a31055b33309a7e45b26625b9d9f9e",
+      "size": 5467
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-engine-wasm-js/0.2.0/atlas-engine-wasm-js-0.2.0.pom",
+      "sha256": "7c9361afb12ab2899c863c1b8e2794e2f099c8dc5239786a4d1f449e0ddbe288",
+      "size": 3257
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-realtime/0.2.0/atlas-gtfs-realtime-0.2.0-kotlin-tooling-metadata.json",
+      "sha256": "ed6c277634b5bf141a9c3f6977865e066d46d53943a88a70254537c1511f1b01",
+      "size": 977
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-realtime/0.2.0/atlas-gtfs-realtime-0.2.0-sources.jar",
+      "sha256": "d6a00c6dfc55bf70eb0459245052a1b4d729f456b71f6d283e115d88c001b317",
+      "size": 10949
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-realtime/0.2.0/atlas-gtfs-realtime-0.2.0.jar",
+      "sha256": "0e04e75236576ce8562435be18c8501a50c256a75aa88f9f3b4a72e0fb9a2eb7",
+      "size": 7095
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-realtime/0.2.0/atlas-gtfs-realtime-0.2.0.module",
+      "sha256": "b2ec940c58f30a01d7750a02bb13ad2a2aa55585fa0aa4297406addec895a4e6",
+      "size": 6540
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-realtime/0.2.0/atlas-gtfs-realtime-0.2.0.pom",
+      "sha256": "29766d12ba24fcfb1a0ff9d8d500ec9576b1d84b9db0d24ff649efe0e0ce2790",
+      "size": 2611
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-realtime-jvm/0.2.0/atlas-gtfs-realtime-jvm-0.2.0-sources.jar",
+      "sha256": "342c4bc4715c5153f32396a99e8dd5626a5941b8a2333cc29a9e70bd744413a2",
+      "size": 13699
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-realtime-jvm/0.2.0/atlas-gtfs-realtime-jvm-0.2.0.jar",
+      "sha256": "adbb4b0fee21287e6c2c3c79254d68e62fbbcc793b2d779e5eeec0ac828e97d3",
+      "size": 76418
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-realtime-jvm/0.2.0/atlas-gtfs-realtime-jvm-0.2.0.module",
+      "sha256": "32114de1ef9f0e66b9c185c9765ca99eba69b424e2a54c5ed5b24555a71d59ff",
+      "size": 5371
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-realtime-jvm/0.2.0/atlas-gtfs-realtime-jvm-0.2.0.pom",
+      "sha256": "a4b384dee071559669f1abd4e87090f0c0f617dd5455299da872d338832e117a",
+      "size": 3022
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-realtime-wasm-js/0.2.0/atlas-gtfs-realtime-wasm-js-0.2.0-sources.jar",
+      "sha256": "52bbab6cb7b3cbe35f7f28553e59858b6b429cb849303e55a4c62fcb7a74c869",
+      "size": 12786
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-realtime-wasm-js/0.2.0/atlas-gtfs-realtime-wasm-js-0.2.0.klib",
+      "sha256": "a94740cdc2dcba3cddf83d5a1c59595d8ce87240c5a41afe5f5c1d7a4a6861ea",
+      "size": 75342
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-realtime-wasm-js/0.2.0/atlas-gtfs-realtime-wasm-js-0.2.0.module",
+      "sha256": "c9e59e6bcb0696ab60d55eac9c4d9681cb5bc95894c00d038ac6dcdb31aa5970",
+      "size": 4880
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-realtime-wasm-js/0.2.0/atlas-gtfs-realtime-wasm-js-0.2.0.pom",
+      "sha256": "6a0d15d78a4b77536466a3d56729e501358473191f28eda22c59e885d093a3bf",
+      "size": 2685
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-static/0.2.0/atlas-gtfs-static-0.2.0-kotlin-tooling-metadata.json",
+      "sha256": "ed6c277634b5bf141a9c3f6977865e066d46d53943a88a70254537c1511f1b01",
+      "size": 977
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-static/0.2.0/atlas-gtfs-static-0.2.0-sources.jar",
+      "sha256": "8550208c4d5ff516aa9bebcd1d7c1cf30d533dbb75439abf500d8243fd541993",
+      "size": 41061
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-static/0.2.0/atlas-gtfs-static-0.2.0.jar",
+      "sha256": "9794124b224f721124e14d2c77d927d73557c8788e1a563ab61663d13b032349",
+      "size": 18410
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-static/0.2.0/atlas-gtfs-static-0.2.0.module",
+      "sha256": "b09706416d38c52bf3848c6a413b5546e2b5822af60006d871a0910be7cb73df",
+      "size": 6495
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-static/0.2.0/atlas-gtfs-static-0.2.0.pom",
+      "sha256": "540ccb5be4cb5cbb15bc985bdceb1487efa57954be0b7c71e80bfb4a0e14c03f",
+      "size": 2609
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-static-jvm/0.2.0/atlas-gtfs-static-jvm-0.2.0-sources.jar",
+      "sha256": "7616d358a0eff80b16d36afdffeb2d8c995a54689f2920222c9fdf91c10d3097",
+      "size": 43606
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-static-jvm/0.2.0/atlas-gtfs-static-jvm-0.2.0.jar",
+      "sha256": "65427ced5bb723abb5b9d0f8c83a0502736d59459984c58314eafeeabf621d69",
+      "size": 194437
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-static-jvm/0.2.0/atlas-gtfs-static-jvm-0.2.0.module",
+      "sha256": "46c5631c6a1cb66680f53a2fe1a50f75e9498f8823c117b60a7d82e5016822e5",
+      "size": 5182
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-static-jvm/0.2.0/atlas-gtfs-static-jvm-0.2.0.pom",
+      "sha256": "ef4c914234104fd32419235a6dc5d574d4514036d4190aba48176060cf7c8d80",
+      "size": 2829
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-static-wasm-js/0.2.0/atlas-gtfs-static-wasm-js-0.2.0-sources.jar",
+      "sha256": "c18baa57e00ffb35f976b4b7e765b86de4c5cd41f6427fedd6020fd88779c17f",
+      "size": 43855
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-static-wasm-js/0.2.0/atlas-gtfs-static-wasm-js-0.2.0.klib",
+      "sha256": "fb58a350e670d76567a5f8470c1c09107d516200dc8c513068a9a6d45110232e",
+      "size": 247346
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-static-wasm-js/0.2.0/atlas-gtfs-static-wasm-js-0.2.0.module",
+      "sha256": "894a6ca10e6ed35cc704f375e0c6e900b040e4c96523943921c6212110d56748",
+      "size": 4864
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-gtfs-static-wasm-js/0.2.0/atlas-gtfs-static-wasm-js-0.2.0.pom",
+      "sha256": "f5b5f5fd3f395a1dae251dee546c34e7a36f3fd4c0698ee6b6314b8e808db182",
+      "size": 2683
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map/0.2.0/atlas-map-0.2.0-kotlin-tooling-metadata.json",
+      "sha256": "ed6c277634b5bf141a9c3f6977865e066d46d53943a88a70254537c1511f1b01",
+      "size": 977
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map/0.2.0/atlas-map-0.2.0-sources.jar",
+      "sha256": "279a968f1d3533ec792297a9cc6431adca03c62ea627711a1e66a9221922a973",
+      "size": 12643
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map/0.2.0/atlas-map-0.2.0.jar",
+      "sha256": "37a19a85b77ea4657e3728541fecd9f6da443a9bdd85287ee207c1ad1ab5c674",
+      "size": 8073
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map/0.2.0/atlas-map-0.2.0.module",
+      "sha256": "215ca1a017019b8f5ece8ef21bf1439fac23a6d1c949d9c7ef1a2441012437ab",
+      "size": 5960
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map/0.2.0/atlas-map-0.2.0.pom",
+      "sha256": "d04a288c7ea9a49d1ec95473cfcacbeb13f05a5da9558977d0f0b5c6a5628a7e",
+      "size": 2215
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-jvm/0.2.0/atlas-map-jvm-0.2.0-sources.jar",
+      "sha256": "279a968f1d3533ec792297a9cc6431adca03c62ea627711a1e66a9221922a973",
+      "size": 12643
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-jvm/0.2.0/atlas-map-jvm-0.2.0.jar",
+      "sha256": "206b3916734d6cacb4b6ab4eec8c815e56d44b89c3404144f9eb4cd4770b5da0",
+      "size": 67282
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-jvm/0.2.0/atlas-map-jvm-0.2.0.module",
+      "sha256": "8be69e803c545944eee8425b431c79bc26c04331150e4fb9f38dddfdc6c3cb9f",
+      "size": 4408
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-jvm/0.2.0/atlas-map-jvm-0.2.0.pom",
+      "sha256": "84625853e88bc374a790d7505b0de3282039989ea30cd23ce146cb0666c5211a",
+      "size": 2427
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-wasm-js/0.2.0/atlas-map-wasm-js-0.2.0-sources.jar",
+      "sha256": "279a968f1d3533ec792297a9cc6431adca03c62ea627711a1e66a9221922a973",
+      "size": 12643
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-wasm-js/0.2.0/atlas-map-wasm-js-0.2.0.klib",
+      "sha256": "2ce2e2a6fe4444cb0d74bab8161b2069af7d4e7306bf61d3f9f62d6cd106a444",
+      "size": 72881
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-wasm-js/0.2.0/atlas-map-wasm-js-0.2.0.module",
+      "sha256": "7dff78c2d631e36dad862ccb7a68f0ccf714ab5e8fb2fc61950635b653be723c",
+      "size": 4090
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-wasm-js/0.2.0/atlas-map-wasm-js-0.2.0.pom",
+      "sha256": "9f1d30138d7c5b07fa94c11e694822af9f5257381a38422224a9811560ee7140",
+      "size": 2273
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-web/0.2.0/atlas-map-web-0.2.0-kotlin-tooling-metadata.json",
+      "sha256": "ed6c277634b5bf141a9c3f6977865e066d46d53943a88a70254537c1511f1b01",
+      "size": 977
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-web/0.2.0/atlas-map-web-0.2.0-sources.jar",
+      "sha256": "963d39ed9c313968228573e13651632c7f7c7b4f2c94bad15a2fcedb9cf05358",
+      "size": 2331
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-web/0.2.0/atlas-map-web-0.2.0.jar",
+      "sha256": "2756332fdbd7bf3df798400b5a309be8610bb8b8e3225cf4a100e09c532d2a5b",
+      "size": 2907
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-web/0.2.0/atlas-map-web-0.2.0.module",
+      "sha256": "96a08209e4e0b8f8c9dcc6f7078ecfc0dc0b73d0dba02a56813c0c752d83505c",
+      "size": 6048
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-web/0.2.0/atlas-map-web-0.2.0.pom",
+      "sha256": "ab968b942cc1f2f086b1e5ec43e1723ac33bfc366a6687da557e0d87c512a6d2",
+      "size": 2216
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-web-jvm/0.2.0/atlas-map-web-jvm-0.2.0-sources.jar",
+      "sha256": "963d39ed9c313968228573e13651632c7f7c7b4f2c94bad15a2fcedb9cf05358",
+      "size": 2331
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-web-jvm/0.2.0/atlas-map-web-jvm-0.2.0.jar",
+      "sha256": "5beeb6c6dbecb058780da33ca116825bcaf999c950a4ac52f940a20e33d17c82",
+      "size": 8747
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-web-jvm/0.2.0/atlas-map-web-jvm-0.2.0.module",
+      "sha256": "eb6da57b4f4c8e4e01362eaed2288f5d6bc75eaf6fac480820143810ffd74812",
+      "size": 4071
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-web-jvm/0.2.0/atlas-map-web-jvm-0.2.0.pom",
+      "sha256": "aa623c61ba8ceb931a0f66bfe598a986645f84395fe30728cf7d94bee3c4eb46",
+      "size": 2224
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-web-wasm-js/0.2.0/atlas-map-web-wasm-js-0.2.0-sources.jar",
+      "sha256": "f9630bdd6b69b5b0a7826d797a55914fd886cc40bd68a03d4760206a31aa4111",
+      "size": 5980
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-web-wasm-js/0.2.0/atlas-map-web-wasm-js-0.2.0.klib",
+      "sha256": "a173d221df9d5147ce2d58877aadbc947827b9ce30fa00905f4bed3b1f101b39",
+      "size": 17768
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-web-wasm-js/0.2.0/atlas-map-web-wasm-js-0.2.0.module",
+      "sha256": "07156df2c481b92ff692659971d524af635236c19c914081115f7449c2777297",
+      "size": 4425
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-map-web-wasm-js/0.2.0/atlas-map-web-wasm-js-0.2.0.pom",
+      "sha256": "fafaa4d3c886ea6687f36aef684c0d1b65300a17205c3bbdc09c81dc039321b4",
+      "size": 2683
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-offline/0.2.0/atlas-offline-0.2.0-kotlin-tooling-metadata.json",
+      "sha256": "ed6c277634b5bf141a9c3f6977865e066d46d53943a88a70254537c1511f1b01",
+      "size": 977
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-offline/0.2.0/atlas-offline-0.2.0-sources.jar",
+      "sha256": "0d85c720a6c6b8f2158d412adab63daba6a214fdbfb7dd8dbf996f059bac1c95",
+      "size": 19171
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-offline/0.2.0/atlas-offline-0.2.0.jar",
+      "sha256": "b41e9150e272322361ef765785ab16907eac355e594952dfd2e74d2cdfdf309a",
+      "size": 9631
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-offline/0.2.0/atlas-offline-0.2.0.module",
+      "sha256": "d768b3469722f4116ca004823364eb241e9f860b29109823822ce357c206c72c",
+      "size": 6052
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-offline/0.2.0/atlas-offline-0.2.0.pom",
+      "sha256": "744a80873e4239f293b1f5ebf94764711791b9b33268ba27c953ad4731e7fafe",
+      "size": 2219
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-offline-jvm/0.2.0/atlas-offline-jvm-0.2.0-sources.jar",
+      "sha256": "ba6e7d73ffc064f0c63caa0330858696e0b0c5d0c589fc34ab432317b5c3bc9c",
+      "size": 22187
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-offline-jvm/0.2.0/atlas-offline-jvm-0.2.0.jar",
+      "sha256": "ae97c79392437ece1652a0f91591655188edaaceea7881a83c93a9a3ae1a8281",
+      "size": 74878
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-offline-jvm/0.2.0/atlas-offline-jvm-0.2.0.module",
+      "sha256": "eb63f0b34d74d5b0f5c5c6d8735c161d5a717dac275fa3fe910e2f1a345d05d7",
+      "size": 4617
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-offline-jvm/0.2.0/atlas-offline-jvm-0.2.0.pom",
+      "sha256": "a03d3902d8cf540b8abe0ace007277aaed88cbd945da585d6b9a5eb60241287d",
+      "size": 2626
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-offline-wasm-js/0.2.0/atlas-offline-wasm-js-0.2.0-sources.jar",
+      "sha256": "35a594ad5f6831c47d8a8b4bbf31cca752787a7d1af31fa7bd0bc7d0f19cc502",
+      "size": 21207
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-offline-wasm-js/0.2.0/atlas-offline-wasm-js-0.2.0.klib",
+      "sha256": "3de6a1a5536f9fe6f87e5f626a75cf68b80fa0cc8194dfddfc51410f511a3ace",
+      "size": 93067
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-offline-wasm-js/0.2.0/atlas-offline-wasm-js-0.2.0.module",
+      "sha256": "616fb5084cd08562b92cdae601d54e4587c61cdf5d3dd6db7a4fb5cf50f0cca1",
+      "size": 4126
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-offline-wasm-js/0.2.0/atlas-offline-wasm-js-0.2.0.pom",
+      "sha256": "1bc067140b2bcbdb89e850a7c5322434ebddc22d31ea8ddde4bccfcefb3d060e",
+      "size": 2277
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-routing/0.2.0/atlas-routing-0.2.0-kotlin-tooling-metadata.json",
+      "sha256": "ed6c277634b5bf141a9c3f6977865e066d46d53943a88a70254537c1511f1b01",
+      "size": 977
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-routing/0.2.0/atlas-routing-0.2.0-sources.jar",
+      "sha256": "94073e4e4b7c63bcc34c436746133548ca848f5a75a729a702d568c198fb3884",
+      "size": 25751
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-routing/0.2.0/atlas-routing-0.2.0.jar",
+      "sha256": "8493bbd9cbebd4731d5216d1f6a95e8f6788c942d78eec62fd060e0ecf3c0ff8",
+      "size": 10986
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-routing/0.2.0/atlas-routing-0.2.0.module",
+      "sha256": "c822a336704b75f8921b528b4557f87920c4a074ed54daf7850f34a98c21063f",
+      "size": 5713
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-routing/0.2.0/atlas-routing-0.2.0.pom",
+      "sha256": "86a357dbaeeb63ede4222b32bf68d22c61392cad0566faac8bf2c7b2e538ac49",
+      "size": 1843
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-routing-jvm/0.2.0/atlas-routing-jvm-0.2.0-sources.jar",
+      "sha256": "94073e4e4b7c63bcc34c436746133548ca848f5a75a729a702d568c198fb3884",
+      "size": 25751
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-routing-jvm/0.2.0/atlas-routing-jvm-0.2.0.jar",
+      "sha256": "cfacfeea1c62682a130e85d1002bce67fd925f2dc4f53130ac05fd64216244e3",
+      "size": 121737
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-routing-jvm/0.2.0/atlas-routing-jvm-0.2.0.module",
+      "sha256": "a38ca2d2859a70d82eb493eae5451e4193eb36c3b3c63e0f4eb38d32789d95a0",
+      "size": 4456
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-routing-jvm/0.2.0/atlas-routing-jvm-0.2.0.pom",
+      "sha256": "3257459d529d382860dd0e3f67a2ad82713e83bc6c76f14e9fc337c9bebfbd50",
+      "size": 2825
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-routing-wasm-js/0.2.0/atlas-routing-wasm-js-0.2.0-sources.jar",
+      "sha256": "94073e4e4b7c63bcc34c436746133548ca848f5a75a729a702d568c198fb3884",
+      "size": 25751
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-routing-wasm-js/0.2.0/atlas-routing-wasm-js-0.2.0.klib",
+      "sha256": "95d6c42b0434f8dfa652cd7f62fc77ad0e0f6b0b925c29873375a0c89003baf4",
+      "size": 144647
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-routing-wasm-js/0.2.0/atlas-routing-wasm-js-0.2.0.module",
+      "sha256": "41bf9f1007416048f4472dec6c0d96404915eb7d8cd84f4ccaf65981bc51690c",
+      "size": 4138
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-routing-wasm-js/0.2.0/atlas-routing-wasm-js-0.2.0.pom",
+      "sha256": "ed2469f56015024e8d5454f4c884481762a8155a3a4bcb160dd748ebf517028a",
+      "size": 2679
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-scope/0.2.0/atlas-scope-0.2.0-kotlin-tooling-metadata.json",
+      "sha256": "ed6c277634b5bf141a9c3f6977865e066d46d53943a88a70254537c1511f1b01",
+      "size": 977
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-scope/0.2.0/atlas-scope-0.2.0-sources.jar",
+      "sha256": "da305c8b3573d7dca75f02631197d4c36299df6aca183a4b423f346f0142081e",
+      "size": 3783
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-scope/0.2.0/atlas-scope-0.2.0.jar",
+      "sha256": "728e90baa487be7014265a73503d307a693515250cdcd8f1a6c1da32bab99684",
+      "size": 3726
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-scope/0.2.0/atlas-scope-0.2.0.module",
+      "sha256": "cb2e37e33c318df105a0bad5402eee585fef246f7c6f031fac3e78acd034f34b",
+      "size": 6176
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-scope/0.2.0/atlas-scope-0.2.0.pom",
+      "sha256": "aa50be9d558e5c1f4d3b8bb75b82868e7dd61b03b60a426bb3aa194290b456b1",
+      "size": 2406
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-scope-jvm/0.2.0/atlas-scope-jvm-0.2.0-sources.jar",
+      "sha256": "da305c8b3573d7dca75f02631197d4c36299df6aca183a4b423f346f0142081e",
+      "size": 3783
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-scope-jvm/0.2.0/atlas-scope-jvm-0.2.0.jar",
+      "sha256": "4079eaf420eab7c91fa241b1aca11da7ed61a48d2bc95051e353b39ee8ea9c21",
+      "size": 13848
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-scope-jvm/0.2.0/atlas-scope-jvm-0.2.0.module",
+      "sha256": "9acd1283e767e35dfb3200647522045e36dec9eb4af2f4a83ab0645358283ab0",
+      "size": 4767
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-scope-jvm/0.2.0/atlas-scope-jvm-0.2.0.pom",
+      "sha256": "7f7f61b81e6ded066b58819bfd38b35f168dfb1a4c9d2239a189dfef5ee89132",
+      "size": 2622
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-scope-wasm-js/0.2.0/atlas-scope-wasm-js-0.2.0-sources.jar",
+      "sha256": "da305c8b3573d7dca75f02631197d4c36299df6aca183a4b423f346f0142081e",
+      "size": 3783
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-scope-wasm-js/0.2.0/atlas-scope-wasm-js-0.2.0.klib",
+      "sha256": "a270e7d9f6c38e433d81a0e3c3b9696d7d9b2d6fa6126eb1df2f606f878703de",
+      "size": 20588
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-scope-wasm-js/0.2.0/atlas-scope-wasm-js-0.2.0.module",
+      "sha256": "4bd7ead8ec501658f23b61564d57fd59d9bc058a9227e06d0f241f0088a03ea3",
+      "size": 4449
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-scope-wasm-js/0.2.0/atlas-scope-wasm-js-0.2.0.pom",
+      "sha256": "260db1d4d6eb303a88ef229f367dfcfc82f86220c9d08c03b6e68b49b96f2af5",
+      "size": 2472
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-weather/0.2.0/atlas-weather-0.2.0-kotlin-tooling-metadata.json",
+      "sha256": "ed6c277634b5bf141a9c3f6977865e066d46d53943a88a70254537c1511f1b01",
+      "size": 977
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-weather/0.2.0/atlas-weather-0.2.0-sources.jar",
+      "sha256": "386b533c1d896dec38eadc3d5247f585821dc1d42b500ff61f65d39a8b8f58e8",
+      "size": 11176
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-weather/0.2.0/atlas-weather-0.2.0.jar",
+      "sha256": "a72896d9507f23fd8ea091b3576af1202d87008701b4cc4590e229e29e83eaad",
+      "size": 6925
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-weather/0.2.0/atlas-weather-0.2.0.module",
+      "sha256": "b76105e9ef580cdcf96e5f67e60e4f43ab7c4060f5d5d1ac098950afa6527de3",
+      "size": 6402
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-weather/0.2.0/atlas-weather-0.2.0.pom",
+      "sha256": "36dfa5a911f93b91c5f8bcee0d1681690276c5c0a4b42a92bef9038d7a1d0259",
+      "size": 2605
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-weather-jvm/0.2.0/atlas-weather-jvm-0.2.0-sources.jar",
+      "sha256": "e3e1fb99fc07d9a3bca67f796a0b30cfb629e7a3dec8801f6ec4fb2f07f03bf6",
+      "size": 12553
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-weather-jvm/0.2.0/atlas-weather-jvm-0.2.0.jar",
+      "sha256": "e9855c388c26151eff3c509cdda7cb4b0438c13f2c311a3c827c305f6c4b5a8a",
+      "size": 62179
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-weather-jvm/0.2.0/atlas-weather-jvm-0.2.0.module",
+      "sha256": "75c2e46296fa45532bc89b6989b6546628f6688f6ca23284bfa45e3c952971d2",
+      "size": 5326
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-weather-jvm/0.2.0/atlas-weather-jvm-0.2.0.pom",
+      "sha256": "0736184bdb8f445d639070c2cb5a1681d8140f17b71efe6a4c8b123bdcc3a292",
+      "size": 3029
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-weather-wasm-js/0.2.0/atlas-weather-wasm-js-0.2.0-sources.jar",
+      "sha256": "c327d14da5719dfc7b8da1696d0038b92c041899909ead71f37ee14235b33e55",
+      "size": 12393
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-weather-wasm-js/0.2.0/atlas-weather-wasm-js-0.2.0.klib",
+      "sha256": "2f9c6b2477619160eaa296b19b7268a75b762ad6f76d7591a502cbb71d03331e",
+      "size": 52665
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-weather-wasm-js/0.2.0/atlas-weather-wasm-js-0.2.0.module",
+      "sha256": "e53cad4c0da910c0d20f1f21c1a3faf896b36143f407dc97111f698ecf33d5ab",
+      "size": 5008
+    },
+    {
+      "path": "com/intellitrip/atlas/atlas-weather-wasm-js/0.2.0/atlas-weather-wasm-js-0.2.0.pom",
+      "sha256": "8b777d4d5abe07b166919a17de6972249867059be91b59f2a6e3ad0d32f78b49",
+      "size": 2887
+    }
+  ],
+  "build": {
+    "command": "./gradlew publishAtlasToLocalRepo",
+    "gradle": "8.10",
+    "java": "openjdk version 21.0.13 2026-10-20 LTS"
+  },
+  "groupId": "com.intellitrip.atlas",
+  "publishedAt": "2026-11-14T04:07:42+00:00",
+  "schemaVersion": 1,
+  "source": {
+    "commit": "781af81189d362fe50ffed9951d88c998fa2a6ce",
+    "ref": "refs/tags/atlas-v0.2.0",
+    "repository": "https://github.com/GhostMan612/Metro-IntelliTrip"
+  },
+  "version": "0.2.0"
+}

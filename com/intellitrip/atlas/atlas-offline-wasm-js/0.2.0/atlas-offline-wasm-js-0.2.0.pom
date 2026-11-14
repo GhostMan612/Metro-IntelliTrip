@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <!-- This module was also published with a richer model, Gradle metadata,  -->
+  <!-- which should be used instead. Do not delete the following line which  -->
+  <!-- is to indicate to Gradle or any Gradle module metadata file consumer  -->
+  <!-- that they should prefer consuming it instead. -->
+  <!-- do_not_remove: published-with-gradle-metadata -->
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.intellitrip.atlas</groupId>
+  <artifactId>atlas-offline-wasm-js</artifactId>
+  <version>0.2.0</version>
+  <packaging>klib</packaging>
+  <name>IntelliTrip Atlas SDK</name>
+  <description>Portable transit and geospatial engine for IntelliTrip hosts.</description>
+  <url>https://github.com/GhostMan612/Metro-IntelliTrip</url>
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <id>GhostMan612</id>
+      <name>Glenn Lee Clark IV</name>
+      <organization>Recovery For All</organization>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:https://github.com/GhostMan612/Metro-IntelliTrip.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/GhostMan612/Metro-IntelliTrip.git</developerConnection>
+    <url>https://github.com/GhostMan612/Metro-IntelliTrip</url>
+  </scm>
+  <dependencies>
+    <dependency>
+      <groupId>com.intellitrip.atlas</groupId>
+      <artifactId>atlas-domain-wasm-js</artifactId>
+      <version>0.2.0</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlinx</groupId>
+      <artifactId>kotlinx-datetime-wasm-js</artifactId>
+      <version>0.6.2</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-stdlib-wasm-js</artifactId>
+      <version>2.1.20</version>
+      <scope>compile</scope>
+    </dependency>
+  </dependencies>
+</project>
