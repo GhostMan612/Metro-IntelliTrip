@@ -204,6 +204,93 @@ class StopTimeIndexTest {
         }
     }
 
+    @Test
+    fun upgradeV3ToV4ProducesEquivalentIndex() {
+        val rows = listOf(
+            stopTime("T1", 1, "S1", 3600).copy(pickupType = 0, dropOffType = 1),
+            stopTime("T1", 2, "S2", 3660).copy(pickupType = 1, dropOffType = 0),
+            stopTime("T2", 1, "S2", 4200),
+            stopTime("T2", 2, "S3", 4260),
+        )
+        val writer = StopTimeIndexWriter()
+        rows.forEach { writer.write(it) }
+        val (expectedData, expectedV4) = writer.finish()
+        val v3Index = downgradeV4ToV3(expectedV4)
+
+        val upgraded = StopTimeIndexWriter.upgradeV3ToV4(v3Index)
+        assertTrue(upgraded != null)
+        val (dataLength, upgradedV4) = upgraded!!
+        assertEquals(expectedData.size.toLong(), dataLength)
+        assertTrue(StopTimeIndexReader.isCurrentFormat(upgradedV4))
+        assertTrue(expectedV4.contentEquals(upgradedV4), "transcoded V4 bytes must match direct V4 writer output")
+
+        val reader = StopTimeIndexReader(upgradedV4, expectedData)
+        assertTrue(reader.isCurrentFormat)
+        assertEquals(setOf(TripKey(feedId, "T1")), reader.tripsServing(StopKey(feedId, "S1")))
+        assertEquals(setOf(TripKey(feedId, "T1"), TripKey(feedId, "T2")), reader.tripsServing(StopKey(feedId, "S2")))
+        assertEquals(setOf(TripKey(feedId, "T2")), reader.tripsServing(StopKey(feedId, "S3")))
+    }
+
+    @Test
+    fun upgradeV3ToV4RejectsNonV3AndCorruptInputs() {
+        val writer = StopTimeIndexWriter()
+        writer.write(stopTime("T1", 1, "S1", 3600))
+        val (data, v4) = writer.finish()
+        val (_, v2) = legacyV2Index("T1", listOf(stopTime("T1", 1, "S1", 3600)))
+        val v3 = downgradeV4ToV3(v4)
+
+        assertNull(StopTimeIndexWriter.upgradeV3ToV4(v4))
+        assertNull(StopTimeIndexWriter.upgradeV3ToV4(v2))
+        assertNull(StopTimeIndexWriter.upgradeV3ToV4(v3.copyOf(v3.size - 1)))
+        assertNull(StopTimeIndexWriter.upgradeV3ToV4(v3 + byteArrayOf(0x00)))
+        // Even valid reader data should fail if non-V3 bytes passed in.
+        assertEquals(1, StopTimeIndexReader(v4, data).tripCount())
+    }
+
+    /** Rebuilds the `STIDX003` byte layout from a writer-produced `STIDX004` image for round-trip tests. */
+    private fun downgradeV4ToV3(v4Bytes: ByteArray): ByteArray {
+        val cursor = ByteArrayCursor(v4Bytes, StopTimeIndexWriter.INDEX_MAGIC.size)
+        val dataLength = cursor.readLong()
+        val tripCount = cursor.readInt()
+        val totalRows = cursor.readLong()
+        val tripNames = ArrayList<ByteArray>(tripCount)
+        val out = GrowableBytes()
+        out.writeBytes(StopTimeIndexWriter.INDEX_MAGIC_V3)
+        out.writeLong(dataLength)
+        out.writeInt(tripCount)
+        out.writeLong(totalRows)
+        repeat(tripCount) {
+            val nameLen = cursor.readShort()
+            val nameBytes = cursor.readBytes(nameLen)
+            tripNames += nameBytes
+            val segCount = cursor.readInt()
+            out.writeShort(nameLen)
+            out.writeBytes(nameBytes)
+            out.writeInt(segCount)
+            repeat(segCount) {
+                out.writeLong(cursor.readLong())
+                out.writeInt(cursor.readInt())
+            }
+        }
+        val stopCount = cursor.readInt()
+        out.writeInt(stopCount)
+        repeat(stopCount) {
+            val stopLen = cursor.readShort()
+            val stopBytes = cursor.readBytes(stopLen)
+            val tripsInStop = cursor.readInt()
+            out.writeShort(stopLen)
+            out.writeBytes(stopBytes)
+            out.writeInt(tripsInStop)
+            repeat(tripsInStop) {
+                val ordinal = cursor.readInt()
+                val nameBytes = tripNames[ordinal]
+                out.writeShort(nameBytes.size)
+                out.writeBytes(nameBytes)
+            }
+        }
+        return out.toByteArray()
+    }
+
     /** Builds a `STIDX003` layout (restrictions + string reverse keys) by hand. */
     private fun legacyV3Index(tripId: String, rows: List<StopTime>): Pair<ByteArray, ByteArray> {
         val data = GrowableBytes()

@@ -147,6 +147,100 @@ class StopTimeIndexWriter {
         internal val INDEX_MAGIC = "STIDX004".encodeToByteArray()
         internal val INDEX_MAGIC_V3 = "STIDX003".encodeToByteArray()
         internal val INDEX_MAGIC_V2 = "STIDX002".encodeToByteArray()
+
+        private class SliceKey(
+            private val bytes: ByteArray,
+            private val offset: Int,
+            private val length: Int,
+        ) {
+            private val hash: Int = computeHash(bytes, offset, length)
+
+            override fun hashCode(): Int = hash
+
+            override fun equals(other: Any?): Boolean {
+                if (this === other) return true
+                if (other !is SliceKey || length != other.length || hash != other.hash) return false
+                val otherBytes = other.bytes
+                val otherOffset = other.offset
+                for (i in 0 until length) {
+                    if (bytes[offset + i] != otherBytes[otherOffset + i]) return false
+                }
+                return true
+            }
+
+            private companion object {
+                fun computeHash(bytes: ByteArray, offset: Int, length: Int): Int {
+                    var h = 1
+                    val end = offset + length
+                    for (i in offset until end) {
+                        h = 31 * h + bytes[i].toInt()
+                    }
+                    return h
+                }
+            }
+        }
+
+        /**
+         * Losslessly transcodes a `STIDX003` index byte image to `STIDX004`
+         * without re-parsing `gtfs.zip`.
+         *
+         * The forward trip table and the accompanying `stop-times.dat` file are
+         * identical between `003` and `004`; only the reverse stop index changes
+         * from UTF-8 `"feed|tripId"` keys to 4-byte forward-table ordinals.
+         * Returns `(dataLength, v4IndexBytes)` or `null` when [indexBytes] is not
+         * a well-formed `STIDX003` payload.
+         */
+        internal fun upgradeV3ToV4(indexBytes: ByteArray): Pair<Long, ByteArray>? {
+            if (!StopTimeIndexReader.isV3Format(indexBytes)) return null
+            return try {
+                val cursor = ByteArrayCursor(indexBytes, INDEX_MAGIC_V3.size)
+                val dataLength = cursor.readLong()
+                if (dataLength < 0L) return null
+                val tripCount = cursor.readInt()
+                if (tripCount < 0 || tripCount > cursor.remaining / 7) return null
+                cursor.readLong() // total rows, preserved in the verbatim forward slice
+                val ordinalByTripKey = HashMap<SliceKey, Int>(((tripCount / 0.75f).toInt() + 1).coerceAtLeast(16))
+                for (ordinal in 0 until tripCount) {
+                    val nameLength = cursor.readShort()
+                    if (nameLength <= 0) return null
+                    val nameStart = cursor.position
+                    cursor.skip(nameLength)
+                    ordinalByTripKey[SliceKey(indexBytes, nameStart, nameLength)] = ordinal
+                    val segmentCount = cursor.readInt()
+                    if (segmentCount < 0 || segmentCount > cursor.remaining / 12) return null
+                    cursor.skip(segmentCount * 12)
+                }
+                val forwardEnd = cursor.position
+                val stopCount = cursor.readInt()
+                if (stopCount < 0 || stopCount > cursor.remaining / 6) return null
+                val out = GrowableBytes((forwardEnd + stopCount * 16).coerceAtLeast(1024))
+                out.writeBytes(INDEX_MAGIC)
+                out.writeBytes(indexBytes, INDEX_MAGIC_V3.size, forwardEnd - INDEX_MAGIC_V3.size)
+                out.writeInt(stopCount)
+                repeat(stopCount) {
+                    val stopIdLength = cursor.readShort()
+                    val stopIdStart = cursor.position
+                    cursor.skip(stopIdLength)
+                    out.writeShort(stopIdLength)
+                    out.writeBytes(indexBytes, stopIdStart, stopIdLength)
+                    val tripsInStop = cursor.readInt()
+                    if (tripsInStop < 0 || tripsInStop > cursor.remaining / 2) return null
+                    out.writeInt(tripsInStop)
+                    repeat(tripsInStop) {
+                        val tripNameLength = cursor.readShort()
+                        val tripNameStart = cursor.position
+                        cursor.skip(tripNameLength)
+                        val ordinal = ordinalByTripKey[SliceKey(indexBytes, tripNameStart, tripNameLength)]
+                            ?: return null
+                        out.writeInt(ordinal)
+                    }
+                }
+                if (cursor.remaining != 0) return null
+                dataLength to out.toByteArray()
+            } catch (_: Exception) {
+                null
+            }
+        }
     }
 }
 

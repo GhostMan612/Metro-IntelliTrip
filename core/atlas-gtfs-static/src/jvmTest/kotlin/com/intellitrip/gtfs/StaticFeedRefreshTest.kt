@@ -214,6 +214,98 @@ class StaticFeedRefreshTest {
     }
 
     @Test
+    fun v3StopTimeIndexIsUpgradedInPlaceWithoutReparsingArchive() {
+        val root = createTempDirectory("gtfs-v3-upgrade")
+        val store = storeAt(root)
+        val metadata = FeedMetadata(feedId, null, null, null, "v", "h", Instant.DISTANT_PAST, null, null, "src")
+        // Build genuine STIDX004 data/index from minimalFeed, then rewrite index as legacy STIDX003.
+        store.activate(feedId, zip, metadata)
+        assertTrue(store.reindexStopTimes(feedId))
+        val snapshotDir = Path.of(store.activeSnapshot(feedId)!!.snapshotDir)
+        val pointerLines = Files.readAllLines(snapshotDir.resolve("stop-times.current")).filter { it.isNotBlank() }
+        val v4Bytes = Files.readAllBytes(snapshotDir.resolve(pointerLines[1]))
+        val cursor = ByteArrayCursor(v4Bytes, StopTimeIndexWriter.INDEX_MAGIC.size)
+        val dataLength = cursor.readLong()
+        val tripCount = cursor.readInt()
+        val totalRows = cursor.readLong()
+        val tripNames = ArrayList<ByteArray>(tripCount)
+        val v3 = GrowableBytes()
+        v3.writeBytes(StopTimeIndexWriter.INDEX_MAGIC_V3)
+        v3.writeLong(dataLength)
+        v3.writeInt(tripCount)
+        v3.writeLong(totalRows)
+        repeat(tripCount) {
+            val nameLen = cursor.readShort()
+            val nameBytes = cursor.readBytes(nameLen)
+            tripNames += nameBytes
+            val segCount = cursor.readInt()
+            v3.writeShort(nameLen)
+            v3.writeBytes(nameBytes)
+            v3.writeInt(segCount)
+            repeat(segCount) {
+                v3.writeLong(cursor.readLong())
+                v3.writeInt(cursor.readInt())
+            }
+        }
+        val stopCount = cursor.readInt()
+        v3.writeInt(stopCount)
+        repeat(stopCount) {
+            val stopLen = cursor.readShort()
+            val stopBytes = cursor.readBytes(stopLen)
+            val tripsInStop = cursor.readInt()
+            v3.writeShort(stopLen)
+            v3.writeBytes(stopBytes)
+            v3.writeInt(tripsInStop)
+            repeat(tripsInStop) {
+                val nameBytes = tripNames[cursor.readInt()]
+                v3.writeShort(nameBytes.size)
+                v3.writeBytes(nameBytes)
+            }
+        }
+        Files.write(snapshotDir.resolve(pointerLines[1]), v3.toByteArray())
+        // Replace gtfs.zip with invalid bytes: proves reindexStopTimes does not touch the ZIP for STIDX003.
+        Files.write(snapshotDir.resolve("gtfs.zip"), "not-parsed".toByteArray())
+
+        val freshStore = storeAt(root)
+        assertFalse(freshStore.hasCurrentStopTimeIndex(feedId))
+        assertTrue(freshStore.reindexStopTimes(feedId))
+        assertTrue(freshStore.hasCurrentStopTimeIndex(feedId))
+
+        val reader = freshStore.stopTimeReader(feedId)!!
+        assertTrue(reader.isCurrentFormat)
+        assertEquals(setOf(TripKey(feedId, "1001")), reader.tripsServing(StopKey(feedId, "34")))
+        val rows = reader.stopTimesFor(TripKey(feedId, "1001")) { id -> StopKey(feedId, id) }
+        assertEquals(listOf(1, 2), rows.map { it.stopSequence })
+        assertEquals(listOf("34", "39"), rows.map { it.stopKey.stopId })
+    }
+
+    @Test
+    fun mismatchedV3DataLengthFallsBackToArchiveReparse() {
+        val root = createTempDirectory("gtfs-v3-mismatch")
+        val store = storeAt(root)
+        val metadata = FeedMetadata(feedId, null, null, null, "v", "h", Instant.DISTANT_PAST, null, null, "src")
+        store.activate(feedId, zip, metadata)
+        assertTrue(store.reindexStopTimes(feedId))
+        val snapshotDir = Path.of(store.activeSnapshot(feedId)!!.snapshotDir)
+        val pointerLines = Files.readAllLines(snapshotDir.resolve("stop-times.current")).filter { it.isNotBlank() }
+        val idxPath = snapshotDir.resolve(pointerLines[1])
+        val v4Bytes = Files.readAllBytes(idxPath)
+        // Corrupt magic to STIDX003 AND alter data length inside bytes [8..15] so transcode refuses .dat.
+        val badV3 = v4Bytes.copyOf()
+        "STIDX003".encodeToByteArray().copyInto(badV3, 0)
+        badV3[15] = (badV3[15].toInt() xor 0x01).toByte()
+        Files.write(idxPath, badV3)
+
+        val freshStore = storeAt(root)
+        assertFalse(freshStore.hasCurrentStopTimeIndex(feedId))
+        assertTrue(freshStore.reindexStopTimes(feedId))
+        assertTrue(freshStore.hasCurrentStopTimeIndex(feedId))
+        val reader = freshStore.stopTimeReader(feedId)!!
+        assertTrue(reader.isCurrentFormat)
+        assertEquals(listOf("34", "39"), reader.stopTimesFor(TripKey(feedId, "1001")) { id -> StopKey(feedId, id) }.map { it.stopKey.stopId })
+    }
+
+    @Test
     fun overlappingRefreshStagesKeepPayloadAndStopTimeIndexPaired() {
         val root = createTempDirectory("gtfs-overlapping-stages")
         val firstStore = storeAt(root)
