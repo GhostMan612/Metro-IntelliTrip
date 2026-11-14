@@ -506,6 +506,116 @@ class StaticNetworkPlannerTest {
     }
 
     @Test
+    fun arriveByBoundsCandidateExpansionAfterFeasibleDeadline() {
+        val lateStops = RoutingFixtures.stops
+        val lateTrips = (1..20).map { i ->
+            com.intellitrip.domain.Trip(
+                key = com.intellitrip.domain.TripKey(RoutingFixtures.feedId, "LATE_$i"),
+                routeKey = RoutingFixtures.routeA.key,
+                serviceKey = RoutingFixtures.tripA1.serviceKey,
+                headsign = null, directionId = 0, blockId = null, shapeKey = null, wheelchairAccessible = null,
+            )
+        }
+        val lateStopTimes = lateTrips.flatMapIndexed { idx, trip ->
+            val depSecs = (8 * 3600) + ((40 + idx) * 60)
+            val arrSecs = depSecs + 300
+            listOf(
+                com.intellitrip.domain.StopTime(trip.key, RoutingFixtures.stops[0].key, 1, com.intellitrip.domain.GtfsServiceTime.ofSeconds(depSecs), com.intellitrip.domain.GtfsServiceTime.ofSeconds(depSecs), null, null, null, null),
+                com.intellitrip.domain.StopTime(trip.key, RoutingFixtures.stops[2].key, 2, com.intellitrip.domain.GtfsServiceTime.ofSeconds(arrSecs), com.intellitrip.domain.GtfsServiceTime.ofSeconds(arrSecs), null, null, null, null),
+            )
+        }
+        val net = RoutingNetwork(
+            feedId = RoutingFixtures.feedId,
+            metadata = RoutingFixtures.network.metadata,
+            routes = RoutingFixtures.network.routes,
+            stops = lateStops,
+            trips = listOf(RoutingFixtures.tripC1) + lateTrips,
+            stopTimes = RoutingFixtures.stopTimes.filter { it.tripKey == RoutingFixtures.tripC1.key } + lateStopTimes,
+        )
+        val p = StaticNetworkPlanner(net, RoutingFixtures.zone)
+        var checkpointsWithDeadline = 0
+        val reqWithDeadline = RoutingFixtures.request().copy(
+            arriveBy = LocalDateTime(
+                RoutingFixtures.serviceDate.year,
+                RoutingFixtures.serviceDate.monthNumber,
+                RoutingFixtures.serviceDate.dayOfMonth,
+                8, 35, 0,
+            ).toInstant(RoutingFixtures.zone),
+        )
+        val boundedResult = p.planWithRealtime(reqWithDeadline, emptyList()) { checkpointsWithDeadline++ }
+        assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(boundedResult)
+        assertEquals(1, boundedResult.data.size)
+
+        var checkpointsUnbounded = 0
+        p.planWithRealtime(RoutingFixtures.request(), emptyList()) { checkpointsUnbounded++ }
+        assertTrue(
+            checkpointsWithDeadline < checkpointsUnbounded,
+            "expected arriveBy to stop scanning post-deadline candidates ($checkpointsWithDeadline vs $checkpointsUnbounded)",
+        )
+    }
+
+    @Test
+    fun twoTransferSearchCapsCandidatePoolTighterThanSingleTransfer() {
+        // Place 150 early filler trips S1 -> S_AWAY (far from destination S3) at 08:01..08:25
+        // and one direct trip C_LATE S1 -> S3 at 08:29. With maxTransfers=1 (cap=400),
+        // C_LATE at candidate index 150 is expanded and succeeds; with maxTransfers=2
+        // (cap=120), C_LATE at index 150 falls outside the tighter candidate bound.
+        val awayStop = com.intellitrip.domain.Stop(
+            key = StopKey(RoutingFixtures.feedId, "S_AWAY"),
+            code = "S_AWAY",
+            name = "Far Away",
+            description = null,
+            location = GeoPoint(44.9400, -93.2650),
+            url = null,
+            locationType = 0,
+            parentStation = null,
+            zoneId = null,
+        )
+        val fillers = (0 until 150).map { idx ->
+            val depSecs = (8 * 3600) + 60 + (idx * 10)
+            val arrSecs = depSecs + 60
+            val trip = com.intellitrip.domain.Trip(
+                key = com.intellitrip.domain.TripKey(RoutingFixtures.feedId, "FILL_$idx"),
+                routeKey = RoutingFixtures.routeA.key,
+                serviceKey = RoutingFixtures.tripA1.serviceKey,
+                headsign = null, directionId = 0, blockId = null, shapeKey = null, wheelchairAccessible = null,
+            )
+            val rows = listOf(
+                com.intellitrip.domain.StopTime(trip.key, RoutingFixtures.stops[0].key, 1, com.intellitrip.domain.GtfsServiceTime.ofSeconds(depSecs), com.intellitrip.domain.GtfsServiceTime.ofSeconds(depSecs), null, null, null, null),
+                com.intellitrip.domain.StopTime(trip.key, awayStop.key, 2, com.intellitrip.domain.GtfsServiceTime.ofSeconds(arrSecs), com.intellitrip.domain.GtfsServiceTime.ofSeconds(arrSecs), null, null, null, null),
+            )
+            trip to rows
+        }
+        val lateDirectTrip = com.intellitrip.domain.Trip(
+            key = com.intellitrip.domain.TripKey(RoutingFixtures.feedId, "C_LATE"),
+            routeKey = RoutingFixtures.routeC.key,
+            serviceKey = RoutingFixtures.tripC1.serviceKey,
+            headsign = null, directionId = 0, blockId = null, shapeKey = null, wheelchairAccessible = null,
+        )
+        val lateDirectRows = listOf(
+            com.intellitrip.domain.StopTime(lateDirectTrip.key, RoutingFixtures.stops[0].key, 1, com.intellitrip.domain.GtfsServiceTime.parse("08:29:00"), com.intellitrip.domain.GtfsServiceTime.parse("08:29:00"), null, null, null, null),
+            com.intellitrip.domain.StopTime(lateDirectTrip.key, RoutingFixtures.stops[2].key, 2, com.intellitrip.domain.GtfsServiceTime.parse("08:40:00"), com.intellitrip.domain.GtfsServiceTime.parse("08:40:00"), null, null, null, null),
+        )
+        val net = RoutingNetwork(
+            feedId = RoutingFixtures.feedId,
+            metadata = RoutingFixtures.network.metadata,
+            routes = RoutingFixtures.network.routes,
+            stops = listOf(RoutingFixtures.stops[0], awayStop, RoutingFixtures.stops[2]),
+            trips = fillers.map { it.first } + lateDirectTrip,
+            stopTimes = fillers.flatMap { it.second } + lateDirectRows,
+        )
+        val p = StaticNetworkPlanner(net, RoutingFixtures.zone)
+        val req = RoutingFixtures.request().copy(maxWalkMeters = 300.0)
+        val singlePass = runBlocking { p.plan(req.copy(maxTransfers = 1)) }
+        val singleSuccess = assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(singlePass)
+        assertEquals(1, singleSuccess.data.size)
+
+        val doublePass = runBlocking { p.plan(req.copy(maxTransfers = 2)) }
+        val doubleSuccess = assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(doublePass)
+        assertTrue(doubleSuccess.data.isEmpty(), "expected maxTransfers=2 to cap candidates tighter than 150")
+    }
+
+    @Test
     fun preCanceledCoroutineAbortsImmediately() {
         val job = kotlinx.coroutines.Job().apply { cancel() }
         val failed = runCatching {

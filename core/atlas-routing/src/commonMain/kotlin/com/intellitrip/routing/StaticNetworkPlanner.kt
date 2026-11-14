@@ -327,10 +327,16 @@ class StaticNetworkPlanner(
         }
 
         // Earliest departures first, then take only as many as we are prepared to
-        // expand. This is what keeps a system-wide feed responsive.
+        // expand. Two-transfer search branches quadratically across intermediate
+        // stops, so its candidate pool is bounded tighter than single-transfer.
+        val candidateLimit = if (maxTransfers >= 2) {
+            minOf(maxCandidates, MAX_TWO_TRANSFER_CANDIDATES)
+        } else {
+            maxCandidates
+        }
         val chosen = candidates
             .sortedBy { it.board.departureTime?.instantOn(serviceDate, effectiveZone) }
-            .take(maxCandidates)
+            .take(candidateLimit)
 
         // A first leg may alight anywhere the agency allows, not only inside
         // the destination walk area: a transfer station is usually not near
@@ -351,10 +357,18 @@ class StaticNetworkPlanner(
             return arrivals[maxJourneys - 1]
         }
 
+        val arriveBy = request.arriveBy
         for (candidate in chosen) {
             checkCancelled()
             val origin = candidate.origin
             val board = candidate.board
+            val boardInstant = board.departureTime?.instantOn(serviceDate, effectiveZone)
+            // Once departures pass arriveBy and at least one option is recorded
+            // (either feasible or proof of arrive-by-unachievable), later departures
+            // can never arrive in time.
+            if (arriveBy != null && boardInstant != null && boardInstant >= arriveBy && options.isNotEmpty()) {
+                break
+            }
             val times = candidate.times
             val firstAlightIndex = candidate.boardIndex + 1
             val routeKey = network.tripsByKey[board.tripKey]?.routeKey
@@ -387,10 +401,12 @@ class StaticNetworkPlanner(
                 if (!visitedTransferStops.add(alight.stopKey)) continue
 
                 val alightArrival = alight.arrivalTime?.instantOn(serviceDate, effectiveZone)
-                if (cutoff != null && alightArrival != null && alightArrival >= cutoff) break
+                val loopCutoff = minInstant(cutoff, if (options.isNotEmpty()) arriveBy else null)
+                if (loopCutoff != null && alightArrival != null && alightArrival >= loopCutoff) break
 
                 val reachesDestination = context.destinationServiceAt(alight.stopKey)
                 val reachesAnotherTransfer = maxTransfers >= 2 &&
+                    (arriveBy == null || alightArrival == null || alightArrival < arriveBy) &&
                     context.transferServiceAt(
                         alight.stopKey,
                         excludingRoute = routeKey,
@@ -600,21 +616,24 @@ class StaticNetworkPlanner(
             return linked.toList()
         }
 
+        private val destinationConnectionMemo = HashMap<StopKey, List<Trip>>()
+        private val transferConnectionMemo = HashMap<StopKey, List<Trip>>()
+
         /**
-         * Trips that can carry the rider onward from [stop].
-         *
-         * [allowTransfer] selects the second leg of a two-transfer journey:
-         * reaching a place where another transfer is possible is enough. The
-         * final leg must reach the destination itself, so it passes `false`.
+         * Active trips that can carry the rider onward from [stop]. Memoized per
+         * plan because transfer searches revisit busy hubs across many first legs.
          */
-        fun connectionTrips(
+        fun connectionTripsAt(
             stop: StopKey,
-            excludeTrip: TripKey,
             allowTransfer: Boolean,
-        ): List<Trip> = tripsAt(stop).filter { trip ->
-            trip.key != excludeTrip &&
-                isServiceActive(trip.serviceKey) &&
-                (trip.key in destinationTrips || (allowTransfer && trip.key in transferTrips))
+        ): List<Trip> {
+            val memo = if (allowTransfer) transferConnectionMemo else destinationConnectionMemo
+            return memo.getOrPut(stop) {
+                tripsAt(stop).filter { trip ->
+                    isServiceActive(trip.serviceKey) &&
+                        (trip.key in destinationTrips || (allowTransfer && trip.key in transferTrips))
+                }
+            }
         }
     }
 
@@ -820,6 +839,9 @@ class StaticNetworkPlanner(
         val (secondTrip, secondBoard, walking1, secondTimes) = conn1
         val boardIdx2 = secondTimes.indexOfFirst { it.stopKey == secondBoard.stopKey && it.stopSequence == secondBoard.stopSequence }
         if (boardIdx2 < 0) return null
+        val initialCutoff = minInstant(cutoff, request.arriveBy)
+        val secondBoardDep = secondBoard.departureTime?.instantOn(serviceDate, effectiveZone)
+        if (initialCutoff != null && secondBoardDep != null && secondBoardDep >= initialCutoff) return null
         var best: JourneyOption? = null
         val firstLegTrip = network.tripsByKey[board.tripKey] ?: return null
         val firstLeg = transitLeg(firstLegTrip, board, firstAlight, serviceDate, updates)
@@ -830,9 +852,11 @@ class StaticNetworkPlanner(
             if (!allowsAlighting(midAlight)) continue
             if (!visitedMidStops.add(midAlight.stopKey)) continue
             // Stops arrive in order, so once this leg reaches the current
-            // top-N cutoff, no later mid stop can produce a better journey.
+            // top-N cutoff, best arrival found so far, or arriveBy deadline,
+            // no later mid stop can produce a better journey.
             val midArrival = midAlight.arrivalTime?.instantOn(serviceDate, effectiveZone)
-            if (cutoff != null && midArrival != null && midArrival >= cutoff) break
+            val loopCutoff = minInstant(cutoff, best?.arrival, request.arriveBy)
+            if (loopCutoff != null && midArrival != null && midArrival >= loopCutoff) break
             // The third leg must be boardable here and able to reach the
             // destination; otherwise the timed search below is wasted work.
             if (!context.destinationServiceAt(midAlight.stopKey)) continue
@@ -946,17 +970,17 @@ class StaticNetworkPlanner(
             val earliestBoardSeconds = arrivalSeconds + requiredSeconds
             // Only trips that can actually reach the destination (or, for a
             // middle leg, another transfer) are candidates at all.
-            val onwardTrips = context.connectionTrips(boardingKey, firstAlight.tripKey, allowTransfer)
+            val onwardTrips = context.connectionTripsAt(boardingKey, allowTransfer)
             for (trip in onwardTrips) {
                 checkCancelled()
+                if (trip.key == firstAlight.tripKey) continue
                 val times = network.stopTimesFor(trip.key)
                 if (times.isEmpty()) continue
                 // Consider every stop at this boarding stop, expanded for frequencies.
                 // A stop that prohibits pickup can never be a boarding point.
-                val boardIndexes = times.indices.filter {
-                    times[it].stopKey == boardingKey && allowsBoarding(times[it])
-                }
-                for (bi in boardIndexes) {
+                for (bi in times.indices) {
+                    val stopTime = times[bi]
+                    if (stopTime.stopKey != boardingKey || !allowsBoarding(stopTime)) continue
                     checkCancelled()
                     val (candidate, shifted) =
                         earliestCatchableRun(trip.key, times, bi, earliestBoardSeconds, checkCancelled) ?: continue
@@ -1132,6 +1156,17 @@ class StaticNetworkPlanner(
         }
         matches.sortBy { it.meters }
         return if (matches.size <= limit) matches else matches.subList(0, limit).toList()
+    }
+
+    companion object {
+        private const val MAX_TWO_TRANSFER_CANDIDATES = 120
+
+        private fun minInstant(a: Instant?, b: Instant?, c: Instant? = null): Instant? {
+            var best = a
+            if (b != null && (best == null || b < best)) best = b
+            if (c != null && (best == null || c < best)) best = c
+            return best
+        }
     }
 }
 

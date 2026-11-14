@@ -164,6 +164,81 @@ class StopTimeIndexTest {
         assertEquals(2, reader.stopTimesFor(TripKey(feedId, "T1"), stopKeyOf).size)
     }
 
+    @Test
+    fun v3IndexStillReadsWithRestrictionsAndTriggersUpgrade() {
+        val rows = listOf(
+            stopTime("T1", 1, "S1", 3600).copy(pickupType = 0, dropOffType = 1),
+            stopTime("T1", 2, "S2", 3660).copy(pickupType = 1, dropOffType = 0),
+        )
+        val (data, index) = legacyV3Index("T1", rows)
+
+        val reader = StopTimeIndexReader(index, data)
+
+        assertFalse(reader.isCurrentFormat, "a 003 index must report false so hosts upgrade to 004")
+        assertFalse(StopTimeIndexReader.isCurrentFormat(index))
+        assertFalse(StopTimeIndexReader.isLegacyFormat(index))
+        assertEquals(setOf(TripKey(feedId, "T1")), reader.tripsServing(StopKey(feedId, "S1")))
+        val read = reader.stopTimesFor(TripKey(feedId, "T1"), stopKeyOf).associateBy { it.stopSequence }
+        assertEquals(2, read.size)
+        assertEquals(0, read[1]?.pickupType)
+        assertEquals(1, read[1]?.dropOffType)
+        assertEquals(1, read[2]?.pickupType)
+        assertEquals(0, read[2]?.dropOffType)
+    }
+
+    @Test
+    fun corruptV4OrdinalIsRejected() {
+        val writer = StopTimeIndexWriter()
+        writer.write(stopTime("T1", 1, "S1", 3600))
+        val (data, index) = writer.finish()
+        // Overwrite the single 4-byte ordinal at the tail of the v4 index with an out-of-range int.
+        val corrupted = index.copyOf()
+        val tail = corrupted.size - 4
+        corrupted[tail] = 0x00
+        corrupted[tail + 1] = 0x00
+        corrupted[tail + 2] = 0x01
+        corrupted[tail + 3] = 0x00 // 256 >= tripCount (1)
+        val reader = StopTimeIndexReader(corrupted, data)
+        assertFailsWith<StopTimeIndexFormatException> {
+            reader.tripsServing(StopKey(feedId, "S1"))
+        }
+    }
+
+    /** Builds a `STIDX003` layout (restrictions + string reverse keys) by hand. */
+    private fun legacyV3Index(tripId: String, rows: List<StopTime>): Pair<ByteArray, ByteArray> {
+        val data = GrowableBytes()
+        rows.forEach { row ->
+            val stopBytes = row.stopKey.stopId.encodeToByteArray()
+            data.writeInt(row.stopSequence)
+            data.writeInt(row.arrivalTime!!.secondsSinceServiceDayStart)
+            data.writeInt(row.departureTime!!.secondsSinceServiceDayStart)
+            data.writeByte(row.pickupType ?: StopTimeIndexWriter.NO_VALUE)
+            data.writeByte(row.dropOffType ?: StopTimeIndexWriter.NO_VALUE)
+            data.writeShort(stopBytes.size)
+            data.writeBytes(stopBytes)
+        }
+        val dataBytes = data.toByteArray()
+        val index = GrowableBytes()
+        index.writeBytes("STIDX003".encodeToByteArray())
+        index.writeLong(dataBytes.size.toLong())
+        index.writeInt(1) // trips
+        index.writeLong(rows.size.toLong())
+        val key = "metro-transit-regional|$tripId".encodeToByteArray()
+        index.writeShort(key.size)
+        index.writeBytes(key)
+        index.writeInt(1) // segments
+        index.writeLong(0L)
+        index.writeInt(rows.size)
+        index.writeInt(1) // stops
+        val stopBytes = rows.first().stopKey.stopId.encodeToByteArray()
+        index.writeShort(stopBytes.size)
+        index.writeBytes(stopBytes)
+        index.writeInt(1) // trips at this stop
+        index.writeShort(key.size)
+        index.writeBytes(key)
+        return dataBytes to index.toByteArray()
+    }
+
     /** Builds the pre-restriction `STIDX002` layout by hand. */
     private fun legacyV2Index(tripId: String, rows: List<StopTime>): Pair<ByteArray, ByteArray> {
         val data = GrowableBytes()

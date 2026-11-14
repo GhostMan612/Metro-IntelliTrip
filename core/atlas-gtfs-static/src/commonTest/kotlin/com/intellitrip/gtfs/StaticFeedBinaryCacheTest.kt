@@ -40,4 +40,29 @@ class StaticFeedBinaryCacheTest {
         )))
         assertEquals(null, StaticFeedBinaryCache.read(byteArrayOf(1, 2, 3)))
     }
+
+    @Test
+    fun includeShapesFalseSkipsShapesWhilePreservingRoutingTables() {
+        val feedId = FeedId("metro-transit-regional")
+        val metadata = FeedMetadata(feedId, null, null, null, "1", "hash", Clock.System.now(), null, null, null)
+        val feedWithShape = GtfsStaticParser.parse(
+            feedId,
+            (GtfsFixtures.minimalFeed + mapOf(
+                "shapes.txt" to "shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence\nSH1,44.97,-93.26,1\nSH1,44.98,-93.27,2\n",
+            )).mapValues { it.value.toByteArray() }.toMutableMap(),
+            metadata,
+        )
+        assertEquals(1, feedWithShape.shapes.size)
+        val bytes = StaticFeedBinaryCache.write(feedWithShape)
+        assertEquals(StaticFeedBinaryCache.VERSION, StaticFeedBinaryCache.versionOf(bytes))
+
+        val withoutShapes = StaticFeedBinaryCache.read(bytes, includeShapes = false)
+        assertNotNull(withoutShapes)
+        assertEquals(emptyList(), withoutShapes.shapes)
+        assertEquals(feedWithShape.stops, withoutShapes.stops)
+        assertEquals(feedWithShape.trips, withoutShapes.trips)
+        assertEquals(feedWithShape.routes, withoutShapes.routes)
+        assertEquals(feedWithShape.calendars, withoutShapes.calendars)
+        assertEquals(feedWithShape.transfers, withoutShapes.transfers)
+    }
 }

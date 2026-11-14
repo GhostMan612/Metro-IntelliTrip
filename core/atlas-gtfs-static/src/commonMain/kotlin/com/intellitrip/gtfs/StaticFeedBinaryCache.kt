@@ -31,13 +31,19 @@ import kotlinx.datetime.TimeZone
  * the stop-time index). Cold start reads this in milliseconds instead of
  * re-parsing a 29 MB ZIP on a slow CPU.
  *
- * Serialized as bytes so it ports cleanly: the store keeps the file behind
- * [PlatformFileStore], and the wire format stays byte-identical to the old
- * platform data-stream writer.
+ * Version 2 writes `shapes` last so callers that only need routing/stops (such
+ * as transit journey planning) can pass `includeShapes = false` and skip
+ * deserializing hundreds of thousands of shape points altogether. Version 1
+ * caches remain readable for backward compatibility.
  */
 object StaticFeedBinaryCache {
-    const val VERSION = 1
+    const val VERSION = 2
+    const val LEGACY_VERSION_1 = 1
     const val CACHE_FILE = "static-feed.cache"
+
+    /** Returns the binary cache format version, or null when [bytes] cannot carry one. */
+    fun versionOf(bytes: ByteArray): Int? =
+        if (bytes.size < Int.SIZE_BYTES) null else ByteArrayCursor(bytes).readInt()
 
     fun write(feed: StaticFeed): ByteArray {
         val out = GrowableBytes()
@@ -56,20 +62,25 @@ object StaticFeedBinaryCache {
         feed.calendars.forEach { writeCalendar(out, it) }
         out.writeInt(feed.calendarDates.size)
         feed.calendarDates.forEach { writeCalendarDate(out, it) }
-        out.writeInt(feed.shapes.size)
-        feed.shapes.forEach { writeShape(out, it) }
         out.writeInt(feed.frequencies.size)
         feed.frequencies.forEach { writeFrequency(out, it) }
         out.writeInt(feed.transfers.size)
         feed.transfers.forEach { writeTransfer(out, it) }
+        // Shapes sit at the tail in v2 so readers with includeShapes = false stop before reading them.
+        out.writeInt(feed.shapes.size)
+        feed.shapes.forEach { writeShape(out, it) }
         return out.toByteArray()
     }
 
-    fun read(bytes: ByteArray): StaticFeed? {
+    fun read(bytes: ByteArray): StaticFeed? = read(bytes, includeShapes = true)
+
+    fun read(bytes: ByteArray, includeShapes: Boolean): StaticFeed? {
         return try {
             val input = ByteArrayCursor(bytes)
             val version = input.readInt()
-            if (version != VERSION) throw IllegalArgumentException("cache version $version")
+            if (version != VERSION && version != LEGACY_VERSION_1) {
+                throw IllegalArgumentException("cache version $version")
+            }
             val feedId = FeedId(input.readUtf8String())
             val metadata = readMetadata(input, feedId)
             val agencies = List(input.readInt()) { readAgency(input, feedId) }
@@ -78,9 +89,23 @@ object StaticFeedBinaryCache {
             val trips = List(input.readInt()) { readTrip(input, feedId) }
             val calendars = List(input.readInt()) { readCalendar(input, feedId) }
             val calendarDates = List(input.readInt()) { readCalendarDate(input, feedId) }
-            val shapes = List(input.readInt()) { readShape(input, feedId) }
-            val frequencies = List(input.readInt()) { readFrequency(input, feedId) }
-            val transfers = List(input.readInt()) { readTransfer(input, feedId) }
+            val shapes: List<Shape>
+            val frequencies: List<Frequency>
+            val transfers: List<Transfer>
+            if (version == LEGACY_VERSION_1) {
+                val parsedShapes = List(input.readInt()) { readShape(input, feedId) }
+                shapes = if (includeShapes) parsedShapes else emptyList()
+                frequencies = List(input.readInt()) { readFrequency(input, feedId) }
+                transfers = List(input.readInt()) { readTransfer(input, feedId) }
+            } else {
+                frequencies = List(input.readInt()) { readFrequency(input, feedId) }
+                transfers = List(input.readInt()) { readTransfer(input, feedId) }
+                shapes = if (includeShapes) {
+                    List(input.readInt()) { readShape(input, feedId) }
+                } else {
+                    emptyList()
+                }
+            }
             StaticFeed(
                 feedId = feedId,
                 metadata = metadata,
