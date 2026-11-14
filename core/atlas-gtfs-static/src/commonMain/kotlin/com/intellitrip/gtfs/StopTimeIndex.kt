@@ -1,5 +1,6 @@
 package com.intellitrip.gtfs
 
+import com.intellitrip.domain.FeedId
 import com.intellitrip.domain.GtfsServiceTime
 import com.intellitrip.domain.StopKey
 import com.intellitrip.domain.StopTime
@@ -153,19 +154,36 @@ class StopTimeIndexFormatException(message: String) : IllegalStateException(mess
  * on them for routing.
  */
 class StopTimeIndexReader(
-    private val indexBytes: ByteArray,
+    indexBytes: ByteArray,
     private val dataBytes: ByteArray,
 ) {
 
     private data class Segment(val start: Long, val count: Int)
 
+    private class LoadedIndex(
+        val segments: Map<TripKey, List<Segment>>,
+        val stopIndex: Map<String, Set<TripKey>>,
+    )
+
+    private class CompactTripSet(private val items: Array<TripKey>) : AbstractSet<TripKey>() {
+        override val size: Int get() = items.size
+        override fun iterator(): Iterator<TripKey> = items.iterator()
+        override fun contains(element: TripKey): Boolean = items.any { it == element }
+    }
+
+    private var pendingIndexBytes: ByteArray? = indexBytes
     private val format: IndexFormat = detectFormat(indexBytes)
 
     /** True when this index carries pickup/drop-off restrictions. */
     val isCurrentFormat: Boolean get() = format == IndexFormat.V3
 
-    private val segments: Map<TripKey, List<Segment>> by lazy { loadIndex().first }
-    private val stopIndex: Map<String, Set<TripKey>> by lazy { loadIndex().second }
+    // Load once for both segments and stopIndex, then release raw indexBytes.
+    private val loadedIndex: LoadedIndex by lazy {
+        loadIndex().also { pendingIndexBytes = null }
+    }
+
+    private val segments: Map<TripKey, List<Segment>> get() = loadedIndex.segments
+    private val stopIndex: Map<String, Set<TripKey>> get() = loadedIndex.stopIndex
 
     /**
      * Small cache of recently read trips. A planner reads the same trip
@@ -253,11 +271,12 @@ class StopTimeIndexReader(
         return ByteArrayCursor(dataBytes, start.toInt())
     }
 
-    private fun loadIndex(): Pair<Map<TripKey, List<Segment>>, Map<String, Set<TripKey>>> {
-        if (indexBytes.isEmpty() || dataBytes.isEmpty()) {
-            return emptyMap<TripKey, List<Segment>>() to emptyMap<String, Set<TripKey>>()
+    private fun loadIndex(): LoadedIndex {
+        val rawIndex = pendingIndexBytes
+        if (rawIndex == null || rawIndex.isEmpty() || dataBytes.isEmpty()) {
+            return LoadedIndex(emptyMap(), emptyMap())
         }
-        val cursor = ByteArrayCursor(indexBytes, StopTimeIndexWriter.INDEX_MAGIC.size)
+        val cursor = ByteArrayCursor(rawIndex, StopTimeIndexWriter.INDEX_MAGIC.size)
         if (format == IndexFormat.V3) {
             val dataLength = cursor.readLong()
             if (dataLength != dataBytes.size.toLong()) {
@@ -268,40 +287,86 @@ class StopTimeIndexReader(
         }
         val tripCount = cursor.readInt()
         cursor.readLong() // total rows, informational
-        val result = LinkedHashMap<TripKey, List<Segment>>(tripCount * 2)
+        val feedPool = HashMap<String, FeedId>(4)
+        val tripCapacity = ((tripCount / 0.75f).toInt() + 1).coerceAtLeast(16)
+        val result = HashMap<TripKey, List<Segment>>(tripCapacity)
+        val tripPool = HashMap<String, TripKey>(tripCapacity)
         repeat(tripCount) {
             val name = cursor.readBytes(cursor.readShort()).decodeToString()
             val segmentCount = cursor.readInt()
-            val segments = ArrayList<Segment>(segmentCount)
-            repeat(segmentCount) {
+            val segments: List<Segment> = if (segmentCount == 1) {
                 val start = cursor.readLong()
                 val rows = cursor.readInt()
-                segments.add(Segment(start, rows))
+                listOf(Segment(start, rows))
+            } else {
+                ArrayList<Segment>(segmentCount).apply {
+                    repeat(segmentCount) {
+                        val start = cursor.readLong()
+                        val rows = cursor.readInt()
+                        add(Segment(start, rows))
+                    }
+                }
             }
-            val (feedId, tripId) = parseKey(name)
-            result[TripKey(feedId, tripId)] = segments
+            val (feedId, tripId) = parseKey(name, feedPool)
+            val tripKey = TripKey(feedId, tripId)
+            result[tripKey] = segments
+            tripPool[name] = tripKey
         }
 
         val stopCount = cursor.readInt()
-        val stops = LinkedHashMap<String, Set<TripKey>>(stopCount * 2)
+        val stopCapacity = ((stopCount / 0.75f).toInt() + 1).coerceAtLeast(16)
+        val stops = HashMap<String, Set<TripKey>>(stopCapacity)
+        val seenTrips = HashSet<TripKey>(256)
+        val scratchTrips = ArrayList<TripKey>(256)
         repeat(stopCount) {
             val stopId = cursor.readBytes(cursor.readShort()).decodeToString()
             val tripsInStop = cursor.readInt()
-            val trips = LinkedHashSet<TripKey>(tripsInStop * 2)
-            repeat(tripsInStop) {
-                val tripName = cursor.readBytes(cursor.readShort()).decodeToString()
-                val (tripFeed, tripId) = parseKey(tripName)
-                trips.add(TripKey(tripFeed, tripId))
+            when (tripsInStop) {
+                0 -> stops[stopId] = emptySet()
+                1 -> {
+                    val tripName = cursor.readBytes(cursor.readShort()).decodeToString()
+                    val key = resolveTripKey(tripName, tripPool, feedPool)
+                    stops[stopId] = setOf(key)
+                }
+                else -> {
+                    seenTrips.clear()
+                    scratchTrips.clear()
+                    repeat(tripsInStop) {
+                        val tripName = cursor.readBytes(cursor.readShort()).decodeToString()
+                        val key = resolveTripKey(tripName, tripPool, feedPool)
+                        if (seenTrips.add(key)) {
+                            scratchTrips.add(key)
+                        }
+                    }
+                    stops[stopId] = if (scratchTrips.size == 1) {
+                        setOf(scratchTrips[0])
+                    } else {
+                        CompactTripSet(scratchTrips.toTypedArray())
+                    }
+                }
             }
-            stops[stopId] = trips
         }
-        return result to stops
+        return LoadedIndex(result, stops)
     }
 
-    private fun parseKey(name: String): Pair<com.intellitrip.domain.FeedId, String> {
+    private fun resolveTripKey(
+        name: String,
+        tripPool: HashMap<String, TripKey>,
+        feedPool: HashMap<String, FeedId>,
+    ): TripKey {
+        tripPool[name]?.let { return it }
+        val (feedId, tripId) = parseKey(name, feedPool)
+        val created = TripKey(feedId, tripId)
+        tripPool[name] = created
+        return created
+    }
+
+    private fun parseKey(name: String, feedPool: HashMap<String, FeedId>): Pair<FeedId, String> {
         val separator = name.indexOf('|')
         require(separator > 0) { "malformed stop-time index key: $name" }
-        return com.intellitrip.domain.FeedId(name.substring(0, separator)) to name.substring(separator + 1)
+        val rawFeed = name.substring(0, separator)
+        val feed = feedPool.getOrPut(rawFeed) { FeedId(rawFeed) }
+        return feed to name.substring(separator + 1)
     }
 
     companion object {

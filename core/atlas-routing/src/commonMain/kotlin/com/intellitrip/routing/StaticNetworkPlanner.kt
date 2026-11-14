@@ -306,7 +306,7 @@ class StaticNetworkPlanner(
             checkCancelled()
             for (trip in context.tripsAt(origin.stop.key)) {
                 checkCancelled()
-                if (!network.isActive(trip.serviceKey, serviceDate)) continue
+                if (!context.isServiceActive(trip.serviceKey)) continue
                 val times = network.stopTimesFor(trip.key)
                 if (times.isEmpty()) continue
                 val boardIndex = times.indexOfFirst { it.stopKey == origin.stop.key }
@@ -467,9 +467,21 @@ class StaticNetworkPlanner(
         val destinationKeys: Set<StopKey>,
         val checkCancelled: () -> Unit,
     ) {
+        private val serviceCalendar = ServiceCalendar(
+            network.calendars,
+            network.calendarDates,
+            network.activeServiceDates,
+        )
+        private val activeServiceMemo = HashMap<ServiceKey, Boolean>()
         private val tripsAtMemo = HashMap<StopKey, List<Trip>>()
         private val destinationServiceMemo = HashMap<StopKey, Boolean>()
         private val transferServiceMemo = HashMap<TransferServiceKey, Boolean>()
+
+        /** Memoized service-calendar check for [serviceDate]. */
+        fun isServiceActive(serviceKey: ServiceKey): Boolean =
+            activeServiceMemo.getOrPut(serviceKey) {
+                serviceCalendar.isActive(serviceKey, serviceDate)
+            }
 
         /** Trips that have a downstream destination stop allowing alighting. */
         private val destinationTrips: Set<TripKey> by lazy {
@@ -479,7 +491,7 @@ class StaticNetworkPlanner(
                 for (trip in tripsAt(stop)) {
                     checkCancelled()
                     if (trip.key in result) continue
-                    if (!network.isActive(trip.serviceKey, serviceDate)) continue
+                    if (!isServiceActive(trip.serviceKey)) continue
                     if (network.stopTimesFor(trip.key).any { row ->
                             row.stopKey in destinationKeys && allowsAlighting(row)
                         }
@@ -515,7 +527,7 @@ class StaticNetworkPlanner(
                 checkCancelled()
                 for (trip in tripsAt(stop)) {
                     checkCancelled()
-                    if (network.isActive(trip.serviceKey, serviceDate)) result += trip.key
+                    if (isServiceActive(trip.serviceKey)) result += trip.key
                 }
             }
             result
@@ -601,7 +613,7 @@ class StaticNetworkPlanner(
             allowTransfer: Boolean,
         ): List<Trip> = tripsAt(stop).filter { trip ->
             trip.key != excludeTrip &&
-                network.isActive(trip.serviceKey, serviceDate) &&
+                isServiceActive(trip.serviceKey) &&
                 (trip.key in destinationTrips || (allowTransfer && trip.key in transferTrips))
         }
     }

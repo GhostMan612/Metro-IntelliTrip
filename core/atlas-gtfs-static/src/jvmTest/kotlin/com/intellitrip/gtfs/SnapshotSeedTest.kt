@@ -17,6 +17,10 @@ import kotlinx.coroutines.runBlocking
 class SnapshotSeedTest {
     @Test
     fun seedRealFeedSnapshot() {
+        if (System.getenv("CI") == "true") {
+            println("SKIPPED dev-only seed generator on CI")
+            return
+        }
         val fixture = System.getProperty("intellitrip.gtfs.fixture") ?: return
         val file = java.io.File(fixture)
         if (!file.exists()) return
