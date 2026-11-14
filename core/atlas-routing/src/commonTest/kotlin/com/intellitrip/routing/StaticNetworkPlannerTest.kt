@@ -8,7 +8,10 @@ import com.intellitrip.domain.StopKey
 import com.intellitrip.domain.StopTimeUpdate
 import com.intellitrip.domain.TripKey
 import com.intellitrip.domain.TripUpdate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.Instant
@@ -407,6 +410,140 @@ class StaticNetworkPlannerTest {
             ),
         )
         assertTrue(net2.isActive(addedSvc, RoutingFixtures.serviceDate))
+    }
+
+    @Test
+    fun missingOriginStopsReportsSpecificWalkLimitReason() {
+        val request = RoutingFixtures.request().copy(origin = GeoPoint(45.50, -94.00))
+        val result = runBlocking { planner.plan(request) }
+        val partial = assertIs<ProviderResult.PartialResult<List<com.intellitrip.domain.JourneyOption>>>(result)
+        assertTrue(partial.missing.contains("stops-within-walk-limit"))
+        assertTrue(partial.missing.contains("no-origin-stops-within-walk-limit"))
+    }
+
+    @Test
+    fun missingDestinationStopsReportsSpecificWalkLimitReason() {
+        val request = RoutingFixtures.request().copy(destination = GeoPoint(45.50, -94.00))
+        val result = runBlocking { planner.plan(request) }
+        val partial = assertIs<ProviderResult.PartialResult<List<com.intellitrip.domain.JourneyOption>>>(result)
+        assertTrue(partial.missing.contains("stops-within-walk-limit"))
+        assertTrue(partial.missing.contains("no-destination-stops-within-walk-limit"))
+    }
+
+    @Test
+    fun transferFallbackRespectsMaxTransfersCap() {
+        val s4 = com.intellitrip.domain.Stop(
+            com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S4"),
+            "S4",
+            "Fourth",
+            null,
+            GeoPoint(44.9890, -93.2650),
+            null,
+            0,
+            null,
+            null,
+        )
+        val tripD = com.intellitrip.domain.Trip(
+            key = com.intellitrip.domain.TripKey(RoutingFixtures.feedId, "T4"),
+            routeKey = RoutingFixtures.routeA.key,
+            serviceKey = RoutingFixtures.tripA1.serviceKey,
+            headsign = null,
+            directionId = 0,
+            blockId = null,
+            shapeKey = null,
+            wheelchairAccessible = null,
+        )
+        val stops = RoutingFixtures.network.stops + s4
+        val times = RoutingFixtures.stopTimes.filter { it.tripKey != RoutingFixtures.tripB1.key } +
+            listOf(
+                com.intellitrip.domain.StopTime(tripKey = RoutingFixtures.tripB1.key, stopKey = com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S2"), stopSequence = 1, arrivalTime = com.intellitrip.domain.GtfsServiceTime.parse("08:12:00"), departureTime = com.intellitrip.domain.GtfsServiceTime.parse("08:12:00"), pickupType = null, dropOffType = null, timepoint = null, shapeDistTraveled = null),
+                com.intellitrip.domain.StopTime(tripKey = RoutingFixtures.tripB1.key, stopKey = com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S4"), stopSequence = 2, arrivalTime = com.intellitrip.domain.GtfsServiceTime.parse("08:20:00"), departureTime = com.intellitrip.domain.GtfsServiceTime.parse("08:20:00"), pickupType = null, dropOffType = null, timepoint = null, shapeDistTraveled = null),
+                com.intellitrip.domain.StopTime(tripKey = tripD.key, stopKey = com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S4"), stopSequence = 1, arrivalTime = com.intellitrip.domain.GtfsServiceTime.parse("08:22:00"), departureTime = com.intellitrip.domain.GtfsServiceTime.parse("08:22:00"), pickupType = null, dropOffType = null, timepoint = null, shapeDistTraveled = null),
+                com.intellitrip.domain.StopTime(tripKey = tripD.key, stopKey = com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S3"), stopSequence = 2, arrivalTime = com.intellitrip.domain.GtfsServiceTime.parse("08:30:00"), departureTime = com.intellitrip.domain.GtfsServiceTime.parse("08:30:00"), pickupType = null, dropOffType = null, timepoint = null, shapeDistTraveled = null),
+            )
+        // Remove the direct C1 leg so ONLY the 2-transfer path T1->T2->T4 connects S1 to S3.
+        val transferOnlyTimes = times.filter { it.tripKey != RoutingFixtures.tripC1.key }
+        val net = RoutingNetwork(
+            feedId = RoutingFixtures.feedId,
+            metadata = RoutingFixtures.network.metadata,
+            routes = RoutingFixtures.network.routes,
+            stops = stops,
+            trips = listOf(RoutingFixtures.tripA1, RoutingFixtures.tripB1, tripD),
+            stopTimes = transferOnlyTimes,
+        )
+        val p = StaticNetworkPlanner(net, RoutingFixtures.zone)
+
+        val oneTransferResult = runBlocking { p.plan(RoutingFixtures.request().copy(maxTransfers = 1)) }
+        val oneTransferSuccess = assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(oneTransferResult)
+        assertTrue(oneTransferSuccess.data.isEmpty(), "1-transfer cap should not return a 2-transfer journey")
+
+        val twoTransferResult = runBlocking { p.plan(RoutingFixtures.request().copy(maxTransfers = 2)) }
+        val twoTransferSuccess = assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(twoTransferResult)
+        assertEquals(1, twoTransferSuccess.data.size)
+        assertEquals(2, twoTransferSuccess.data.single().transferCount)
+    }
+
+    @Test
+    fun cooperativeCancellationTerminatesMidSearch() {
+        var checkpoints = 0
+        var stoppedEarly = false
+        val thrown = runCatching {
+            planner.planWithRealtime(RoutingFixtures.request(), emptyList()) {
+                checkpoints++
+                if (checkpoints >= 8) {
+                    stoppedEarly = true
+                    throw CancellationException("canceled at checkpoint $checkpoints")
+                }
+            }
+        }
+        assertTrue(stoppedEarly)
+        assertIs<CancellationException>(thrown.exceptionOrNull())
+        assertEquals(8, checkpoints)
+    }
+
+    @Test
+    fun preCanceledCoroutineAbortsImmediately() {
+        val job = kotlinx.coroutines.Job().apply { cancel() }
+        val failed = runCatching {
+            runBlocking(job) {
+                planner.plan(RoutingFixtures.request())
+            }
+        }
+        assertIs<CancellationException>(failed.exceptionOrNull())
+    }
+
+    @Test
+    fun timeoutCancelsAtCooperativeCheckpoint() {
+        val largeStops = (0 until 2000).map { idx ->
+            com.intellitrip.domain.Stop(
+                com.intellitrip.domain.StopKey(RoutingFixtures.feedId, "S_$idx"),
+                "S_$idx",
+                "Stop $idx",
+                null,
+                GeoPoint(44.9778 + (idx * 0.00001), -93.2650),
+                null,
+                0,
+                null,
+                null,
+            )
+        }
+        val net = RoutingNetwork(
+            feedId = RoutingFixtures.feedId,
+            metadata = RoutingFixtures.network.metadata,
+            routes = RoutingFixtures.network.routes,
+            stops = largeStops,
+            trips = emptyList(),
+            stopTimes = emptyList(),
+        )
+        val slowPlanner = StaticNetworkPlanner(net, RoutingFixtures.zone)
+        val outcome = runCatching {
+            runBlocking {
+                withTimeout(Duration.ZERO) {
+                    slowPlanner.plan(RoutingFixtures.request())
+                }
+            }
+        }
+        assertIs<TimeoutCancellationException>(outcome.exceptionOrNull())
     }
 }
 

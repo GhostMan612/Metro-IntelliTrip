@@ -6,6 +6,8 @@ import com.intellitrip.domain.GeoPoint
 import com.intellitrip.domain.JourneyOption
 import com.intellitrip.domain.TripPlanRequest
 import kotlinx.datetime.Instant
+import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 
@@ -30,6 +32,7 @@ class HybridRoutingProvider(
 ) : RoutingProvider {
 
     override suspend fun plan(request: TripPlanRequest): ProviderResult<List<JourneyOption>> {
+        coroutineContext.ensureActive()
         val localResult = try {
             local.plan(request)
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -39,6 +42,7 @@ class HybridRoutingProvider(
                 com.intellitrip.contracts.ProviderError("Local planner failed", e),
             )
         }
+        coroutineContext.ensureActive()
 
         val localJourneys = localResult.dataOrEmpty()
         if (localJourneys.isNotEmpty()) {

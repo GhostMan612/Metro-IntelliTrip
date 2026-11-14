@@ -31,6 +31,8 @@ import com.intellitrip.domain.Trip
 import com.intellitrip.domain.TripKey
 import com.intellitrip.domain.TripPlanRequest
 import com.intellitrip.domain.TripUpdate
+import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
@@ -201,27 +203,48 @@ class StaticNetworkPlanner(
     /** Feed truth wins: the network's agency timezone overrides the default. */
     private val effectiveZone: TimeZone get() = network.agencyZone(agencyZone)
 
-    override suspend fun plan(request: TripPlanRequest): ProviderResult<List<JourneyOption>> =
-        planWithRealtime(request, emptyList())
+    override suspend fun plan(request: TripPlanRequest): ProviderResult<List<JourneyOption>> {
+        val callerContext = coroutineContext
+        callerContext.ensureActive()
+        return planWithRealtime(request, emptyList(), callerContext::ensureActive)
+    }
 
     fun planWithRealtime(
         request: TripPlanRequest,
         updates: List<TripUpdate>,
+    ): ProviderResult<List<JourneyOption>> = planWithRealtime(request, updates) {}
+
+    /**
+     * Plans a journey using static schedules plus optional [updates], polling
+     * [checkCancelled] at cooperative checkpoints across stop scanning, candidate
+     * expansion, and transfer searches.
+     */
+    fun planWithRealtime(
+        request: TripPlanRequest,
+        updates: List<TripUpdate>,
+        checkCancelled: () -> Unit,
     ): ProviderResult<List<JourneyOption>> {
+        checkCancelled()
         val earliest = request.departAt ?: Clock.System.now() + 60.seconds
         val serviceDate = earliest.toLocalDateTime(effectiveZone).date
 
-val originStops = nearestStops(request.origin, request.maxWalkMeters, maxStopsPerEnd)
-        val destinationStops = nearestStops(request.destination, request.maxWalkMeters, maxStopsPerEnd)
+        val originStops = nearestStops(request.origin, request.maxWalkMeters, maxStopsPerEnd, checkCancelled)
+        val destinationStops = nearestStops(request.destination, request.maxWalkMeters, maxStopsPerEnd, checkCancelled)
         if (originStops.isEmpty() || destinationStops.isEmpty()) {
+            val missing = buildList {
+                add("stops-within-walk-limit")
+                if (originStops.isEmpty()) add("no-origin-stops-within-walk-limit")
+                if (destinationStops.isEmpty()) add("no-destination-stops-within-walk-limit")
+            }
             return ProviderResult.PartialResult(
                 data = emptyList(),
-                missing = listOf("stops-within-walk-limit"),
+                missing = missing,
                 freshness = freshness(),
             )
         }
 
-val options = buildOptions(
+        checkCancelled()
+        val options = buildOptions(
             request,
             originStops,
             destinationStops,
@@ -229,7 +252,9 @@ val options = buildOptions(
             earliest,
             earliest + (departureWindowMinutes * 60).seconds,
             updates,
+            checkCancelled,
         )
+        checkCancelled()
         val sorted = options.sortedBy { it.arrival }
         val arriveBy = request.arriveBy
         if (arriveBy != null) {
@@ -257,15 +282,17 @@ val options = buildOptions(
         request: TripPlanRequest,
         originStops: List<Stoped>,
         destinationStops: List<Stoped>,
-serviceDate: LocalDate,
+        serviceDate: LocalDate,
         earliest: Instant,
         horizonEnd: Instant,
         updates: List<TripUpdate>,
-): List<JourneyOption> {
+        checkCancelled: () -> Unit,
+    ): List<JourneyOption> {
+        checkCancelled()
         val destinationKeys = destinationStops.map { it.stop.key }.toSet()
         val options = mutableListOf<JourneyOption>()
         val maxTransfers = request.maxTransfers ?: 1
-        val context = SearchContext(serviceDate, destinationKeys)
+        val context = SearchContext(serviceDate, destinationKeys, checkCancelled)
 
         // Candidate boardings, gathered across all origin stops and ordered by
         // departure so the search can stop once it has seen enough.
@@ -276,7 +303,9 @@ serviceDate: LocalDate,
         // journey never accounts for.
         val candidates = ArrayList<Candidate>()
         for (origin in originStops) {
+            checkCancelled()
             for (trip in context.tripsAt(origin.stop.key)) {
+                checkCancelled()
                 if (!network.isActive(trip.serviceKey, serviceDate)) continue
                 val times = network.stopTimesFor(trip.key)
                 if (times.isEmpty()) continue
@@ -286,7 +315,8 @@ serviceDate: LocalDate,
 
                 // Frequency trips repeat at headway intervals; expand each
                 // repetition as its own candidate (bounded, window-filtered).
-                for ((board, shiftedTimes) in expandedRuns(trip.key, times, boardIndex)) {
+                for ((board, shiftedTimes) in expandedRuns(trip.key, times, boardIndex, checkCancelled)) {
+                    checkCancelled()
                     val boardInstant =
                         board.departureTime?.instantOn(serviceDate, effectiveZone) ?: continue
                     if (boardInstant < earliest) continue
@@ -322,6 +352,7 @@ serviceDate: LocalDate,
         }
 
         for (candidate in chosen) {
+            checkCancelled()
             val origin = candidate.origin
             val board = candidate.board
             val times = candidate.times
@@ -332,6 +363,7 @@ serviceDate: LocalDate,
             // Direct: the first downstream stop inside the destination area
             // that permits alighting.
             val directIndex = (firstAlightIndex until times.size).firstOrNull { index ->
+                checkCancelled()
                 times[index].stopKey in destinationKeys && allowsAlighting(times[index])
             }
             if (directIndex != null) {
@@ -345,6 +377,7 @@ serviceDate: LocalDate,
             val cutoff = journeyCutoff()
             val visitedTransferStops = HashSet<StopKey>()
             for (index in firstAlightIndex until times.size) {
+                checkCancelled()
                 val alight = times[index]
                 if (!allowsAlighting(alight)) continue
                 // A stop inside the destination area can still be a transfer
@@ -369,13 +402,30 @@ serviceDate: LocalDate,
 
                 if (reachesAnotherTransfer) {
                     val onward2 = doubleOnwardJourney(
-                        request, origin, board, alight, destinationStops, serviceDate, updates, context, cutoff,
+                        request,
+                        origin,
+                        board,
+                        alight,
+                        destinationStops,
+                        serviceDate,
+                        updates,
+                        context,
+                        cutoff,
+                        checkCancelled,
                     )
                     if (onward2 != null) options += onward2
                 }
                 if (reachesDestination) {
                     val onward = onwardJourney(
-                        request, origin, board, alight, destinationStops, serviceDate, updates, context,
+                        request,
+                        origin,
+                        board,
+                        alight,
+                        destinationStops,
+                        serviceDate,
+                        updates,
+                        context,
+                        checkCancelled,
                     )
                     if (onward != null) options += onward
                 }
@@ -415,6 +465,7 @@ serviceDate: LocalDate,
     private inner class SearchContext(
         val serviceDate: LocalDate,
         val destinationKeys: Set<StopKey>,
+        val checkCancelled: () -> Unit,
     ) {
         private val tripsAtMemo = HashMap<StopKey, List<Trip>>()
         private val destinationServiceMemo = HashMap<StopKey, Boolean>()
@@ -424,7 +475,9 @@ serviceDate: LocalDate,
         private val destinationTrips: Set<TripKey> by lazy {
             val result = HashSet<TripKey>()
             for (stop in destinationKeys) {
+                checkCancelled()
                 for (trip in tripsAt(stop)) {
+                    checkCancelled()
                     if (trip.key in result) continue
                     if (!network.isActive(trip.serviceKey, serviceDate)) continue
                     if (network.stopTimesFor(trip.key).any { row ->
@@ -445,6 +498,7 @@ serviceDate: LocalDate,
         private val transferHubStops: Set<StopKey> by lazy {
             val result = HashSet<StopKey>()
             for (trip in destinationTrips) {
+                checkCancelled()
                 for (row in network.stopTimesFor(trip)) result += row.stopKey
             }
             result
@@ -458,7 +512,9 @@ serviceDate: LocalDate,
         private val transferTrips: Set<TripKey> by lazy {
             val result = HashSet<TripKey>()
             for (stop in transferHubStops) {
+                checkCancelled()
                 for (trip in tripsAt(stop)) {
+                    checkCancelled()
                     if (network.isActive(trip.serviceKey, serviceDate)) result += trip.key
                 }
             }
@@ -466,8 +522,10 @@ serviceDate: LocalDate,
         }
 
         /** Trips serving a stop; memoized because the search asks repeatedly. */
-        fun tripsAt(stop: StopKey): List<Trip> =
-            tripsAtMemo.getOrPut(stop) { network.tripsServing(stop) }
+        fun tripsAt(stop: StopKey): List<Trip> {
+            checkCancelled()
+            return tripsAtMemo.getOrPut(stop) { network.tripsServing(stop) }
+        }
 
         /** True when some trip serving [stop] can reach the destination. */
         fun destinationServiceAt(stop: StopKey): Boolean =
@@ -597,18 +655,22 @@ serviceDate: LocalDate,
         tripKey: TripKey,
         times: List<StopTime>,
         boardIndex: Int,
+        checkCancelled: () -> Unit,
     ): List<Pair<StopTime, List<StopTime>>> {
+        checkCancelled()
         val freqs = network.frequenciesByTrip[tripKey]
         if (freqs.isNullOrEmpty()) return listOf(times[boardIndex] to times)
         val firstDepSec = times.firstOrNull()?.departureTime?.secondsSinceServiceDayStart ?: return listOf(times[boardIndex] to times)
         val out = mutableListOf<Pair<StopTime, List<StopTime>>>()
         for (freq in freqs) {
+            checkCancelled()
             val headway = freq.headwaySeconds
             if (headway <= 0) continue
             var runStart = freq.startTime.secondsSinceServiceDayStart
             var count = 0
             // All-day 5-min headway is 288 runs; 50 truncates legitimate service.
             while (runStart <= freq.endTime.secondsSinceServiceDayStart && count < 300) {
+                checkCancelled()
                 val delta = runStart - firstDepSec
                 val shifted = times.map { st ->
                     st.copy(
@@ -665,13 +727,16 @@ serviceDate: LocalDate,
         serviceDate: LocalDate,
         updates: List<TripUpdate>,
         context: SearchContext,
+        checkCancelled: () -> Unit,
     ): JourneyOption? {
+        checkCancelled()
         val destinationKeys = context.destinationKeys
         val connection = earliestConnection(
             firstAlight,
             context,
             allowTransfer = false,
             walkSpeedMps = request.walkSpeedMetersPerSecond,
+            checkCancelled = checkCancelled,
         ) ?: return null
         val (secondTrip, secondBoard, walkingDuration, secondTimes) = connection
         val boardIndex = secondTimes.indexOfFirst { it.stopKey == secondBoard.stopKey && it.stopSequence == secondBoard.stopSequence }
@@ -729,13 +794,16 @@ serviceDate: LocalDate,
         updates: List<TripUpdate>,
         context: SearchContext,
         cutoff: Instant?,
+        checkCancelled: () -> Unit,
     ): JourneyOption? {
+        checkCancelled()
         val destinationKeys = context.destinationKeys
         val conn1 = earliestConnection(
             firstAlight,
             context,
             allowTransfer = true,
             walkSpeedMps = request.walkSpeedMetersPerSecond,
+            checkCancelled = checkCancelled,
         ) ?: return null
         val (secondTrip, secondBoard, walking1, secondTimes) = conn1
         val boardIdx2 = secondTimes.indexOfFirst { it.stopKey == secondBoard.stopKey && it.stopSequence == secondBoard.stopSequence }
@@ -745,6 +813,7 @@ serviceDate: LocalDate,
         val firstLeg = transitLeg(firstLegTrip, board, firstAlight, serviceDate, updates)
         val visitedMidStops = HashSet<StopKey>()
         for (midIdx in boardIdx2 + 1 until secondTimes.size) {
+            checkCancelled()
             val midAlight = secondTimes[midIdx]
             if (!allowsAlighting(midAlight)) continue
             if (!visitedMidStops.add(midAlight.stopKey)) continue
@@ -760,6 +829,7 @@ serviceDate: LocalDate,
                 context,
                 allowTransfer = false,
                 walkSpeedMps = request.walkSpeedMetersPerSecond,
+                checkCancelled = checkCancelled,
             ) ?: continue
             val (thirdTrip, thirdBoard, walking2, thirdTimes) = conn2
             if (thirdTrip.key == secondTrip.key) continue
@@ -821,7 +891,9 @@ serviceDate: LocalDate,
         context: SearchContext,
         allowTransfer: Boolean,
         walkSpeedMps: Double,
+        checkCancelled: () -> Unit,
     ): Quad<Trip, StopTime, Duration, List<StopTime>>? {
+        checkCancelled()
         val arrivalSeconds =
             firstAlight.arrivalTime?.secondsSinceServiceDayStart ?: return null
         val fromStop = network.stopsByKey[firstAlight.stopKey]
@@ -839,6 +911,7 @@ serviceDate: LocalDate,
                 network.stopsByKey[parent]?.let { add(it) }
             }
             for (stop in siblings) {
+                checkCancelled()
                 if (stop.key == firstAlight.stopKey) continue
                 val walking = haversineMeters(fromLocation, stop.location)
                 val secs = (walking / walkSpeedMps).toLong()
@@ -847,6 +920,7 @@ serviceDate: LocalDate,
         }
         // Explicit transfers.txt pairs.
         for (transfer in network.transfersByFromStop[firstAlight.stopKey].orEmpty()) {
+            checkCancelled()
             if (transfer.type == com.intellitrip.domain.TransferType.NO_TRANSFER) continue
             val toStop = network.stopsByKey[transfer.toStopKey] ?: continue
             val walking = if (fromLocation != null) haversineMeters(fromLocation, toStop.location) else 0.0
@@ -856,11 +930,13 @@ serviceDate: LocalDate,
         var best: Quad<Trip, StopTime, Duration, List<StopTime>>? = null
         var bestDepartureSeconds: Long? = null
         for ((boardingKey, requiredSeconds) in boardingStops) {
+            checkCancelled()
             val earliestBoardSeconds = arrivalSeconds + requiredSeconds
             // Only trips that can actually reach the destination (or, for a
             // middle leg, another transfer) are candidates at all.
             val onwardTrips = context.connectionTrips(boardingKey, firstAlight.tripKey, allowTransfer)
             for (trip in onwardTrips) {
+                checkCancelled()
                 val times = network.stopTimesFor(trip.key)
                 if (times.isEmpty()) continue
                 // Consider every stop at this boarding stop, expanded for frequencies.
@@ -869,8 +945,9 @@ serviceDate: LocalDate,
                     times[it].stopKey == boardingKey && allowsBoarding(times[it])
                 }
                 for (bi in boardIndexes) {
+                    checkCancelled()
                     val (candidate, shifted) =
-                        earliestCatchableRun(trip.key, times, bi, earliestBoardSeconds) ?: continue
+                        earliestCatchableRun(trip.key, times, bi, earliestBoardSeconds, checkCancelled) ?: continue
                     val departureSeconds =
                         candidate.departureTime?.secondsSinceServiceDayStart?.toLong() ?: continue
                     if (bestDepartureSeconds == null || departureSeconds < bestDepartureSeconds) {
@@ -898,7 +975,9 @@ serviceDate: LocalDate,
         times: List<StopTime>,
         boardIndex: Int,
         earliestDepartureSeconds: Long,
+        checkCancelled: () -> Unit,
     ): Pair<StopTime, List<StopTime>>? {
+        checkCancelled()
         val templateBoard = times[boardIndex]
         val templateDeparture =
             templateBoard.departureTime?.secondsSinceServiceDayStart?.toLong() ?: return null
@@ -911,6 +990,7 @@ serviceDate: LocalDate,
         val minDeparture = times.mapNotNull { it.departureTime?.secondsSinceServiceDayStart }.minOrNull() ?: 0
         var bestDelta: Long? = null
         for (freq in freqs) {
+            checkCancelled()
             val headway = freq.headwaySeconds.toLong()
             if (headway <= 0) continue
             val windowStart = freq.startTime.secondsSinceServiceDayStart.toLong()
@@ -1015,7 +1095,7 @@ serviceDate: LocalDate,
 
     private data class Stoped(val stop: Stop, val meters: Double)
 
-/**
+    /**
      * Stops within [maxMeters], nearest first, capped at [limit].
      *
      * The cap matters more than it looks: in a dense downtown a 2 km walk reaches
@@ -1023,14 +1103,24 @@ serviceDate: LocalDate,
      * search. Taking the closest few keeps the search tractable without changing
      * results in practice, since the nearest stops dominate the best journeys.
      */
-private fun nearestStops(point: GeoPoint, maxMeters: Double, limit: Int): List<Stoped> =
-        network.stops
-            .asSequence()
-            .map { Stoped(it, haversineMeters(point, it.location)) }
-            .filter { it.meters <= maxMeters }
-            .sortedBy { it.meters }
-            .take(limit)
-            .toList()
+    private fun nearestStops(
+        point: GeoPoint,
+        maxMeters: Double,
+        limit: Int,
+        checkCancelled: () -> Unit,
+    ): List<Stoped> {
+        checkCancelled()
+        val matches = ArrayList<Stoped>()
+        for (stop in network.stops) {
+            checkCancelled()
+            val meters = haversineMeters(point, stop.location)
+            if (meters <= maxMeters) {
+                matches += Stoped(stop, meters)
+            }
+        }
+        matches.sortBy { it.meters }
+        return if (matches.size <= limit) matches else matches.subList(0, limit).toList()
+    }
 }
 
 /**
