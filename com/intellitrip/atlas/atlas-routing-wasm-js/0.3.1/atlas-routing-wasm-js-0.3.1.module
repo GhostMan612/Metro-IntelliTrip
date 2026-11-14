@@ -1,0 +1,130 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../atlas-routing/0.3.1/atlas-routing-0.3.1.module",
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-routing",
+    "version": "0.3.1",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-routing-wasm-js.klib",
+          "url": "atlas-routing-wasm-js-0.3.1.klib",
+          "size": 147739,
+          "sha512": "884c3340d091985b7378cc24520f454c31b4733413e36889a1611fcbd2905214bf01a3421af0372f2c5b6f28bf1924b1af061e62f53f7a729fd9d14873ca0db2",
+          "sha256": "4e9ad49aaf4c5d0e53cf7a821152ce16514db76719271b4ca3558587f0231a9c",
+          "sha1": "dc3b26aa07818eb732cd7fde144f40d868054363",
+          "md5": "56b462976de98077ba40c71875e34fac"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.1"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-routing-wasm-js.klib",
+          "url": "atlas-routing-wasm-js-0.3.1.klib",
+          "size": 147739,
+          "sha512": "884c3340d091985b7378cc24520f454c31b4733413e36889a1611fcbd2905214bf01a3421af0372f2c5b6f28bf1924b1af061e62f53f7a729fd9d14873ca0db2",
+          "sha256": "4e9ad49aaf4c5d0e53cf7a821152ce16514db76719271b4ca3558587f0231a9c",
+          "sha1": "dc3b26aa07818eb732cd7fde144f40d868054363",
+          "md5": "56b462976de98077ba40c71875e34fac"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "files": [
+        {
+          "name": "atlas-routing-wasm-js-sources.jar",
+          "url": "atlas-routing-wasm-js-0.3.1-sources.jar",
+          "size": 26246,
+          "sha512": "a498c99c7e1f37cef269ed8a04af46b838a6a747d043d10d45b89f7f9d5561aebcc614cccb655503a18846ffe70ee0ec7b97d4736a84e1a8557c1640d91de37d",
+          "sha256": "ee25f2cf9172fe0b32891ecef8c46e3f85275f1c76d5c6a430e5fc53d789d9a5",
+          "sha1": "1ad115cbfe4fef751eea9b4452ba286f1817360e",
+          "md5": "4cceda4df311da608a6f41858fc10b95"
+        }
+      ]
+    }
+  ]
+}

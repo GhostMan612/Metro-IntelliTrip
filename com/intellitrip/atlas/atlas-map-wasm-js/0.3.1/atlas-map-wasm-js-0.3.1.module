@@ -1,0 +1,130 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../atlas-map/0.3.1/atlas-map-0.3.1.module",
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-map",
+    "version": "0.3.1",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-map-wasm-js.klib",
+          "url": "atlas-map-wasm-js-0.3.1.klib",
+          "size": 72881,
+          "sha512": "414be4be68a6a85a09e0d25b1d2dd578d63a7c0eb235baa23b4745edb377a51e315794f8139cfc2aa9d5981efa45fc1272de2ad849c735b35ab98d840211b787",
+          "sha256": "2ce2e2a6fe4444cb0d74bab8161b2069af7d4e7306bf61d3f9f62d6cd106a444",
+          "sha1": "0994605d424868bad9c5b1c5c230281760ee0f42",
+          "md5": "59d06d9cb62762e76c6e278826915584"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-map-wasm-js.klib",
+          "url": "atlas-map-wasm-js-0.3.1.klib",
+          "size": 72881,
+          "sha512": "414be4be68a6a85a09e0d25b1d2dd578d63a7c0eb235baa23b4745edb377a51e315794f8139cfc2aa9d5981efa45fc1272de2ad849c735b35ab98d840211b787",
+          "sha256": "2ce2e2a6fe4444cb0d74bab8161b2069af7d4e7306bf61d3f9f62d6cd106a444",
+          "sha1": "0994605d424868bad9c5b1c5c230281760ee0f42",
+          "md5": "59d06d9cb62762e76c6e278826915584"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "files": [
+        {
+          "name": "atlas-map-wasm-js-sources.jar",
+          "url": "atlas-map-wasm-js-0.3.1-sources.jar",
+          "size": 12643,
+          "sha512": "c129e19914ca50679517f8cc6ea6f32f58b87ef3e0484cfbad9f5d5c506c2342f78b4b1ec0793fb11e26addb660ef7cc79d4c5837269b6007afe6dbbe1a9db48",
+          "sha256": "279a968f1d3533ec792297a9cc6431adca03c62ea627711a1e66a9221922a973",
+          "sha1": "c46799d8409b1ba9053cf70f7423f6c2b62f6b14",
+          "md5": "880e251295e594f322d82a64ffb80097"
+        }
+      ]
+    }
+  ]
+}

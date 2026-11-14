@@ -1,0 +1,144 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../atlas-map/0.3.1/atlas-map-0.3.1.module",
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-map",
+    "version": "0.3.1",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-map-jvm.jar",
+          "url": "atlas-map-jvm-0.3.1.jar",
+          "size": 67282,
+          "sha512": "d8fb83964e9c8b94e8793f08a0370131a44562f4a1c9fd9afee7544cafc4018d3c82c603c3518342f03d8b29bb5b66f3dec423c4ed2da04250b8a9986f903e3d",
+          "sha256": "206b3916734d6cacb4b6ab4eec8c815e56d44b89c3404144f9eb4cd4770b5da0",
+          "sha1": "e73846ea733e4b9be1d0c6d7879c85bdd2e39dbb",
+          "md5": "047631ec1d2772d40462762f8774b9ae"
+        }
+      ]
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-map-jvm.jar",
+          "url": "atlas-map-jvm-0.3.1.jar",
+          "size": 67282,
+          "sha512": "d8fb83964e9c8b94e8793f08a0370131a44562f4a1c9fd9afee7544cafc4018d3c82c603c3518342f03d8b29bb5b66f3dec423c4ed2da04250b8a9986f903e3d",
+          "sha256": "206b3916734d6cacb4b6ab4eec8c815e56d44b89c3404144f9eb4cd4770b5da0",
+          "sha1": "e73846ea733e4b9be1d0c6d7879c85bdd2e39dbb",
+          "md5": "047631ec1d2772d40462762f8774b9ae"
+        }
+      ]
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "atlas-map-jvm-sources.jar",
+          "url": "atlas-map-jvm-0.3.1-sources.jar",
+          "size": 12643,
+          "sha512": "c129e19914ca50679517f8cc6ea6f32f58b87ef3e0484cfbad9f5d5c506c2342f78b4b1ec0793fb11e26addb660ef7cc79d4c5837269b6007afe6dbbe1a9db48",
+          "sha256": "279a968f1d3533ec792297a9cc6431adca03c62ea627711a1e66a9221922a973",
+          "sha1": "c46799d8409b1ba9053cf70f7423f6c2b62f6b14",
+          "md5": "880e251295e594f322d82a64ffb80097"
+        }
+      ]
+    }
+  ]
+}

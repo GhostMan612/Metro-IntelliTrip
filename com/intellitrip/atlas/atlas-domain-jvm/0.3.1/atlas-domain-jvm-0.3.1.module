@@ -1,0 +1,130 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../atlas-domain/0.3.1/atlas-domain-0.3.1.module",
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-domain",
+    "version": "0.3.1",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-domain-jvm.jar",
+          "url": "atlas-domain-jvm-0.3.1.jar",
+          "size": 132280,
+          "sha512": "0f47101c54731708afb3db2ad157d8d3df6f31fa06706911962a562c1b2c077334cb1138fd0f98aa46130a026c890b931fabfe9c4e65e269e6e03cc9f0933df4",
+          "sha256": "40aea5976b0ddc2e5b1eb705025e596a2e8d92b281789f22e9592c977dda39eb",
+          "sha1": "8264cb7f75b9b07699d1b3512b5f585362b3e421",
+          "md5": "2564050b0d1f2121f55e244f70311152"
+        }
+      ]
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-domain-jvm.jar",
+          "url": "atlas-domain-jvm-0.3.1.jar",
+          "size": 132280,
+          "sha512": "0f47101c54731708afb3db2ad157d8d3df6f31fa06706911962a562c1b2c077334cb1138fd0f98aa46130a026c890b931fabfe9c4e65e269e6e03cc9f0933df4",
+          "sha256": "40aea5976b0ddc2e5b1eb705025e596a2e8d92b281789f22e9592c977dda39eb",
+          "sha1": "8264cb7f75b9b07699d1b3512b5f585362b3e421",
+          "md5": "2564050b0d1f2121f55e244f70311152"
+        }
+      ]
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "atlas-domain-jvm-sources.jar",
+          "url": "atlas-domain-jvm-0.3.1-sources.jar",
+          "size": 12689,
+          "sha512": "c1893d5c087f6c987efbafc60cc0375b98baaf00743069592e3ace5573cbe5355363adad09af247b9a3d59b22a5d9d6bac3a38a97d223033e02209d9f0c894cc",
+          "sha256": "9e11147ba85abfb68fb37dfb19523bac9969ddb85db815efd47c19c2bad3f683",
+          "sha1": "2e3bd330c39dd5438cfbd9c30eeb0926baa3926b",
+          "md5": "4082e8b1f50a027b41e359fd0ce06ddc"
+        }
+      ]
+    }
+  ]
+}

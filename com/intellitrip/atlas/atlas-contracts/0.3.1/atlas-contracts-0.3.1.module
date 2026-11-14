@@ -1,0 +1,190 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-contracts",
+    "version": "0.3.1",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-contracts-metadata.jar",
+          "url": "atlas-contracts-0.3.1.jar",
+          "size": 8239,
+          "sha512": "ddd412280e23c21f40a10335bdeae637eadb8369a26e6797a0ed73a3b45e8ca2f0422ce22b1bfbc49ae84d4436387a6b8c82d4a255a402775cd70645aabed342",
+          "sha256": "4bbdbdc8321e816bedc2fc101ef1be280af1b2547af697efb8bd291424e82256",
+          "sha1": "54344b9324af4bebf380ff7b2f7b2bcb0005da0b",
+          "md5": "fdcf811aced220b6e7e0ac3981b39526"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "files": [
+        {
+          "name": "atlas-contracts-kotlin-sources.jar",
+          "url": "atlas-contracts-0.3.1-sources.jar",
+          "size": 6250,
+          "sha512": "7ceffc1679e3020ed90bb06bef19e7f8c97b4e2aee919196a513459550b2536274f7222d5a658f3d97727e1267d643340ec78b4e14183db299fb4216f9693a82",
+          "sha256": "ebeb2c7e57d355e6a1eef3265682efd1ef607bc4fe7e4ede9643fb3fe88f5e0a",
+          "sha1": "c89aa5066c9bb7cba6415ef8ba716fbc7868fc12",
+          "md5": "42a81017750949198da26dfe29ccd948"
+        }
+      ]
+    },
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-contracts-jvm/0.3.1/atlas-contracts-jvm-0.3.1.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-contracts-jvm",
+        "version": "0.3.1"
+      }
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-contracts-jvm/0.3.1/atlas-contracts-jvm-0.3.1.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-contracts-jvm",
+        "version": "0.3.1"
+      }
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-contracts-jvm/0.3.1/atlas-contracts-jvm-0.3.1.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-contracts-jvm",
+        "version": "0.3.1"
+      }
+    },
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-contracts-wasm-js/0.3.1/atlas-contracts-wasm-js-0.3.1.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-contracts-wasm-js",
+        "version": "0.3.1"
+      }
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-contracts-wasm-js/0.3.1/atlas-contracts-wasm-js-0.3.1.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-contracts-wasm-js",
+        "version": "0.3.1"
+      }
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-contracts-wasm-js/0.3.1/atlas-contracts-wasm-js-0.3.1.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-contracts-wasm-js",
+        "version": "0.3.1"
+      }
+    }
+  ]
+}
