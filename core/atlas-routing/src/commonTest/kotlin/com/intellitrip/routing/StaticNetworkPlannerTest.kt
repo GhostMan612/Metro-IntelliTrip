@@ -473,11 +473,15 @@ class StaticNetworkPlannerTest {
         )
         val p = StaticNetworkPlanner(net, RoutingFixtures.zone)
 
-        val oneTransferResult = runBlocking { p.plan(RoutingFixtures.request().copy(maxTransfers = 1)) }
+        val oneTransferResult = runBlocking {
+            p.plan(RoutingFixtures.request().copy(maxTransfers = 1, maxWalkMeters = 300.0))
+        }
         val oneTransferSuccess = assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(oneTransferResult)
         assertTrue(oneTransferSuccess.data.isEmpty(), "1-transfer cap should not return a 2-transfer journey")
 
-        val twoTransferResult = runBlocking { p.plan(RoutingFixtures.request().copy(maxTransfers = 2)) }
+        val twoTransferResult = runBlocking {
+            p.plan(RoutingFixtures.request().copy(maxTransfers = 2, maxWalkMeters = 300.0))
+        }
         val twoTransferSuccess = assertIs<ProviderResult.Success<List<com.intellitrip.domain.JourneyOption>>>(twoTransferResult)
         assertEquals(1, twoTransferSuccess.data.size)
         assertEquals(2, twoTransferSuccess.data.single().transferCount)

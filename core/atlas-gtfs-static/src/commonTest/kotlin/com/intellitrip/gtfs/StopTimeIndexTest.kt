@@ -146,6 +146,24 @@ class StopTimeIndexTest {
         assertNull(read[1]?.dropOffType)
     }
 
+    @Test
+    fun tripsServingSupportsContainmentAndRepeatedLookupWithoutRecomputing() {
+        val reader = write(
+            stopTime("T1", 1, "S1", 3600),
+            stopTime("T1", 2, "S1", 3630), // duplicate visit at same stop
+            stopTime("T2", 1, "S1", 7200),
+            stopTime("T3", 1, "S2", 7500),
+        )
+        val atS1 = reader.tripsServing(StopKey(feedId, "S1"))
+        val atS2 = reader.tripsServing(StopKey(feedId, "S2"))
+        assertEquals(setOf(TripKey(feedId, "T1"), TripKey(feedId, "T2")), atS1)
+        assertEquals(setOf(TripKey(feedId, "T3")), atS2)
+        assertTrue(TripKey(feedId, "T1") in atS1)
+        assertFalse(TripKey(feedId, "T3") in atS1)
+        assertEquals(3, reader.tripCount())
+        assertEquals(2, reader.stopTimesFor(TripKey(feedId, "T1"), stopKeyOf).size)
+    }
+
     /** Builds the pre-restriction `STIDX002` layout by hand. */
     private fun legacyV2Index(tripId: String, rows: List<StopTime>): Pair<ByteArray, ByteArray> {
         val data = GrowableBytes()

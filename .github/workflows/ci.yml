@@ -35,7 +35,7 @@ jobs:
       # starts, which silently skips every later step. Invoking bash explicitly
       # makes the workflow independent of file mode.
       - name: Unit tests
-        run: bash ./gradlew test --console=plain
+        run: bash ./gradlew test jvmTest --console=plain
 
       - name: Real-feed verification (Metro Transit GTFS)
         run: |
