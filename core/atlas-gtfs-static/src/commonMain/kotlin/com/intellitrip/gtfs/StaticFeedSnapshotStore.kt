@@ -219,27 +219,35 @@ class StaticFeedSnapshotStore(
     /**
      * Rebuilds the active snapshot's stop-time index in the current format.
      *
-     * This re-parses the stored archive, so it belongs on a background
-     * thread. Publishing is atomic: both files are written under generation
-     * names and the pointer file is swapped last. A crash therefore leaves
-     * the previous generation readable, and an interrupted rebuild simply
-     * runs again on the next refresh.
+     * Upgrades `STIDX003` snapshots in place via [StopTimeIndexWriter.upgradeV3ToV4]
+     * without re-parsing the compressed archive; falls back to streaming
+     * [GtfsStaticParser.parseFromZip] for `STIDX002`, missing, or invalid indexes.
+     * Publishing is atomic: both files are written under generation names and
+     * the pointer file is swapped last. A crash therefore leaves the previous
+     * generation readable, and an interrupted rebuild simply runs again on the
+     * next refresh.
      *
      * Returns true when the active snapshot now has a current-format index.
      */
     fun reindexStopTimes(feedId: FeedId): Boolean = coordination.lock.locked {
         val snapshot = activeSnapshot(feedId) ?: return@locked false
+        if (hasCurrentStopTimeIndex(feedId)) return@locked true
         val payload = joinPath(snapshot.snapshotDir, PAYLOAD_FILE)
-        if (!store.exists(payload)) return@locked false
+        val existing = stopTimeFiles(snapshot.snapshotDir)
+        val hasExistingPair = store.exists(existing.data) && store.exists(existing.index)
+        if (!store.exists(payload) && !hasExistingPair) return@locked false
         try {
-            val writer = StopTimeIndexWriter()
-            val sink = object : StopTimeSink {
-                override fun accept(stopTime: StopTime) {
-                    writer.write(stopTime)
+            val (data, index) = (if (hasExistingPair) tryUpgradeV3StopTimeIndex(existing) else null) ?: run {
+                if (!store.exists(payload)) return@locked false
+                val writer = StopTimeIndexWriter()
+                val sink = object : StopTimeSink {
+                    override fun accept(stopTime: StopTime) {
+                        writer.write(stopTime)
+                    }
                 }
+                GtfsStaticParser.parseFromZip(feedId, store.readBytes(payload), snapshot.metadata, sink)
+                writer.finish()
             }
-            GtfsStaticParser.parseFromZip(feedId, store.readBytes(payload), snapshot.metadata, sink)
-            val (data, index) = writer.finish()
             val generation = STOP_TIME_GENERATION_PREFIX + stageToken()
             val dataName = "$generation.dat"
             val indexName = "$generation.idx"
@@ -257,6 +265,21 @@ class StaticFeedSnapshotStore(
             false
         }
     }
+
+    /**
+     * Transcodes `STIDX003 -> STIDX004` in two scopes so the large V3 index
+     * buffer is eligible for GC before `stop-times.dat` is read into memory.
+     */
+    private fun tryUpgradeV3StopTimeIndex(existing: StopTimeFiles): Pair<ByteArray, ByteArray>? {
+        val upgraded = transcodeV3IndexOnly(existing.index) ?: return null
+        val (expectedDataLength, v4Index) = upgraded
+        val existingData = store.readBytes(existing.data)
+        if (existingData.size.toLong() != expectedDataLength) return null
+        return existingData to v4Index
+    }
+
+    private fun transcodeV3IndexOnly(indexPath: String): Pair<Long, ByteArray>? =
+        StopTimeIndexWriter.upgradeV3ToV4(store.readBytes(indexPath))
 
     /** Resolves the data/index pair named by the snapshot's pointer file. */
     private fun stopTimeFiles(snapshotDir: String): StopTimeFiles {

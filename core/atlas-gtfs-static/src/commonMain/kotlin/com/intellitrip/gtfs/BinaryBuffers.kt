@@ -34,6 +34,15 @@ internal class GrowableBytes(private var capacity: Int = 1024) {
         size += bytes.size
     }
 
+    fun writeBytes(bytes: ByteArray, offset: Int, length: Int) {
+        require(offset >= 0 && length >= 0 && offset + length <= bytes.size) {
+            "invalid byte slice ($offset, $length) for size ${bytes.size}"
+        }
+        ensure(length)
+        bytes.copyInto(storage, size, startIndex = offset, endIndex = offset + length)
+        size += length
+    }
+
     fun writeShort(value: Int) {
         ensure(2)
         storage[size++] = (value ushr 8).toByte()
