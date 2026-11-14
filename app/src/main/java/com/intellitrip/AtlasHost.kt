@@ -128,6 +128,23 @@ class AtlasHost(val context: Context) {
     val basemapStore = com.intellitrip.offline.OfflineBasemapStore(
         context.filesDir.toPath().resolve("basemaps").toString(),
     )
+    private val mbtilesTileServer = MbtilesTileServer()
+
+    fun basemapStyle(pkg: com.intellitrip.offline.BasemapPackage): String? {
+        val tileJsonUrl = if (pkg.archiveFormat == com.intellitrip.offline.BasemapArchiveFormat.MBTILES) {
+            mbtilesTileServer.tileJsonUrl(pkg)
+        } else {
+            null
+        }
+        return basemapStore.styleFor(pkg, tileJsonUrl)
+    }
+
+    fun removeBasemap(id: String): Boolean {
+        val removed = basemapStore.remove(id)
+        if (removed) mbtilesTileServer.forgetPackage(id)
+        return removed
+    }
+
     val scopeEngine = ScopeEngine()
     val pipeline = TransitRenderPipeline()
     val throttle = RenderUpdateThrottle()

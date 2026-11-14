@@ -17,6 +17,15 @@ data class BasemapBounds(
         get() = minLat <= -85.0 && maxLat >= 85.0 && minLon <= -179.0 && maxLon >= 179.0
 }
 
+enum class BasemapArchiveFormat { PMTILES, MBTILES }
+
+data class MbtilesMetadata(
+    val minZoom: Int,
+    val maxZoom: Int,
+    val bounds: BasemapBounds,
+    val tileFormat: String,
+)
+
 /** What the first bytes of an imported archive are. */
 internal enum class ArchiveKind { PMTILES, MBTILES, UNKNOWN }
 

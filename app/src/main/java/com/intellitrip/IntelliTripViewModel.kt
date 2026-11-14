@@ -367,7 +367,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
     fun removeBasemap(id: String) {
         viewModelScope.launch {
             val removed = withContext(Dispatchers.IO) {
-                runCatching { host.basemapStore.remove(id) }.getOrDefault(false)
+                runCatching { host.removeBasemap(id) }.getOrDefault(false)
             }
             refreshBasemapState()
             update {
@@ -392,7 +392,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         val active = packages.firstOrNull { it.id == requested } ?: packages.firstOrNull()
         val style = active?.let { pkg ->
             withContext(Dispatchers.IO) {
-                runCatching { host.basemapStore.styleFor(pkg) }.getOrNull()
+                runCatching { host.basemapStyle(pkg) }.getOrNull()
             }
         }
         val unavailableReason = if (active != null && style == null) {
@@ -415,33 +415,37 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
         val staged = mutableListOf<BasemapImport.StagedFile>()
         try {
             uris.forEach { uri -> staged += BasemapImport.stage(host.context, uri) }
-            val archives = staged.filter { it.kind == BasemapImport.Kind.PMTILES }
+            val archives = staged.filter {
+                it.kind == BasemapImport.Kind.PMTILES || it.kind == BasemapImport.Kind.MBTILES
+            }
             val styles = staged.filter { it.kind == BasemapImport.Kind.STYLE }
-            val mbtiles = staged.filter { it.kind == BasemapImport.Kind.MBTILES }
             val unknown = staged.filter { it.kind == BasemapImport.Kind.UNKNOWN }
 
-            if (mbtiles.isNotEmpty()) {
-                return InstallResult.Rejected(
-                    "MBTiles is not supported. Convert it with " +
-                        "`pmtiles convert input.mbtiles output.pmtiles`, then select the " +
-                        ".pmtiles archive and its .json style.",
-                )
-            }
             if (unknown.isNotEmpty()) {
                 return InstallResult.Rejected(
                     "Could not identify ${unknown.joinToString { it.displayName }}. " +
-                        "Select one .pmtiles archive and one MapLibre .json style.",
+                        "Select one .pmtiles or .mbtiles archive and one MapLibre .json style.",
                 )
             }
             if (archives.size != 1 || styles.size != 1) {
                 return InstallResult.Rejected(
-                    "Select exactly one .pmtiles archive and one .json style " +
+                    "Select exactly one .pmtiles or .mbtiles archive and one .json style " +
                         "(found ${archives.size} archive(s) and ${styles.size} style(s)).",
                 )
             }
 
             val archive = archives.single()
             val style = styles.single()
+            val mbtilesMetadata = if (archive.kind == BasemapImport.Kind.MBTILES) {
+                when (val result = MbtilesValidator.validate(archive.file)) {
+                    is MbtilesValidator.Result.Invalid -> {
+                        return InstallResult.Rejected("Invalid MBTiles archive: ${result.reason}")
+                    }
+                    is MbtilesValidator.Result.Valid -> result.metadata
+                }
+            } else {
+                null
+            }
             if (style.sizeBytes > BasemapImport.MAX_STYLE_BYTES) {
                 return InstallResult.Rejected(
                     "style is ${style.sizeBytes} bytes; the maximum is " +
@@ -460,6 +464,7 @@ class IntelliTripViewModel(private val host: AtlasHost) : ViewModel() {
                 displayName = baseName.trim().ifBlank { "Offline basemap" }.take(120),
                 stagedPath = archive.file.absolutePath,
                 styleJson = style.file.readText(Charsets.UTF_8),
+                mbtilesMetadata = mbtilesMetadata,
             )
         } finally {
             staged.forEach { runCatching { it.file.delete() } }

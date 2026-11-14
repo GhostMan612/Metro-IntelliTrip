@@ -161,7 +161,7 @@ fun MoreScreen(
         item {
             ActionRow(
                 "Import offline basemap",
-                "Select a PMTiles v3 archive and its MapLibre style JSON",
+                "Select a PMTiles or MBTiles archive and its MapLibre style JSON",
                 onImportBasemap,
             )
         }
@@ -177,9 +177,9 @@ fun MoreScreen(
         }
         item {
             Text(
-                text = "PMTiles archives are read from local storage; no vendor key or " +
-                    "account is needed. MBTiles must be converted with `pmtiles convert` " +
-                    "first. The imported style controls labels, colours and attribution.",
+                text = "PMTiles and validated MBTiles archives are read from local storage; " +
+                    "no vendor key or account is needed. The imported style controls labels, " +
+                    "colours and attribution.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = Space.sm),

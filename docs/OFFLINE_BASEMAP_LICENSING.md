@@ -7,16 +7,19 @@ has not cleared.
 
 ## Format
 
-- **Accepted:** PMTiles v3 (`.pmtiles`) plus a MapLibre style JSON.
-- **Rejected:** MBTiles/SQLite and unknown formats. Convert first with the
+- **Accepted:** PMTiles v3 (`.pmtiles`) or Android-host-validated MBTiles
+  (`.mbtiles`), each with a MapLibre style JSON. MBTiles is served by the Android
+  host over loopback; the platform-neutral store requires the host's validated
+  metadata.
+- **Rejected:** unknown formats. To convert MBTiles to PMTiles, use the
   official tool:
 
   ```
   pmtiles convert metro.mbtiles metro.pmtiles
   ```
 
-  The app shows this command in the import error instead of pretending an MBTiles
-  file is installable.
+  PMTiles remains the portable store's default format; Android accepts
+  MBTiles only after SQLite schema, metadata, zoom/bounds, and tile data checks.
 
 The store validates the PMTiles header before installation: magic and version,
 u64 offsets/counts, non-empty root/tile sections, compression and tile type, zoom
@@ -27,14 +30,16 @@ never as a guessed location.
 
 - JSON object with `"version": 8`
 - a `"sources"` object and a `"layers"` array
-- at least one source URL beginning with `pmtiles://`
+- at least one source URL beginning with the selected format's `pmtiles://` or
+  `mbtiles://` marker
 
 The style controls labels, colours, fonts, and attribution. On installation the
-store rewrites every `pmtiles://` URL to the installed archive's `file://` URI, so
-the style cannot fetch a different remote archive behind the rider's back. Fonts
-and sprites referenced by URL are not bundled; use an offline style whose glyph
-and sprite references are available, or accept that those resources may be
-missing offline.
+store rewrites `pmtiles://` URLs to the installed archive's `file://` URI and
+Android binds `mbtiles://` URLs to the host's loopback TileJSON endpoint. MBTiles
+styles with remote HTTP(S) `url`, `tiles`, `sprite`, or `glyphs` resources are
+rejected. This validation is not a full MapLibre style-schema validator and
+runtime no-network behavior has not been proven; do not treat source checks as
+offline-rendering evidence.
 
 ## Licence and attribution
 

@@ -152,10 +152,10 @@ class OfflineBasemapStoreSecurityTest {
         assertEquals(awkward, reloaded.displayName)
     }
 
-    // --- format validation: only a valid PMTiles v3 archive is accepted
+    // --- format validation: PMTiles v3 or host-validated MBTiles
 
     @Test
-    fun mbtilesIsRejectedWithConversionGuidance() {
+    fun mbtilesRequiresHostValidatedMetadata() {
         val store = store()
         val mbtiles = PmtilesFixture.write(
             Files.createTempFile("stage", ".mbtiles"),
@@ -163,9 +163,43 @@ class OfflineBasemapStoreSecurityTest {
         )
         val rejected = store.install("metro", "Old archive", mbtiles.toString(), style)
         assertTrue(rejected is InstallResult.Rejected)
-        assertTrue(rejected.reason.contains("MBTiles"), rejected.reason)
-        assertTrue(rejected.reason.contains("pmtiles convert"), rejected.reason)
+        assertTrue(rejected.reason.contains("validated"), rejected.reason)
         assertTrue(!store.hasPackage())
+    }
+
+    @Test
+    fun mbtilesFormatAndMetadataSurviveManifestRoundTrip() {
+        val store = store()
+        val mbtiles = PmtilesFixture.write(
+            Files.createTempFile("stage", ".mbtiles"),
+            PmtilesFixture.mbtiles(),
+        )
+        val mbtilesStyle = style.replace("pmtiles://", "mbtiles://")
+        val metadata = MbtilesMetadata(
+            minZoom = 2,
+            maxZoom = 12,
+            bounds = BasemapBounds(44.8, -93.4, 45.1, -92.9),
+            tileFormat = "pbf",
+        )
+        val installed = store.install(
+            "metro",
+            "Twin Cities",
+            mbtiles.toString(),
+            mbtilesStyle,
+            metadata,
+        )
+        assertTrue(installed is InstallResult.Installed, "install failed: $installed")
+
+        val reloaded = OfflineBasemapStore(store.rootForTest())
+        val pkg = reloaded.packages().single()
+        assertEquals(BasemapArchiveFormat.MBTILES, pkg.archiveFormat)
+        assertEquals("pbf", pkg.tileFormat)
+        assertEquals(2, pkg.minZoom)
+        assertEquals(12, pkg.maxZoom)
+        val tileJsonUrl = "http://127.0.0.1:12345/${"a".repeat(32)}/tilejson.json"
+        val bound = assertNotNull(reloaded.styleFor(pkg, tileJsonUrl))
+        assertTrue(bound.contains(tileJsonUrl), "style was not bound to local TileJSON: $bound")
+        assertFalse(bound.contains("mbtiles://"), "the MBTiles placeholder survived binding")
     }
 
     @Test
@@ -175,7 +209,7 @@ class OfflineBasemapStoreSecurityTest {
         Files.write(file, ByteArray(4096) { 0x42 })
         val rejected = store.install("metro", "Junk", file.toString(), style)
         assertTrue(rejected is InstallResult.Rejected)
-        assertTrue(rejected.reason.contains("Not a PMTiles v3 archive"), rejected.reason)
+        assertTrue(rejected.reason.contains("Not a PMTiles v3 or MBTiles archive"), rejected.reason)
     }
 
     @Test
@@ -236,6 +270,32 @@ class OfflineBasemapStoreSecurityTest {
         val bound = assertNotNull(store.styleFor(installed.pkg))
         assertTrue(bound.contains("pmtiles://file:"), bound)
         assertFalse(bound.contains("\\/\\/"), "escaped slashes survived binding: $bound")
+    }
+
+    @Test
+    fun mbtilesStylesRejectEscapedRemoteResourcesButAllowAttributionLinks() {
+        val remoteResources = listOf(
+            """"url":"https://tiles.example.test/tiles.json"""",
+            """"tiles":["https:\/\/tiles.example.test\/{z}/{x}/{y}.pbf"]""",
+            """"sprite":"https://tiles.example.test/sprite"""",
+            """"glyphs":"https://tiles.example.test/fonts/{fontstack}/{range}.pbf"""",
+        )
+        remoteResources.forEach { resource ->
+            val styleJson =
+                """{"version":8,"sources":{"offline":{"type":"vector","url":"mbtiles://archive"}},"layers":[],$resource}"""
+            val result = BasemapStyleValidator.validate(styleJson, BasemapArchiveFormat.MBTILES)
+            assertTrue(
+                result is BasemapStyleValidator.Result.Invalid,
+                "remote resource was accepted: $resource",
+            )
+        }
+
+        val attributionOnly =
+            """{"version":8,"sources":{"offline":{"type":"vector","url":"mbtiles://archive","attribution":"https://tiles.example.test/license"}},"layers":[]}"""
+        assertEquals(
+            BasemapStyleValidator.Result.Valid,
+            BasemapStyleValidator.validate(attributionOnly, BasemapArchiveFormat.MBTILES),
+        )
     }
 
     @Test

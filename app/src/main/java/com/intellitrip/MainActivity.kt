@@ -109,7 +109,7 @@ private fun IntelliTripContent(host: AtlasHost, model: IntelliTripViewModel) {
         )
     }
 
-    // PMTiles archives are opaque binaries, so the picker accepts any MIME type and
+    // Basemap archives are opaque binaries, so the picker accepts any MIME type and
     // the importer identifies the archive/style pair by magic bytes. OpenMultipleDocuments
     // lets the rider choose the archive and its style together, which is the unit the
     // store validates and installs.
