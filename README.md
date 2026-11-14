@@ -4,9 +4,9 @@ This branch is the immutable Maven repository for the portable IntelliTrip
 Atlas SDK. It is generated, never hand-edited.
 
 - Group: `com.intellitrip.atlas`
-- Latest version: `0.3.1`
+- Latest version: `0.3.2`
 - Maven URL: `https://raw.githubusercontent.com/GhostMan612/Metro-IntelliTrip/atlas-maven`
-- Provenance: `provenance/0.3.1.json`
+- Provenance: `provenance/0.3.2.json`
 
 ## Consume
 
@@ -16,7 +16,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.intellitrip.atlas:atlas-engine:0.3.1")
+    implementation("com.intellitrip.atlas:atlas-engine:0.3.2")
 }
 ```
 

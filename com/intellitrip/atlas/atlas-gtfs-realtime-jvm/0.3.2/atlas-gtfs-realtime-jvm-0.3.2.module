@@ -1,0 +1,179 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../atlas-gtfs-realtime/0.3.2/atlas-gtfs-realtime-0.3.2.module",
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-gtfs-realtime",
+    "version": "0.3.2",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-gtfs-realtime-jvm.jar",
+          "url": "atlas-gtfs-realtime-jvm-0.3.2.jar",
+          "size": 76418,
+          "sha512": "4828e6a6f6e3b0a8a5eb0e2f559346a2135d19d245d8712cadb324e9038d25969cb90bc812aa289940c384c579b692d5d905071c5bd2333075b9f98f241e4df7",
+          "sha256": "adbb4b0fee21287e6c2c3c79254d68e62fbbcc793b2d779e5eeec0ac828e97d3",
+          "sha1": "c4a7e9051479e98cb68abfc6e0b9effbf26516dc",
+          "md5": "1e00f75278bbfc7572d9197465d4a2fc"
+        }
+      ]
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        },
+        {
+          "group": "org.mobilitydata",
+          "module": "gtfs-realtime-bindings",
+          "version": {
+            "requires": "0.0.8"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-gtfs-realtime-jvm.jar",
+          "url": "atlas-gtfs-realtime-jvm-0.3.2.jar",
+          "size": 76418,
+          "sha512": "4828e6a6f6e3b0a8a5eb0e2f559346a2135d19d245d8712cadb324e9038d25969cb90bc812aa289940c384c579b692d5d905071c5bd2333075b9f98f241e4df7",
+          "sha256": "adbb4b0fee21287e6c2c3c79254d68e62fbbcc793b2d779e5eeec0ac828e97d3",
+          "sha1": "c4a7e9051479e98cb68abfc6e0b9effbf26516dc",
+          "md5": "1e00f75278bbfc7572d9197465d4a2fc"
+        }
+      ]
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "atlas-gtfs-realtime-jvm-sources.jar",
+          "url": "atlas-gtfs-realtime-jvm-0.3.2-sources.jar",
+          "size": 13699,
+          "sha512": "accff61d43ff40470df89f661d80a4e6b004a5a1c94026f9ac226631d6b46516ea879e5f485ec61f1246f56df57518d7d14b1ac8b6d38cdfed8e2227556a16f4",
+          "sha256": "342c4bc4715c5153f32396a99e8dd5626a5941b8a2333cc29a9e70bd744413a2",
+          "sha1": "4fafc964bd8612df604374b7b98dc435ceba6977",
+          "md5": "615f7f58a6f1bf96b6640d4213aa94bf"
+        }
+      ]
+    }
+  ]
+}

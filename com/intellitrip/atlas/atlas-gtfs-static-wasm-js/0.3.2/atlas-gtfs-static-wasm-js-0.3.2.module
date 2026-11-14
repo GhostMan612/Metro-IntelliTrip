@@ -1,0 +1,158 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../atlas-gtfs-static/0.3.2/atlas-gtfs-static-0.3.2.module",
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-gtfs-static",
+    "version": "0.3.2",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-gtfs-static-wasm-js.klib",
+          "url": "atlas-gtfs-static-wasm-js-0.3.2.klib",
+          "size": 255176,
+          "sha512": "5cd15ada614e61ac0cfd7f141b318141024db6a7bf50c5107923d708535bcad325db477311243a9deead6b933aa2c1f496bb33cc7a159dfc34c30d1bed06c2f7",
+          "sha256": "a47c217147ffc5de5b4f77bcc51488583407d8fda9324a1d8b30ea31d1eef5a5",
+          "sha1": "22ee5c3ce59fbbd8156527740dea84f24b5ae43c",
+          "md5": "54b145cd6080afd7e197ed5a83f46415"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "dependencies": [
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-gtfs-static-wasm-js.klib",
+          "url": "atlas-gtfs-static-wasm-js-0.3.2.klib",
+          "size": 255176,
+          "sha512": "5cd15ada614e61ac0cfd7f141b318141024db6a7bf50c5107923d708535bcad325db477311243a9deead6b933aa2c1f496bb33cc7a159dfc34c30d1bed06c2f7",
+          "sha256": "a47c217147ffc5de5b4f77bcc51488583407d8fda9324a1d8b30ea31d1eef5a5",
+          "sha1": "22ee5c3ce59fbbd8156527740dea84f24b5ae43c",
+          "md5": "54b145cd6080afd7e197ed5a83f46415"
+        }
+      ]
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "files": [
+        {
+          "name": "atlas-gtfs-static-wasm-js-sources.jar",
+          "url": "atlas-gtfs-static-wasm-js-0.3.2-sources.jar",
+          "size": 45256,
+          "sha512": "150328755e2ce1aba9733fd202fa4770dc51cba6901a46bc89ec50a4230a3c9a969cc8403864983b953a8fa52facb9d4a8d26083974f540e77f2b1117da78ca3",
+          "sha256": "af453aa8ed688895566c5d5e57e5968ede218596445d53dd4a18ba269fe7ce69",
+          "sha1": "43b27ef3c3a08b0fa9c5595ecb19a01be45f58a3",
+          "md5": "542394277bc925dbaec35a1a3a6fd670"
+        }
+      ]
+    }
+  ]
+}

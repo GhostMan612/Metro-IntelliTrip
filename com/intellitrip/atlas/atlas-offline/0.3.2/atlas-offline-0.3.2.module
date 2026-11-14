@@ -1,0 +1,183 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-offline",
+    "version": "0.3.2",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-offline-metadata.jar",
+          "url": "atlas-offline-0.3.2.jar",
+          "size": 9631,
+          "sha512": "0ffa347c67200e94125e789dead8f17bff884d83a5e46501628f01581eaae71e326575be593106d65aff934cddec926b50d01739ded3fcfe422dbed605c0a005",
+          "sha256": "b41e9150e272322361ef765785ab16907eac355e594952dfd2e74d2cdfdf309a",
+          "sha1": "9d59b1d18d84fa4d2cbdbe0890df67ecd2775091",
+          "md5": "5ac62fc9b299b0c48609f793127c6423"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "files": [
+        {
+          "name": "atlas-offline-kotlin-sources.jar",
+          "url": "atlas-offline-0.3.2-sources.jar",
+          "size": 19171,
+          "sha512": "54edfc78cb12807d1d8864108e97d626f5a821d4566444af2d4bb7857b7623c278db70707e5b04395834fcd43f260db0c59c1d91500271f6705cd4a153de82e2",
+          "sha256": "0d85c720a6c6b8f2158d412adab63daba6a214fdbfb7dd8dbf996f059bac1c95",
+          "sha1": "f35f725018d7be73b35f902570600db5bbc01dc8",
+          "md5": "1dd48b19b002b4eaf07938233775df5a"
+        }
+      ]
+    },
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-offline-jvm/0.3.2/atlas-offline-jvm-0.3.2.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-offline-jvm",
+        "version": "0.3.2"
+      }
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-offline-jvm/0.3.2/atlas-offline-jvm-0.3.2.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-offline-jvm",
+        "version": "0.3.2"
+      }
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-offline-jvm/0.3.2/atlas-offline-jvm-0.3.2.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-offline-jvm",
+        "version": "0.3.2"
+      }
+    },
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-offline-wasm-js/0.3.2/atlas-offline-wasm-js-0.3.2.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-offline-wasm-js",
+        "version": "0.3.2"
+      }
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-offline-wasm-js/0.3.2/atlas-offline-wasm-js-0.3.2.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-offline-wasm-js",
+        "version": "0.3.2"
+      }
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-offline-wasm-js/0.3.2/atlas-offline-wasm-js-0.3.2.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-offline-wasm-js",
+        "version": "0.3.2"
+      }
+    }
+  ]
+}

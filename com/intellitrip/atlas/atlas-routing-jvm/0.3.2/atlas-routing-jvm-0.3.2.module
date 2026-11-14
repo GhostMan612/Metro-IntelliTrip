@@ -1,0 +1,144 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../atlas-routing/0.3.2/atlas-routing-0.3.2.module",
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-routing",
+    "version": "0.3.2",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-routing-jvm.jar",
+          "url": "atlas-routing-jvm-0.3.2.jar",
+          "size": 125941,
+          "sha512": "b1de8e81d551d83d40c6ad5b91675b936419b7fb4b72972c3de4c1e30037befaf1aad7e21e898890bddac81d1b0f17e4450acdd4dd135ba8c8c12e1aa8ff509c",
+          "sha256": "fbe6c92d47f17e49e0268d2447d793f3b4109291936e92c9852fbb5c4b3fd3a4",
+          "sha1": "408025e9784ad69b9e22f94fcb0dc3db73f1bd8f",
+          "md5": "c3b7620031703828df7ce74e746a476f"
+        }
+      ]
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-routing-jvm.jar",
+          "url": "atlas-routing-jvm-0.3.2.jar",
+          "size": 125941,
+          "sha512": "b1de8e81d551d83d40c6ad5b91675b936419b7fb4b72972c3de4c1e30037befaf1aad7e21e898890bddac81d1b0f17e4450acdd4dd135ba8c8c12e1aa8ff509c",
+          "sha256": "fbe6c92d47f17e49e0268d2447d793f3b4109291936e92c9852fbb5c4b3fd3a4",
+          "sha1": "408025e9784ad69b9e22f94fcb0dc3db73f1bd8f",
+          "md5": "c3b7620031703828df7ce74e746a476f"
+        }
+      ]
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "atlas-routing-jvm-sources.jar",
+          "url": "atlas-routing-jvm-0.3.2-sources.jar",
+          "size": 26678,
+          "sha512": "21340841b52ff6ed71e244e5f21af63f65ca87c339d02318744c7d290552269e201e43550fb4f0f1c6443000119340e8ba898f83e4bd5de69f4e4a8e5e3850fe",
+          "sha256": "f2d0e0b6694ce978127cfb2cba07c0debdd5af118a20b0f455a56571122f82c0",
+          "sha1": "58fe587844cd5e27dcc048482e6dab9a171286ec",
+          "md5": "88033a5cf8d3766065fd80007ab2eea9"
+        }
+      ]
+    }
+  ]
+}

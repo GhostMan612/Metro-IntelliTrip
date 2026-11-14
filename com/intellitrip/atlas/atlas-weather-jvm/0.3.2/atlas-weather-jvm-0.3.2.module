@@ -1,0 +1,179 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../atlas-weather/0.3.2/atlas-weather-0.3.2.module",
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-weather",
+    "version": "0.3.2",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-weather-jvm.jar",
+          "url": "atlas-weather-jvm-0.3.2.jar",
+          "size": 62179,
+          "sha512": "0512ea81af7d394b92c44f3ccebb4030908c9c852f8bff14f356c990074636b4c6ce6276bc2a93273b30ce88c59b5bfdf94ae889ecee4457eeb4cdd3a752950d",
+          "sha256": "e9855c388c26151eff3c509cdda7cb4b0438c13f2c311a3c827c305f6c4b5a8a",
+          "sha1": "cf5837c57cfecff7b046475615675191f25f3dcf",
+          "md5": "a0a96d4e8c511dbce217e69c98bfd110"
+        }
+      ]
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-core",
+          "version": {
+            "requires": "1.8.0"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-json",
+          "version": {
+            "requires": "1.8.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-weather-jvm.jar",
+          "url": "atlas-weather-jvm-0.3.2.jar",
+          "size": 62179,
+          "sha512": "0512ea81af7d394b92c44f3ccebb4030908c9c852f8bff14f356c990074636b4c6ce6276bc2a93273b30ce88c59b5bfdf94ae889ecee4457eeb4cdd3a752950d",
+          "sha256": "e9855c388c26151eff3c509cdda7cb4b0438c13f2c311a3c827c305f6c4b5a8a",
+          "sha1": "cf5837c57cfecff7b046475615675191f25f3dcf",
+          "md5": "a0a96d4e8c511dbce217e69c98bfd110"
+        }
+      ]
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "atlas-weather-jvm-sources.jar",
+          "url": "atlas-weather-jvm-0.3.2-sources.jar",
+          "size": 12553,
+          "sha512": "dff7fae80837f676353768e691d2f467de93d80a828099b095388e4e189c594cb3ebe85a9278ef5df3ac6df4e8f99a2543f1d0e28b6015cbd708ee888dddabc3",
+          "sha256": "e3e1fb99fc07d9a3bca67f796a0b30cfb629e7a3dec8801f6ec4fb2f07f03bf6",
+          "sha1": "47048863e5906ec8a825ab4cfca47f78c21774a0",
+          "md5": "dbe996eeb161809dfd2f6748d2206698"
+        }
+      ]
+    }
+  ]
+}

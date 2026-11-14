@@ -1,0 +1,190 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.intellitrip.atlas",
+    "module": "atlas-scope",
+    "version": "0.3.2",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.10"
+    }
+  },
+  "variants": [
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-domain",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "com.intellitrip.atlas",
+          "module": "atlas-contracts",
+          "version": {
+            "requires": "0.3.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.6.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.1.20"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "atlas-scope-metadata.jar",
+          "url": "atlas-scope-0.3.2.jar",
+          "size": 3726,
+          "sha512": "ef44ec1c18ac59aef940ce2ad4fd5629141065fbe12a21663a5b58f9f337f1c55820e6cb5be308099fcf825c437a1c0e98208ad914564b3c572f84e2c9064797",
+          "sha256": "728e90baa487be7014265a73503d307a693515250cdcd8f1a6c1da32bab99684",
+          "sha1": "79ee97cceacb54f88bdef1a21436eca4390691fc",
+          "md5": "7dbc9c1503d68837540b31d9d2d7cd5c"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "files": [
+        {
+          "name": "atlas-scope-kotlin-sources.jar",
+          "url": "atlas-scope-0.3.2-sources.jar",
+          "size": 3783,
+          "sha512": "cf6a13655521cbbe5bcfd5dbb0d4ec2d924cdd36a0ce5907f335f1413ab941e97db769e51704f141718d05573c8d504311f7e9c1f1a150d103236775a98da61a",
+          "sha256": "da305c8b3573d7dca75f02631197d4c36299df6aca183a4b423f346f0142081e",
+          "sha1": "fe9a068ed80a0d3daa5ca2fe30dcbe1ce8bb1e2f",
+          "md5": "02ae74a6178b98a3a00adb6b40e054a7"
+        }
+      ]
+    },
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-scope-jvm/0.3.2/atlas-scope-jvm-0.3.2.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-scope-jvm",
+        "version": "0.3.2"
+      }
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-scope-jvm/0.3.2/atlas-scope-jvm-0.3.2.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-scope-jvm",
+        "version": "0.3.2"
+      }
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../atlas-scope-jvm/0.3.2/atlas-scope-jvm-0.3.2.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-scope-jvm",
+        "version": "0.3.2"
+      }
+    },
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-scope-wasm-js/0.3.2/atlas-scope-wasm-js-0.3.2.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-scope-wasm-js",
+        "version": "0.3.2"
+      }
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-scope-wasm-js/0.3.2/atlas-scope-wasm-js-0.3.2.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-scope-wasm-js",
+        "version": "0.3.2"
+      }
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../atlas-scope-wasm-js/0.3.2/atlas-scope-wasm-js-0.3.2.module",
+        "group": "com.intellitrip.atlas",
+        "module": "atlas-scope-wasm-js",
+        "version": "0.3.2"
+      }
+    }
+  ]
+}
