@@ -30,8 +30,10 @@ offline basemap packages, and Play publishing.
 - `core/atlas-transit/` — retired and deleted (ADR-014); Git history preserves the prototype.
 - `core/atlas-map-android/` — MapLibre renderer adapter (bulk GeoJSON only).
 
-Publish the SDK to `build/atlas-maven` (`com.intellitrip.atlas:0.2.0`) with
-`.\gradlew.bat publishAtlasToLocalRepo`. See `docs/SDK_INTEGRATION.md`.
+Publish the SDK locally to `build/atlas-maven` (`com.intellitrip.atlas:0.2.0`)
+with `.\gradlew.bat publishAtlasToLocalRepo`. Released versions are published to
+the immutable `atlas-maven` branch; see `docs/SDK_INTEGRATION.md` and
+`docs/ATLAS_MAVEN_DISTRIBUTION.md`.
 
 ## Status
 

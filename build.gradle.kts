@@ -15,7 +15,7 @@
 // Publishing is opt-in via `publishAtlasToLocalRepo`, never part of `build`, so an
 // ordinary clone cannot publish anything by accident.
 
-val atlasVersion = "0.2.0"
+val atlasVersion = providers.gradleProperty("atlasVersion").get()
 
 // `plugins {}` in the root applies the AGP/Kotlin plugins with `apply false`. Reading
 // that block eagerly is what makes them resolvable in subprojects; without it a
@@ -80,6 +80,48 @@ allprojects {
 
         extensions.configure<JavaPluginExtension> {
             withSourcesJar()
+        }
+    }
+}
+
+// Every publication carries the same provenance-facing project metadata. The
+// per-module publishing blocks own coordinates and names; this block only fills
+// in the repository/licence/developer fields that Maven consumers and package
+// scanners need. It runs for both the KMP publications and the java-library
+// publications created above.
+subprojects {
+    plugins.withId("maven-publish") {
+        extensions.configure<PublishingExtension> {
+            publications.withType<MavenPublication>().configureEach {
+                pom {
+                    if (name.orNull.isNullOrBlank()) {
+                        name.set("IntelliTrip Atlas SDK")
+                    }
+                    if (description.orNull.isNullOrBlank()) {
+                        description.set("Portable transit and geospatial engine for IntelliTrip hosts.")
+                    }
+                    url.set("https://github.com/GhostMan612/Metro-IntelliTrip")
+                    licenses {
+                        license {
+                            name.set("Apache License, Version 2.0")
+                            url.set("https://www.apache.org/licenses/LICENSE-2.0")
+                            distribution.set("repo")
+                        }
+                    }
+                    developers {
+                        developer {
+                            id.set("GhostMan612")
+                            name.set("Glenn Lee Clark IV")
+                            organization.set("Recovery For All")
+                        }
+                    }
+                    scm {
+                        connection.set("scm:git:https://github.com/GhostMan612/Metro-IntelliTrip.git")
+                        developerConnection.set("scm:git:ssh://git@github.com/GhostMan612/Metro-IntelliTrip.git")
+                        url.set("https://github.com/GhostMan612/Metro-IntelliTrip")
+                    }
+                }
+            }
         }
     }
 }

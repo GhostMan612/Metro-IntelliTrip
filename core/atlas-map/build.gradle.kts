@@ -21,7 +21,7 @@ publishing {
         // bare id consumers resolve.
         withType<MavenPublication> {
             groupId = "com.intellitrip.atlas"
-            version = "0.2.0"
+            version = providers.gradleProperty("atlasVersion").get()
             when (name) {
                 "kotlinMultiplatform" -> artifactId = "atlas-map"
                 "jvm" -> artifactId = "atlas-map-jvm"

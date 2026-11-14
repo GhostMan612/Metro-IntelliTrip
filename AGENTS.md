@@ -9,12 +9,16 @@ Requires a JDK 17 toolchain (`jvmToolchain(17)`): the Foojay resolver in `settin
 
 ## Publish the SDK for another app
 The portable `core/atlas-*` modules publish to `build/atlas-maven` (group
-`com.intellitrip.atlas`, version `0.2.0`) so a separate repository can consume them:
+`com.intellitrip.atlas`, version from `gradle.properties` `atlasVersion`) so a
+separate repository can consume them:
 ```
 gradlew.bat publishAtlasToLocalRepo
 ```
+Released versions are staged and verified into the immutable `atlas-maven`
+branch by `.github/workflows/atlas-publish.yml`. Do not hand-edit that branch.
 `atlas-map-android` (renderer) and the deleted legacy `atlas-transit` module are
-not published. Integration steps: docs/SDK_INTEGRATION.md.
+not published. Integration steps: `docs/SDK_INTEGRATION.md`; distribution
+contract: `docs/ATLAS_MAVEN_DISTRIBUTION.md`.
 
 ## Test / lint
 ```

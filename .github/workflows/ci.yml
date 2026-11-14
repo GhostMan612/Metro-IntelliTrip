@@ -62,6 +62,36 @@ jobs:
           bash ./gradlew publishAtlasToLocalRepo --console=plain
           bash ./gradlew -p sample/sdk-consumer run --console=plain
 
+      - name: Portable publication contract
+        run: |
+          VERSION=$(python3 - <<'PY'
+          from pathlib import Path
+          for line in Path("gradle.properties").read_text(encoding="utf-8").splitlines():
+              if line.startswith("atlasVersion="):
+                  print(line.split("=", 1)[1].strip())
+                  break
+          else:
+              raise SystemExit("atlasVersion is not set in gradle.properties")
+          PY
+          )
+          python3 tools/atlas_maven.py stage \
+            --source build/atlas-maven \
+            --destination build/atlas-publication \
+            --version "$VERSION" \
+            --source-commit "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF" \
+            --repository-url "https://github.com/${{ github.repository }}" \
+            --gradle-version "$(bash ./gradlew --version | awk '/^Gradle /{print $2; exit}')" \
+            --java-version "$(java -version 2>&1 | head -n1)"
+          python3 tools/atlas_maven.py verify \
+            --repo build/atlas-publication \
+            --version "$VERSION"
+          bash ./gradlew -p sample/sdk-consumer run \
+            --refresh-dependencies \
+            -PatlasMavenUrl="file://$PWD/build/atlas-publication" \
+            -PatlasVersion="$VERSION" \
+            --console=plain
+
   android-tests:
     name: Instrumented tests
     # ubuntu-latest resolved to Ubuntu 26.04 during the emulator ZIP failures.

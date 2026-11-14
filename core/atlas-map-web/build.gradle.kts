@@ -10,7 +10,7 @@ publishing {
     publications {
         withType<MavenPublication> {
             groupId = "com.intellitrip.atlas"
-            version = "0.2.0"
+            version = providers.gradleProperty("atlasVersion").get()
             when (name) {
                 "kotlinMultiplatform" -> artifactId = "atlas-map-web"
                 "jvm" -> artifactId = "atlas-map-web-jvm"

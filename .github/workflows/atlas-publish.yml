@@ -1,0 +1,135 @@
+name: Publish Atlas SDK
+
+on:
+  push:
+    tags:
+      - "atlas-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Atlas version to publish; must match gradle.properties atlasVersion"
+        required: true
+        type: string
+
+concurrency:
+  group: atlas-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish immutable Maven repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Require a clean source checkout
+        run: test -z "$(git status --porcelain)"
+
+      - name: Resolve publication version
+        id: version
+        run: |
+          VERSION=$(python3 - <<'PY'
+          from pathlib import Path
+          for line in Path("gradle.properties").read_text(encoding="utf-8").splitlines():
+              if line.startswith("atlasVersion="):
+                  print(line.split("=", 1)[1].strip())
+                  break
+          else:
+              raise SystemExit("atlasVersion is not set in gradle.properties")
+          PY
+          )
+          test -n "$VERSION"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            test "atlas-v${VERSION}" = "${GITHUB_REF_NAME}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            test "${{ inputs.version }}" = "$VERSION"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve build tool versions
+        id: tools
+        run: |
+          echo "gradle=$(bash ./gradlew --version | awk '/^Gradle /{print $2; exit}')" >> "$GITHUB_OUTPUT"
+          echo "java=$(java -version 2>&1 | head -n1)" >> "$GITHUB_OUTPUT"
+
+      - name: Build SDK publications
+        run: bash ./gradlew publishAtlasToLocalRepo --console=plain
+
+      - name: Prepare atlas-maven branch worktree
+        run: |
+          if git ls-remote --exit-code --heads origin atlas-maven >/dev/null 2>&1; then
+            git fetch origin atlas-maven:refs/remotes/origin/atlas-maven
+            git worktree add ../atlas-maven -B atlas-maven origin/atlas-maven
+          else
+            git worktree add --detach ../atlas-maven
+            cd ../atlas-maven
+            git checkout --orphan atlas-maven
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+
+      - name: Stage immutable publication
+        run: |
+          python3 tools/atlas_maven.py stage \
+            --source build/atlas-maven \
+            --destination ../atlas-maven \
+            --version "${{ steps.version.outputs.version }}" \
+            --source-commit "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF" \
+            --repository-url "https://github.com/${{ github.repository }}" \
+            --gradle-version "${{ steps.tools.outputs.gradle }}" \
+            --java-version "${{ steps.tools.outputs.java }}"
+
+      - name: Verify publication contract
+        run: |
+          python3 tools/atlas_maven.py verify \
+            --repo ../atlas-maven \
+            --version "${{ steps.version.outputs.version }}"
+
+      - name: Publish atlas-maven branch
+        working-directory: ../atlas-maven
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Atlas SDK ${VERSION} is already published; no repository changes."
+          else
+            git commit -m "Atlas SDK ${VERSION} from ${GITHUB_SHA}"
+            git push origin HEAD:atlas-maven
+          fi
+
+      - name: Verify clean remote consumer
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          rm -rf build/atlas-maven
+          export GRADLE_USER_HOME="$RUNNER_TEMP/atlas-consumer-gradle-home"
+          mkdir -p "$GRADLE_USER_HOME"
+          for attempt in 1 2 3 4 5; do
+            if bash ./gradlew -p sample/sdk-consumer run \
+              --refresh-dependencies \
+              -PatlasMavenUrl="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/atlas-maven" \
+              -PatlasVersion="${VERSION}" \
+              --console=plain; then
+              exit 0
+            fi
+            echo "Remote consumer attempt ${attempt} failed; retrying after the branch becomes visible..."
+            sleep 15
+          done
+          exit 1
