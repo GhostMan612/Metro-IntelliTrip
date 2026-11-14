@@ -7,10 +7,12 @@ kotlin {
     jvmToolchain(17)
 }
 
+val atlasVersion = providers.gradleProperty("atlasVersion").getOrElse("0.2.0")
+
 dependencies {
     // The only Atlas dependency. Everything else is transitive, which proves
     // the published POM graph is complete and the engine genuinely stands alone.
-    implementation("com.intellitrip.atlas:atlas-engine:0.2.0")
+    implementation("com.intellitrip.atlas:atlas-engine:$atlasVersion")
 }
 
 application {
