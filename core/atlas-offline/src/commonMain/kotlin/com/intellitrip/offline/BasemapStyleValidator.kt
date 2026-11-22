@@ -5,16 +5,14 @@ package com.intellitrip.offline
  *
  * A tile archive without a style renders nothing, so the two are imported
  * together. The style is untrusted input: it must be a JSON object (not a style
- * URL), it must declare style version 8, and it must reference a PMTiles source.
- * Requiring a PMTiles reference is what ties the style to the archive the rider
+ * URL), it must declare style version 8, and it must reference the selected
+ * archive format. Requiring an archive reference ties the style to the archive the rider
  * also selected; a style that only points at remote raster tiles would install,
  * then keep drawing the online basemap while claiming to be offline.
  *
- * The stored style keeps the original `pmtiles://...` URL. When it is handed to
- * the renderer, [bindArchive] replaces every PMTiles URL with the installed
- * archive's `file://` URI. That keeps the store portable (no absolute app path
- * in the manifest or style file) and means an app restore to a different data
- * directory still works.
+ * The stored style keeps its `pmtiles://` or `mbtiles://` marker. At render
+ * time PMTiles is bound to its file URI and MBTiles to the app's loopback
+ * TileJSON endpoint.
  */
 internal object BasemapStyleValidator {
 
@@ -26,7 +24,10 @@ internal object BasemapStyleValidator {
         data class Invalid(val reason: String) : Result
     }
 
-    fun validate(styleJson: String): Result {
+    fun validate(
+        styleJson: String,
+        format: BasemapArchiveFormat = BasemapArchiveFormat.PMTILES,
+    ): Result {
         if (styleJson.isBlank()) {
             return Result.Invalid("package has no style; tiles alone cannot render")
         }
@@ -55,10 +56,17 @@ internal object BasemapStyleValidator {
         if (!LAYERS_KEY.containsMatchIn(normalized)) {
             return Result.Invalid("style has no \"layers\" array")
         }
-        if (!normalized.contains(PMTILES_PREFIX)) {
+        val marker = when (format) {
+            BasemapArchiveFormat.PMTILES -> PMTILES_PREFIX
+            BasemapArchiveFormat.MBTILES -> MBTILES_PREFIX
+        }
+        if (!normalized.contains(marker)) {
             return Result.Invalid(
-                "style must reference the offline archive with a pmtiles:// source URL",
+                "style must reference the offline archive with a $marker source URL",
             )
+        }
+        if (format == BasemapArchiveFormat.MBTILES && REMOTE_RESOURCE.containsMatchIn(normalized)) {
+            return Result.Invalid("MBTiles styles must not contain remote HTTP(S) resources")
         }
         return Result.Valid
     }
@@ -71,19 +79,28 @@ internal object BasemapStyleValidator {
      * stops at JSON string terminators and at structural whitespace, so the rest
      * of the document is preserved byte for byte.
      */
-    fun bindArchive(styleJson: String, archiveUri: String): String {
+    fun bindArchive(
+        styleJson: String,
+        archiveUri: String,
+        format: BasemapArchiveFormat = BasemapArchiveFormat.PMTILES,
+    ): String {
         val normalized = normalizeEscapedSlashes(styleJson)
+        val marker = when (format) {
+            BasemapArchiveFormat.PMTILES -> PMTILES_PREFIX
+            BasemapArchiveFormat.MBTILES -> MBTILES_PREFIX
+        }
         val out = StringBuilder(normalized.length + archiveUri.length)
         var index = 0
         while (index < normalized.length) {
-            val marker = normalized.indexOf(PMTILES_PREFIX, index)
-            if (marker < 0) {
+            val markerIndex = normalized.indexOf(marker, index)
+            if (markerIndex < 0) {
                 out.append(normalized, index, normalized.length)
                 break
             }
-            out.append(normalized, index, marker)
-            out.append(PMTILES_PREFIX).append(archiveUri)
-            var end = marker + PMTILES_PREFIX.length
+            out.append(normalized, index, markerIndex)
+            if (format == BasemapArchiveFormat.PMTILES) out.append(PMTILES_PREFIX)
+            out.append(archiveUri)
+            var end = markerIndex + marker.length
             while (end < normalized.length) {
                 val c = normalized[end]
                 if (c == '"' || c == '\'' || c == ',' || c == '}' || c == ']' ||
@@ -101,6 +118,8 @@ internal object BasemapStyleValidator {
     /** JSON allows `\/`; some encoders use it even though it is unnecessary. */
     private fun normalizeEscapedSlashes(styleJson: String): String =
         styleJson.replace("pmtiles:\\/\\/", PMTILES_PREFIX)
+            .replace("mbtiles:\\/\\/", MBTILES_PREFIX)
+            .replace("\\/", "/")
 
     /**
      * Minimal structural JSON check: strings and escapes are respected, and
@@ -141,7 +160,12 @@ internal object BasemapStyleValidator {
     }
 
     private const val PMTILES_PREFIX = "pmtiles://"
+    private const val MBTILES_PREFIX = "mbtiles://"
     private val VERSION_8 = Regex("\"version\"\\s*:\\s*8\\b")
     private val SOURCES_KEY = Regex("\"sources\"\\s*:")
     private val LAYERS_KEY = Regex("\"layers\"\\s*:")
+    private val REMOTE_RESOURCE = Regex(
+        "\"(?:url|tiles|sprite|glyphs)\"\\s*:\\s*(?:\"[^\"]*?https?://|\\[[^\\]]*?https?://)",
+        RegexOption.IGNORE_CASE,
+    )
 }

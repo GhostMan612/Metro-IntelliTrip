@@ -453,9 +453,8 @@ private fun DataSheet(
         )
     }
     Text(
-        text = "Offline basemaps are PMTiles v3 archives plus a MapLibre style JSON. " +
-            "MBTiles must be converted with `pmtiles convert` first. The style controls " +
-            "labels, colours and attribution.",
+        text = "Offline basemaps use PMTiles v3 or MBTiles with a MapLibre style JSON. " +
+            "The style controls labels, colours and attribution.",
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),

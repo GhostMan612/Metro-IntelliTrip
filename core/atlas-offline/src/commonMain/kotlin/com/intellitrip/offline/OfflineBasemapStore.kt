@@ -5,7 +5,7 @@ import kotlin.random.Random
 /**
  * An installed offline basemap package.
  *
- * A package is a PMTiles v3 archive plus the MapLibre style it should be
+ * A package is a PMTiles v3 or MBTiles archive plus the MapLibre style it should be
  * rendered with. Both are required: tiles without a style render as nothing, and
  * a style without tiles has nothing to draw.
  *
@@ -17,7 +17,7 @@ import kotlin.random.Random
  * platform file must resolve it through their own store implementation.
  *
  * [styleJson] is the style exactly as imported, with its original
- * `pmtiles://...` URL. Use [OfflineBasemapStore.styleFor] to obtain the copy
+ * `pmtiles://...` or `mbtiles://...` URL. Use [OfflineBasemapStore.styleFor] to obtain the copy
  * bound to this package's installed archive.
  */
 data class BasemapPackage(
@@ -29,6 +29,8 @@ data class BasemapPackage(
     val minZoom: Int,
     val maxZoom: Int,
     val bounds: BasemapBounds,
+    val archiveFormat: BasemapArchiveFormat = BasemapArchiveFormat.PMTILES,
+    val tileFormat: String = "pbf",
 )
 
 /** Outcome of an install attempt; failures are explicit, never silently ignored. */
@@ -47,10 +49,9 @@ sealed class InstallResult {
  * provider-neutral module stays free of any renderer dependency, which is what
  * [BasemapPolicy] needs.
  *
- * Format support is deliberately narrow: PMTiles v3 only. MapLibre Native added
- * PMTiles sources in 11.7.0; an MBTiles file is a SQLite database that the
- * renderer cannot read, so it is rejected with a conversion instruction instead
- * of being copied into the store and failing at render time.
+ * PMTiles v3 is read directly by MapLibre Native. MBTiles is served through a
+ * loopback TileJSON endpoint supplied by the Android host; the common store only
+ * accepts MBTiles after the host has validated its SQLite schema and metadata.
  *
  * Free and key-free by design: packages are produced from OpenStreetMap data,
  * whose license permits this. No tile vendor account is needed, which is the
@@ -89,7 +90,7 @@ class OfflineBasemapStore(
     }
 
     /**
-     * Installs a PMTiles v3 package from a staged file.
+     * Installs a PMTiles v3 package or host-validated MBTiles package.
      *
      * The file is copied into the store rather than referenced in place so the app
      * owns the only durable copy; a caller passing a temp file would otherwise see it
@@ -109,6 +110,7 @@ class OfflineBasemapStore(
         displayName: String,
         stagedPath: String,
         styleJson: String,
+        mbtilesMetadata: MbtilesMetadata? = null,
     ): InstallResult {
         val packageId = id.trim()
         if (packageId.isEmpty()) {
@@ -139,17 +141,35 @@ class OfflineBasemapStore(
         }.getOrElse { error ->
             return InstallResult.Rejected("could not read the archive header: ${error.message}")
         }
-        when (PmtilesFormat.kind(prefix)) {
-            ArchiveKind.MBTILES -> return InstallResult.Rejected(MBTILES_MESSAGE)
+        val archiveFormat = when (PmtilesFormat.kind(prefix)) {
+            ArchiveKind.MBTILES -> {
+                if (mbtilesMetadata == null) {
+                    return InstallResult.Rejected(
+                        "MBTiles schema and metadata must be validated before installation",
+                    )
+                }
+                if (mbtilesMetadata.minZoom !in 0..24 ||
+                    mbtilesMetadata.maxZoom !in mbtilesMetadata.minZoom..24 ||
+                    mbtilesMetadata.tileFormat !in SUPPORTED_MBTILES_TILE_FORMATS ||
+                    !mbtilesMetadata.bounds.isValid()
+                ) {
+                    return InstallResult.Rejected("MBTiles metadata has an unsupported format or zoom range")
+                }
+                BasemapArchiveFormat.MBTILES
+            }
             ArchiveKind.UNKNOWN -> return InstallResult.Rejected(UNKNOWN_FORMAT_MESSAGE)
-            ArchiveKind.PMTILES -> Unit
+            ArchiveKind.PMTILES -> BasemapArchiveFormat.PMTILES
         }
-        val header = when (val validation = PmtilesFormat.validate(prefix, actualSize)) {
-            is PmtilesValidation.Invalid -> return InstallResult.Rejected(validation.reason)
-            is PmtilesValidation.Valid -> validation.header
+        val header = if (archiveFormat == BasemapArchiveFormat.PMTILES) {
+            when (val validation = PmtilesFormat.validate(prefix, actualSize)) {
+                is PmtilesValidation.Invalid -> return InstallResult.Rejected(validation.reason)
+                is PmtilesValidation.Valid -> validation.header
+            }
+        } else {
+            null
         }
 
-        when (val styleCheck = BasemapStyleValidator.validate(styleJson)) {
+        when (val styleCheck = BasemapStyleValidator.validate(styleJson, archiveFormat)) {
             is BasemapStyleValidator.Result.Invalid -> return InstallResult.Rejected(styleCheck.reason)
             BasemapStyleValidator.Result.Valid -> Unit
         }
@@ -159,7 +179,7 @@ class OfflineBasemapStore(
             return InstallResult.Rejected("could not create the basemap store: ${error.message}")
         }
 
-        val storageName = storageNameFor(packageId)
+        val storageName = storageNameFor(packageId, archiveFormat)
         val destination = fileStore.resolvePath(rootDir, storageName)
         val stylePath = fileStore.resolvePath(rootDir, storageName + STYLE_SUFFIX)
         val token = generationToken()
@@ -185,14 +205,13 @@ class OfflineBasemapStore(
                 tilePath = destination,
                 styleJson = styleJson,
                 sizeBytes = actualSize,
-                minZoom = header.minZoom,
-                maxZoom = header.maxZoom,
-                bounds = BasemapBounds(
-                    minLat = header.minLat,
-                    minLon = header.minLon,
-                    maxLat = header.maxLat,
-                    maxLon = header.maxLon,
-                ),
+                minZoom = header?.minZoom ?: requireNotNull(mbtilesMetadata).minZoom,
+                maxZoom = header?.maxZoom ?: requireNotNull(mbtilesMetadata).maxZoom,
+                bounds = header?.let {
+                    BasemapBounds(it.minLat, it.minLon, it.maxLat, it.maxLon)
+                } ?: requireNotNull(mbtilesMetadata).bounds,
+                archiveFormat = archiveFormat,
+                tileFormat = mbtilesMetadata?.tileFormat ?: "pbf",
             )
             writeManifest(pkg)
             committed = true
@@ -241,25 +260,36 @@ class OfflineBasemapStore(
     fun hasPackage(): Boolean = packages().isNotEmpty()
 
     /**
-     * The imported style with every `pmtiles://` source bound to this package's
-     * installed archive.
+     * The imported style with its offline source bound to this package.
      *
      * Returns null when the style file is missing/unreadable or the platform has
      * no addressable local files. Null means the package cannot be rendered;
-     * callers must fall back to the online style and say so, never hand MapLibre
-     * an unresolved `pmtiles://` source.
+     * MBTiles requires the host's local TileJSON URL; PMTiles is bound to the
+     * installed archive URI.
      */
-    fun styleFor(pkg: BasemapPackage): String? {
+    fun styleFor(pkg: BasemapPackage, mbtilesTileJsonUrl: String? = null): String? {
         val stylePath = stylePathFor(pkg.tilePath) ?: return null
         val style = runCatching { fileStore.readText(stylePath) }.getOrNull() ?: return null
-        if (BasemapStyleValidator.validate(style) !is BasemapStyleValidator.Result.Valid) return null
+        if (BasemapStyleValidator.validate(style, pkg.archiveFormat) !is BasemapStyleValidator.Result.Valid) return null
         val archiveSize = runCatching { fileStore.size(pkg.tilePath) }.getOrNull() ?: return null
-        val header = runCatching {
-            fileStore.readRange(pkg.tilePath, 0L, PmtilesFormat.HEADER_BYTES)
-        }.getOrNull() ?: return null
-        if (PmtilesFormat.validate(header, archiveSize) !is PmtilesValidation.Valid) return null
-        val archiveUri = fileStore.fileUri(pkg.tilePath) ?: return null
-        return BasemapStyleValidator.bindArchive(style, archiveUri)
+        val sourceUri = when (pkg.archiveFormat) {
+            BasemapArchiveFormat.PMTILES -> {
+                val header = runCatching {
+                    fileStore.readRange(pkg.tilePath, 0L, PmtilesFormat.HEADER_BYTES)
+                }.getOrNull() ?: return null
+                if (PmtilesFormat.validate(header, archiveSize) !is PmtilesValidation.Valid) return null
+                fileStore.fileUri(pkg.tilePath) ?: return null
+            }
+            BasemapArchiveFormat.MBTILES -> {
+                if (archiveSize < minimumBytes) return null
+                val prefix = runCatching {
+                    fileStore.readRange(pkg.tilePath, 0L, PmtilesFormat.HEADER_BYTES)
+                }.getOrNull() ?: return null
+                if (PmtilesFormat.kind(prefix) != ArchiveKind.MBTILES) return null
+                mbtilesTileJsonUrl?.takeIf { LOCAL_TILEJSON.matches(it) } ?: return null
+            }
+        }
+        return BasemapStyleValidator.bindArchive(style, sourceUri, pkg.archiveFormat)
     }
 
     /** Exposes the store root to security tests without widening the public API. */
@@ -294,6 +324,8 @@ class OfflineBasemapStore(
                     pkg.bounds.minLat.toString(),
                     pkg.bounds.maxLon.toString(),
                     pkg.bounds.maxLat.toString(),
+                    pkg.archiveFormat.name,
+                    encode(pkg.tileFormat),
                 ).joinToString(FIELD_SEPARATOR)
             }
             .joinToString("\n")
@@ -316,10 +348,21 @@ class OfflineBasemapStore(
     private fun parseManifestLine(line: String): BasemapPackage? {
         if (line.isBlank()) return null
         val parts = line.split(FIELD_SEPARATOR)
-        if (parts.size < FIELD_COUNT) return null
+        if (parts.size != LEGACY_FIELD_COUNT && parts.size != FIELD_COUNT) return null
         return runCatching {
             val fileName = parts[2]
             require(isPlainFileName(fileName)) { "manifest entry has an unsafe file name" }
+            val archiveFormat = if (parts.size == LEGACY_FIELD_COUNT) {
+                BasemapArchiveFormat.PMTILES
+            } else {
+                BasemapArchiveFormat.valueOf(parts[10])
+            }
+            val tileFormat = if (parts.size == LEGACY_FIELD_COUNT) "pbf" else decode(parts[11])
+            require(
+                (archiveFormat == BasemapArchiveFormat.PMTILES && fileName.endsWith(PMTILES_EXTENSION)) ||
+                    (archiveFormat == BasemapArchiveFormat.MBTILES && fileName.endsWith(MBTILES_EXTENSION)),
+            ) { "manifest archive extension does not match its format" }
+            require(tileFormat in SUPPORTED_MBTILES_TILE_FORMATS) { "unsupported tile format" }
             // Resolve, then normalize and verify containment. A manifest is a file on
             // disk and is therefore editable; an entry pointing outside the store is
             // rejected rather than trusted.
@@ -357,6 +400,8 @@ class OfflineBasemapStore(
                     maxLat = maxLat,
                     maxLon = maxLon,
                 ),
+                archiveFormat = archiveFormat,
+                tileFormat = tileFormat,
                 styleJson = STYLE_PLACEHOLDER,
             )
         }.getOrNull()
@@ -376,9 +421,13 @@ class OfflineBasemapStore(
      * collide onto one file. The generation token gives every install its own
      * files so the manifest can switch from old to new atomically.
      */
-    private fun storageNameFor(id: String): String {
+    private fun storageNameFor(id: String, format: BasemapArchiveFormat): String {
         val hash = sha256Hex(id.encodeToByteArray()).take(24)
-        return "pkg-$hash-${generationToken()}$PACKAGE_EXTENSION"
+        val extension = when (format) {
+            BasemapArchiveFormat.PMTILES -> PMTILES_EXTENSION
+            BasemapArchiveFormat.MBTILES -> MBTILES_EXTENSION
+        }
+        return "pkg-$hash-${generationToken()}$extension"
     }
 
     private fun generationToken(): String =
@@ -390,6 +439,12 @@ class OfflineBasemapStore(
             name != ".." &&
             name.none { it == '/' || it == '\\' || it == '\u0000' } &&
             fileStore.fileName(name) == name
+
+    private fun BasemapBounds.isValid(): Boolean =
+        minLat.isFinite() && minLon.isFinite() && maxLat.isFinite() && maxLon.isFinite() &&
+            minLon in -180.0..180.0 && maxLon in -180.0..180.0 &&
+            minLat in -90.0..90.0 && maxLat in -90.0..90.0 &&
+            minLon <= maxLon && minLat <= maxLat
 
     private companion object {
         const val MANIFEST = "basemap-manifest.txt"
@@ -406,21 +461,20 @@ class OfflineBasemapStore(
          */
         val FIELD_SEPARATOR: String = 0x1F.toChar().toString()
 
-        const val FIELD_COUNT = 10
+        const val LEGACY_FIELD_COUNT = 10
+        const val FIELD_COUNT = 12
         const val STYLE_SUFFIX = ".style.json"
         const val STYLE_PLACEHOLDER = ""
-        const val PACKAGE_EXTENSION = ".pmtiles"
+        const val PMTILES_EXTENSION = ".pmtiles"
+        const val MBTILES_EXTENSION = ".mbtiles"
+        val SUPPORTED_MBTILES_TILE_FORMATS = setOf("pbf", "png", "jpg", "jpeg", "webp")
         const val MINIMUM_PACKAGE_BYTES = 1024L
         const val MAX_ID_LENGTH = 256
         const val MAX_DISPLAY_NAME = 120
-
-        const val MBTILES_MESSAGE =
-            "MBTiles is not supported. Convert the archive first with " +
-                "`pmtiles convert input.mbtiles output.pmtiles`, then import the " +
-                ".pmtiles file together with its style JSON."
+        val LOCAL_TILEJSON = Regex("^http://127\\.0\\.0\\.1:[0-9]{1,5}/[A-Za-z0-9]{32}/tilejson\\.json$")
 
         const val UNKNOWN_FORMAT_MESSAGE =
-            "Not a PMTiles v3 archive. Import a .pmtiles file and its MapLibre " +
-                "style JSON; ZIP, MBTiles and style URLs are not accepted."
+            "Not a PMTiles v3 or MBTiles archive. Import a .pmtiles or validated " +
+                ".mbtiles file together with its MapLibre style JSON."
     }
 }
